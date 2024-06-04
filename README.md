@@ -158,7 +158,7 @@ $$
 As mentions this can be solved with linear in parameters with an equality constraint $w = (a,b,c,d), d = 1/c$, so perhaps not a necessary problem 
 ## From Other Literature
 Here is a thesis from a more recent work on the development of the Forward Solve Non-linear Least Squares [Calver Thesis Ch2.6](https://tspace.library.utoronto.ca/bitstream/1807/95761/3/Calver_Jonathan_J_201906_PhD_thesis.pdf#page=43). This chapter covers possible examples. A common theme is that they look for **time lags** which I don't know if our frame work would allow, but here are a couple relevent equations:
-- "Goodwin Example" - *Loop model* 
+### Goodwin Example - *Loop model* 
 $$
 \begin{aligned} 
 & y_1^{\prime}(t)=\frac{a}{A+y_3(t)^\sigma}-b y_1(t), \\ 
@@ -169,7 +169,7 @@ $$
 $$
 \begin{aligned} 
 y_1^{\prime}(t) & =\frac{k_1}{1+\left(\frac{P}{q_1}\right)^{q_2}+\left(\frac{q_3}{S}\right)^{q_4}}-k_2 y_1 \\
- y_2^{\prime}(t) & =\frac{k_3}{1+\left(\frac{P}{q_5}\right)^{q_6}+\left(\frac{q_7}{y_7}\right)^{q_8}}-k_4 y_2 \\ y_3^{\prime}(t) & =\frac{k_5}{1+\left(\frac{P}{q_9}\right)^{q_{10}}+\left(\frac{q_{11}}{y_8}\right)^{q_{12}}}-k_6 y_3 \\ y_4^{\prime}(t) & =\frac{k_7 y_1}{y_1+q_{13}}-k_8 y_4 \\ y_5^{\prime}(t) & =\frac{k_9 y_2}{y_2+q_{14}}-k_{10} y_5 \\ y_6^{\prime}(t) & =\frac{k_{11} y_3}{y_3+q_{15}}-k_{12} y_6 \\ y_7^{\prime}(t) & =\frac{k_{13} y_4\left(\frac{1}{q_{16}}\right)\left(S-y_7\right)}{1+\left(\frac{S}{q_{16}}\right)+\left(\frac{y_7}{q_{17}}\right)}-\frac{k_{14} y_5\left(\frac{1}{q_{18}}\right)\left(y_7-y_8\right)}{1+\left(\frac{y_7}{q_{18}}\right)+\left(\frac{y_8}{q_{19}}\right)} \\ y_8^{\prime}(t) & =\frac{k_{14} y_5\left(\frac{1}{q_{18}}\right)\left(y_7-y_8\right)}{1+\left(\frac{y_7}{q_{18}}\right)+\left(\frac{y_8}{q_{19}}\right)}-\frac{k_{15} y_6\left(\frac{1}{q_{20}}\right)\left(y_8-P\right)}{1+\left(\frac{y_8}{q_{20}}\right)+\left(\frac{P}{q_{21}}\right)} .\end{aligned}
+ y_2^{\prime}(t) & =\frac{k_3}{1+\left(\frac{P}{q_5}\right)^{q_6}+\left(\frac{q_7}{y_7}\right)^{q_8}}-k_4 y_2 \\ y_3^{\prime}(t) & =\frac{k_5}{1+\left(\frac{P}{q_9}\right)^{q_{10}}+\left(\frac{q_{11}}{y_8}\right)^{q_{12}}}-k_6 y_3 \\ y_4^{\prime}(t) & =\frac{k_7 y_1}{y_1+q_{13}}-k_8 y_4 \\ y_5^{\prime}(t) & =\frac{k_9 y_2}{y_2+q_{14}}-k_{10} y_5 \\ y_6^{\prime}(t) & =\frac{k_{11} y_3}{y_3+q_{15}}-k_{12} y_6 \\ y_7^{\prime}(t) & =\frac{k_{13} y_4\left(\frac{1}{q_{16}}\right)\left(S-y_7\right)}{1+\left(\frac{S}{q_{16}}\right)+\left(\frac{y_7}{q_{17}}\right)}-\frac{k_{14} y_5\left(\frac{1}{q_{18}}\right)\left(y_7-y_8\right)}{1+\left(\frac{y_7}{q_{18}}\right)+\left(\frac{y_8}{q_{19}}\right)} \\ y_8^{\prime}(t) & =\frac{k_{14} y_5\left(\frac{1}{q_{18}}\right)\left(y_7-y_8\right)}{1+\left(\frac{y_7}{q_{18}}\right)+\left(\frac{y_8}{q_{19}}\right)}-\frac{k_{15} y_6\left(\frac{1}{q_{20}}\right)\left(y_8-P\right)}{1+\left(\frac{y_8}{q_{20}}\right)+\left(\frac{P}{q_{21}}\right)} \end{aligned}
 $$
 ### Michaelis-Menten Equation 
 ```ad-warning
@@ -210,3 +210,5 @@ title: Outstanding Questions
 	- _Continuously Stirred Tank Reactor Equations_ from [[Ramsay et al. - 2007 - Parameter Estimation for Differential Equations a.pdf#page=4|Ramsay]]
 ```
 
+## Identifiably of Parameters
+[Julia Implementation](https://docs.sciml.ai/ModelingToolkit/stable/tutorials/parameter_identifiability/) 
