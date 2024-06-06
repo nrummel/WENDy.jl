@@ -31,17 +31,17 @@ $$w = \underset{\nu}{\operatorname{armin}} \tfrac{1}{2}\|\Theta \nu - \dot{\tild
 The $\|\cdot\|_*$ is a regularizer on $w$ chosen to promote sparse solutions. This in practice can be the 1 norm or 0 norm. This can per solved via LASSO or orthogonal matching pursuit (varieties of alternative) respectively. 
 ### WSINDy 
 . This extends the SINDy framework but now instead of looking at the strong for we have 
-$$\langle \dot{\Phi},u\rangle=\langle\Phi,\Theta\rangle w$$
+$$-\langle \dot{\Phi},u\rangle=\langle\Phi,\Theta\rangle w$$
 where $\langle \Phi, \cdot \rangle_k \approx \int_{t_1}^{t_J} \varphi_k(\tau) (\cdot(\tau)) d\tau$ where $\varphi_k \in C_c^\infty[t_1,t_J]$. These are the familiar test functions for the weak form of the differential equation. The boon here is that the derivative can be passed to the test functions to forgo the approximating the derivative. This along with other properties intrinsic to the weak form make it more robust to noisy data. 
 Again this is posed as a regularized least squares
-$$w = \underset{\nu}{\operatorname{armin}} \tfrac{1}{2}\|\langle\Phi,\Theta\rangle \nu - \dot{\Phi},u\rangle \|_2^2+\lambda\|\nu\|_*$$
+$$w = \underset{\nu}{\operatorname{armin}} \tfrac{1}{2}\|\langle\Phi,\Theta\rangle \nu +\langle \dot{\Phi},u\rangle \|_2^2+\lambda\|\nu\|_*$$
 References: 
 - [[Messenger and Bortz - 2021 - Weak SINDy Galerkin-Based Data-Driven Model Selec.pdf|WSINDy ODE]] 
 - [[Zotero/storage/KBUXC8MA/Messenger and Bortz - 2021 - Weak SINDy For Partial Differential Equations.pdf|WSINDy For PDE]] 
 - [[WENDy_ode2023.pdf|WENDy for ODE]]
 ### WENDy
  This algorithm aims to work from a statistical framework instead of looking at the squared error of the coefficients, we instead isolated the error that is related to noise and come up with an estimator based on the asymptotic distribution of the residual. After much derivation and some assumption due to integration error and model mismatch error being negligible we find
-$$S_w^{-1/2}(\langle\Phi,\Theta\rangle w - \dot{\Phi}) \stackrel{asymp}{\sim} N(0, I)$$
+$$S_w^{-1/2}(\langle\Phi,\Theta\rangle w +\langle \dot{\Phi},u\rangle) \stackrel{asymp}{\sim} N(0, I)$$
 where $L_w = \underbrace{\dot{\Phi}}_{\stackrel{\Delta}{=} L_0} + \underbrace{\langle \Phi, \nabla_u \Theta \rangle}_{\stackrel{\Delta}{=} L_1} \times_3 w$ 
 and $S_w = L_wL_w^T$.   $S_w^{1/2}$ is the Cholesky Factorization of $S_w$.
 Looking at the negative log-likelihood
@@ -86,7 +86,7 @@ If we consider data of the familiar form
 $$\{t_m, u_m\}_{m=1}^M = \{t_m, u^*_m +\varepsilon_m\}_{m=1}^M \text{ where } \varepsilon_m \stackrel{idd}{\sim} N(0,\sigma^2)$$
 The residual in the weak form is 
 $$\begin{align*}
-	r(w) &= \langle \Phi, F(u, w)\rangle - \langle \dot{\Phi}, u \rangle \\
+	r(w) &= \langle \Phi, F(u, w)\rangle + \langle \dot{\Phi}, u \rangle \\
 	&\stackrel{\Delta}{=} G(u,w) - b(u) \\
 \end{align*}$$
 Notice that while $b$ is linear in $u$ by the nature of the inner product $G$ is not! Now, for ease of notation, we define $G(w) = G(u, w)$, $G^*(u,w) = G(u^*,w)$, $b^* = b(u^*)$ , and $b^\epsilon = b(\epsilon)$. Now consider $w^*$ to be the true weight and $w$ to be the approximated weights.
@@ -212,3 +212,25 @@ title: Outstanding Questions
 
 ## Identifiably of Parameters
 [Julia Implementation](https://docs.sciml.ai/ModelingToolkit/stable/tutorials/parameter_identifiability/) 
+
+## Question for Dan
+## Computing $V,V^\prime$
+- Why are there different coefficients for trap rule when we move $V$ to $V^\prime$?
+	$$\begin{align*}
+		\Phi &= \begin{bmatrix*}\phi_1 \cdots \phi_K \end{bmatrix*}\\
+		\mathcal{Q} &= \operatorname{diag}[(\tfrac{\Delta t}{2},\Delta t,\cdots ,\Delta t,\tfrac{\Delta t}{2})]\\
+		\text{In paper} &\rightarrow \begin{cases} 
+		V &= \Phi \mathcal{Q}\\
+		V^\prime &= -\dot{\Phi} \mathcal{Q}
+		 \end{cases}\\
+\text{In code} &\rightarrow \begin{cases} 
+		V &= \Phi \mathcal{Q}\\
+		V^\prime &= -\frac{1}{m_t*\Delta t} \dot{\Phi} \mathcal{Q} 
+		 \end{cases}
+	\end{align*}$$
+### SVD reduction of $V,V^\prime$ 
+
+### Bugs in Code
+- Error in `fdcoeffF.m` 
+- Index bug in `phi_weights`
+- Index bug in `VVp_svd` Fixing symmetry?

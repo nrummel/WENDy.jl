@@ -1,3 +1,43 @@
+## See Wendy paper
+_LOGISTIC_T_RNG = (0, 10)
+@mtkmodel LogisticGrowthModel begin
+    @variables begin
+        u(t) = 0.01
+    end
+    @parameters begin
+        w1 = 1
+        w2 = -1
+    end
+    @equations begin
+        D(u) ~ w1 * u + w2 * u^2
+    end
+end
+## See Wendy paper
+_HINDMARSH_T_RNG = (0, 10)
+@mtkmodel HindmarshRoseModel begin
+    @variables begin
+        u1(t) = -1.31
+        u2(t) = -7.6
+        u3(t) = -0.2
+    end
+    @parameters begin
+        w1  = 10
+        w2  = -10
+        w3  = 30
+        w4  = -10
+        w5  = 10
+        w6  = -50
+        w7  = -10
+        w8  = 0.04
+        w9  = 0.0319
+        w10 = -0.01
+    end
+    @equations begin
+        D(u1) ~ w1 * u2 + w2 * u1^3 + w3 * u1^2 + w4 * u3 
+        D(u2) ~ w5 + w6 * u1^2 + w7 * u2 
+        D(u3) ~ w8 *u1 + w9 + w10 * u3
+    end
+end
 ## Given in RAMSAY 2007
 _FITZ_T_RNG = (0.0, 20.0)         # Time in ms 20
 _FITZ_NUM_PTS = 400               # from the paper
@@ -50,9 +90,6 @@ end
 ## See https://tspace.libraru.utoronto.ca/bitstream/1807/95761/3/Calver_Jonathan_J_201906_PhD_thesis.pdf#page=51
 _MENDES_S_VALS = [0.1,0.46416,2.1544,10]
 _MENDES_P_VALS = [0.05,0.13572,0.3684,1]
-_MENDES_TRUE_PARAMS = Dict(
-   
-)
 _MENDES_T_RNG = (0.0,120.0)
 _MENDES_NUM_PTS = 120               # This was 8 to be small for the forward solves
 _MENDES_HILL_PARAM_RNG = [1e-1,1e2] # q2,4,6,8,10,12 
@@ -132,12 +169,24 @@ function _solve_ode(mdl::ODESystem, t_rng::Tuple, num_pts::Int;
     init_cond = [ic=>ModelingToolkit.getdefault(ic) for ic in unknowns(mdl)]
     p = ODEProblem(mdl,init_cond , t_rng, params)
 
-    t_step = (t_rng[end]-t_rng[1])/num_pts
+    t_step = (t_rng[end]-t_rng[1]) / (num_pts-1)
     return solve(p, alg,reltol=reltol, abstol = abstol, saveat=t_step)
+end
+##
+function _saveSol(sol::DifferentialEquations.ODESolution, saveFile::String)
+    u = Matrix(hcat(sol.u...)')
+    t = sol.t 
+    BSON.@save joinpath(@__DIR__, "..", "data", saveFile) t u
 end
 ##
 function create_test_data(;ll::Logging.LogLevel=Logging.Warn, saveFlag::Bool=false, NumberOfPoints::Int=1024)
     with_logger(ConsoleLogger(stderr,ll)) do
+        @info "Creating Logist Growth Data..."
+        @mtkbuild logistMdl = LogisticGrowthModel()
+        lg_sol = _solve_ode(logistMdl, _LOGISTIC_T_RNG, NumberOfPoints)
+        @info "Creating HindmarshRoseModel Data..."
+        @mtkbuild hindmarshMdl = HindmarshRoseModel()
+        hindmarsh_sol = _solve_ode(hindmarshMdl, _HINDMARSH_T_RNG, NumberOfPoints)
         @info "Creating Fitz Data..."
         @mtkbuild fitzModel = FitzHugNagumoModel()
         fitz_sol = _solve_ode(fitzModel, _FITZ_T_RNG, NumberOfPoints)
@@ -152,10 +201,14 @@ function create_test_data(;ll::Logging.LogLevel=Logging.Warn, saveFlag::Bool=fal
             mendes_sol[i,j] = _solve_ode(mendesMdl, _MENDES_T_RNG, NumberOfPoints)
         end
         if saveFlag
-            BSON.@save joinpath(@__DIR__, "..", "FitzHug_Nagumo.bson") fitz_sol
-            BSON.@save joinpath(@__DIR__, "..", "Loop_Model.bson") loop_sol
-            BSON.@save joinpath(@__DIR__, "..", "Mendes_Problem.bson") mendes_sol
+            _saveSol(lg_sol,"LogisticGrowth.bson")
+            _saveSol(fitz_sol,"HindmarshRose.bson")
+            _saveSol(fitz_sol,"FitzHug_Nagumo.bson")
+            _saveSol(loop_sol,"Loop.bson")
+            for (i,S) in enumerate(_MENDES_S_VALS), (j,P) in enumerate(_MENDES_P_VALS)
+                _saveSol(mendes_sol[i,j],"Mendes_S=$(S)_P=$P.bson")
+            end
         end
-        return fitz_sol, loop_sol, mendes_sol
+        return lg_sol, hindmarsh_sol, fitz_sol, loop_sol, mendes_sol
     end
 end
