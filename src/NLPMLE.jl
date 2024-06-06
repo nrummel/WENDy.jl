@@ -7,6 +7,7 @@ using Random, Statistics, LinearAlgebra, Logging, StaticArrays # stdlib
 ## Import specfics
 using ModelingToolkit: t_nounits as t, D_nounits as D
 using ModelingToolkit: @mtkmodel, @mtkbuild, ODESystem
+using Symbolics: jacobian
 using ImageFiltering: imfilter, Inner # can produce the same as conv in matlab 
 ## include other code
 using FFTW: fft, ifft

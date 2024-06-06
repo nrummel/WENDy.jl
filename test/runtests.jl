@@ -1,15 +1,14 @@
-using NLPMLE: create_test_data, _MENDES_S_VALS, _MENDES_P_VALS, phi_weights, MtminRadMethod, SingularValuePruningMethod, ExponentialTestFun, estiamte_std, UniformDiscritizationMethod, rad_select, _getK
+using NLPMLE: create_test_data, _MENDES_S_VALS, _MENDES_P_VALS, _getTestFunctionWeights, MtminRadMethod, SingularValuePruningMethod, ExponentialTestFun, estiamte_std, UniformDiscritizationMethod, rad_select, _getK
 using Test
-## Set Up plotting
 using Plots, Logging, MAT
 using LinearAlgebra: norm 
 using Statistics: mean
 gr()
-## Helper function
+##
 function _plotTestData(ode_sol, ttlStr)
     return plot(ode_sol, title=ttlStr, xaxis="t", yaxis="u(t)")
 end
-
+##
 function plotTestData(lg, hind, fitz, loop, mendes)
     display(_plotTestData(lg, "Logistic Growth"))
     display(_plotTestData(hind, "Hindmarsh Rose"))
@@ -20,6 +19,7 @@ function plotTestData(lg, hind, fitz, loop, mendes)
         display(_plotTestData(mendes[i,j], "Mendes Problem\nS=$S, P=$P"))
     end
 end
+##
 function testCreateTestData(;ll::Logging.LogLevel=Logging.Warn, plotFlag=false) 
     lg, hind, fitz, loop, mendes = create_test_data(;ll=ll);
     if plotFlag
@@ -27,6 +27,7 @@ function testCreateTestData(;ll::Logging.LogLevel=Logging.Warn, plotFlag=false)
     end
     return true
 end
+##
 function testEstimateNoise(;
     dataFile::String=joinpath(@__DIR__,"../data/estimateNoiseTestProblem.mat"),
     ll::Logging.LogLevel=Logging.Warn 
@@ -43,7 +44,7 @@ function testEstimateNoise(;
         return relErr < 1e2*eps()
     end
 end
-
+##
 function plotTestFunction(x,C_matlab, C)
 
     plot(x, C[1,:],label="ϕ")
@@ -57,7 +58,7 @@ function plotTestFunction(x,C_matlab, C)
     title!("Test Function Plot")
     xlabel!("time")
 end
-
+##
 function testTestFunctionDiscritization(;dataFile::String=joinpath(@__DIR__,"../data/testFunDisc.mat"),ll::Logging.LogLevel=Logging.Warn,plotFlag::Bool=false)
     with_logger(ConsoleLogger(stderr, ll)) do
         data     = matread(dataFile)
@@ -65,14 +66,14 @@ function testTestFunctionDiscritization(;dataFile::String=joinpath(@__DIR__,"../
         maxd     = 3 
         m        = 25
         ϕ        = ExponentialTestFun()
-        C        = phi_weights(ϕ,m,maxd)
+        C        = _getTestFunctionWeights(ϕ,m,maxd)
         if plotFlag 
             plotTestFunction(x,C_matlab, C)
         end 
         return norm(C -C_matlab) / norm(C_matlab) < 1e2*eps()
     end
 end
-
+##
 function testRadSelect(;dataFile::String=joinpath(@__DIR__,"../data/rad_select_test.mat"),
     ll::Logging.LogLevel=Logging.Warn
 )
@@ -94,7 +95,7 @@ function testRadSelect(;dataFile::String=joinpath(@__DIR__,"../data/rad_select_t
         return mt == mt_matlab
     end
 end
-
+##
 function testBuildV(;dataFile::String=joinpath(@__DIR__,"../data/buildV.mat"), ll::Logging.LogLevel=Logging.Warn)
     with_logger(ConsoleLogger(stderr, ll)) do
         data = matread(dataFile)
@@ -159,7 +160,7 @@ function testBuildV(;dataFile::String=joinpath(@__DIR__,"../data/buildV.mat"), l
         return true
         end
 end
-
+##
 @testset "NLPMLE.jl" begin
     @testset "Compare to MATLAB Implementation..." begin
         @test testEstimateNoise()

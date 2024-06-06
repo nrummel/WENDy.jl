@@ -232,5 +232,5 @@ title: Outstanding Questions
 
 ### Bugs in Code
 - Error in `fdcoeffF.m` 
-- Index bug in `phi_weights`
+- Index bug in `_getTestFunctionWeights`
 - Index bug in `VVp_svd` Fixing symmetry?

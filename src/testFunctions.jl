@@ -2,11 +2,11 @@
 ## Two types of test functions of ϕ
 abstract type TestFunction end 
 struct ExponentialTestFun <: TestFunction end 
-function (ϕ::ExponentialTestFun)(x::Real,η::Real=9) 
+function (ϕ::ExponentialTestFun)(x::Number,η::Real=9) 
     exp(-η*(1-x.^2).^(-1))
 end
 struct QuadradicTestFun <: TestFunction end
-function (ϕ::QuadradicTestFun)(x::Real,η::Real=9) 
+function (ϕ::QuadradicTestFun)(x::Number,η::Real=9) 
     (1-x.^2).^η
 end
 ##
@@ -98,26 +98,30 @@ end
 function (meth::MtminRadMethod)(xobs::AbstractVecOrMat{<:Real}, tobs::AbstractVector{<:Real}, ϕ::TestFunction, mtmin::Real, mtmax::Real, p::Real)
     return min(mtmax, p*mtmin)
 end
+## Helper to get derivative of test functions
+function _computeDerivative(ϕ::TestFunction, deg::Int) 
+    if deg == 0 
+        return ϕ
+    end 
+    @variables t
+    Dt = Differential(t)^(deg)
+    Df_sym = Dt(ϕ(t))
+    Df_sym_exp = expand_derivatives(Df_sym)
+    return build_function(Df_sym_exp,t;expression=false)
+end
 
 ## Compute the values of the test function and its derivatives on a grid from [-1,1] with m points with weights that correspond to trapazoid rule. (normalized to have norm 1)
-function phi_weights(ϕ::TestFunction, m::Int, maxd::Int)
+function _getTestFunctionWeights(ϕ::TestFunction, m::Int, maxd::Int)
     @variables t
     xf = range(-1,1,2*m+1);
     x = xf[2:end-1];
     Cfs = zeros(maxd+1,2*m+1);
     for (j,d)= enumerate(0:maxd)
         # Take the derivative and turn it into a function
-        if d > 0
-            Dj = Differential(t)^(d)
-            f_expr = build_function(expand_derivatives(Dj(ϕ(t))),t)
-            myf = eval(f_expr)
-            Df(x) = Base.invokelatest(myf,x)
-        else 
-            Df = ϕ
-        end
+        Df = _computeDerivative(ϕ,d)
         Cfs[j,2:end-1] = Df.(x)
         replace!(Cfs[j,2:end-1],NaN=>Df(eps()),missing=>Df(eps()))
-        ## handle infinite valuse by perturbing the evaluation point
+        # handle infinite valuse by perturbing the evaluation point
         inds = findall(isinf.(abs.(Cfs[j,:])));
         for ix in inds
             # Cfs[j,ix] = Df(xf[ix]-sign(xf[ix])*eps()); ## What dan has
@@ -136,7 +140,7 @@ end
 function _prepare_discritization(mt::Int,t::AbstractVector{<:Real},ϕ::TestFunction,max_derivative::Int)
     dt = mean(diff(t));
     M = length(t);
-    Φ = phi_weights(ϕ,mt,max_derivative);
+    Φ = _getTestFunctionWeights(ϕ,mt,max_derivative);
     return dt, M, Φ
 end 
 
