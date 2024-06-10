@@ -1,21 +1,11 @@
 module NLPMLE
 __precompile__(false)
-## External imports
-using Revise
-using DifferentialEquations, ModelingToolkit, BSON
-using Random, Statistics, LinearAlgebra, Logging, StaticArrays # stdlib
-## Import specfics
-using ModelingToolkit: t_nounits as t, D_nounits as D
-using ModelingToolkit: @mtkmodel, @mtkbuild, ODESystem
-using Symbolics: jacobian
-using ImageFiltering: imfilter, Inner # can produce the same as conv in matlab 
-## include other code
-using FFTW: fft, ifft
 include("exampleProblems.jl")
 include("computeGradients.jl")
 include("generateNoise.jl")
 include("interp1d.jl")
 include("testFunctions.jl")
+using Random 
 # Write your package code here.
 
 function runAlgo(;
@@ -30,12 +20,12 @@ function runAlgo(;
     seed::Real=1.0,
 )
     BSON.@load exampleFile t u 
-    @assert Mp1 == length(t) "Number of time points should match dependent variable array"
+    @assert M == length(t) "Number of time points should match dependent variable array"
     @assert mod(time_subsample_rate,2) ==0 || time_subsample_rate == 1 "Subsample rate should be divisible by 2"
     ## Subsample the data
     tobs = t[1:time_subsample_rate:end]
     uobs = u[:,1:time_subsample_rate:end]
-    Mp1, D = size(uobs)
+    M, D = size(uobs)
     num_rad = length(mt_params)
     ## Add noise 
     Random.seed!(seed)

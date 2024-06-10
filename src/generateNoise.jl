@@ -1,3 +1,5 @@
+using ImageFiltering: imfilter, Inner # equivalent to conv
+##
 function generateNoise(U_exact::AbstractMatrix{<:Real}, noise_ratio::Real, noise_dist::Int=0, noise_alg::Int=0)
     if noise_alg == 0 # additive
         stdv = sqrt(mean(U_exact[:] .^2))
@@ -31,7 +33,7 @@ function generateNoise(U_exact::AbstractMatrix{<:Real}, noise_ratio::Real, noise
 end
 ## estimate the standard deviation of noise by filtering then computing rmse
 function estimate_std(uobs::AbstractMatrix{<:Real}; k::Int=6)
-    D,Mp1 = size(uobs) 
+    D,M = size(uobs) 
     std = zeros(D)
     for d = 1:D
         f = uobs[d,:]

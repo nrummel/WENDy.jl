@@ -1,10 +1,11 @@
-
-function _getRHS_sym(mdl)
+using Symbolics: jacobian
+using ModelingToolkit: parameters, build_function, unknowns, ODESystem
+##
+function _getRHS_sym(mdl::ODESystem)
     return [eq.rhs for eq in equations(mdl)]
 end
 
-
-function getRHS(mdl)
+function getRHS(mdl::ODESystem)
     w = parameters(mdl)
     u = unknowns(mdl)
     rhs_sym = _getRHS_sym(mdl)
@@ -12,13 +13,13 @@ function getRHS(mdl)
     return _rhs,_rhs! 
 end
 
-function _getParameterJacobian_sym(mdl)
+function _getParameterJacobian_sym(mdl::ODESystem)
     w = parameters(mdl)
     rhs_sym = _getRHS_sym(mdl)
     return jacobian(rhs_sym, w)
 end
 
-function getParameterJacobian(mdl)
+function getParameterJacobian(mdl::ODESystem)
     w = parameters(mdl)
     u = unknowns(mdl)
     jac_sym = _getParameterJacobian_sym(mdl)
@@ -27,19 +28,20 @@ function getParameterJacobian(mdl)
     return jac, jac!
 end
 
-function _getJacobian_sym(mdl)
+function _getJacobian_sym(mdl::ODESystem)
     u = unknowns(mdl)
     rhs_sym = _getRHS_sym(mdl)
     return jacobian(rhs_sym, u)
 end
 
-function getJacobian(mdl)
+function getJacobian(mdl::ODESystem)
     w = parameters(mdl)
     u = unknowns(mdl)
     jac_sym = _getJacobian_sym(mdl)
     jac,jac! = build_function(jac_sym, w,u; expression=false)
     return jac, jac!
 end
+
 ## Maybe put size checks in these functions? 
 # J = length(w)
 # D = length(u)

@@ -115,11 +115,11 @@ function testBuildV(;dataFile::String=joinpath(@__DIR__,"../data/buildV.mat"), l
         radMeth    = MtminRadMethod()
         pruneMeth  = SingularValuePruningMethod(UniformDiscritizationMethod())
         ϕ          = ExponentialTestFun()
-        Mp1, D     = size(xobs)
+        M, D     = size(xobs)
         K_min      = 10
         num_rad = length(mt_params);
         ## Compute mt_min/max
-        mt_min, mt_max = getMtMinMax(tobs, xobs, ϕ, Mp1, K, K_min)
+        mt_min, mt_max = getMtMinMax(tobs, xobs, ϕ, M, K, K_min)
         if mt_max != mt_max_matlab 
             @info "mt max does not match"
             return false 
@@ -173,27 +173,27 @@ function test_L_to_matlab(;dataFile::String=joinpath(@__DIR__, "../data/Lw_hindm
         V = data["V"]
         Vp = data["Vp"]
         _, _jacuF! = getJacobian(mdl)
-        D, Mp1 = size(uobs)
+        D, M = size(uobs)
         J = length(parameters(mdl))
         K = size(V, 1)
         ##
         sig = estimate_std(uobs)
         ##
         w_rand = rand(J)
-        L_matlab = zeros(D*K,D*Mp1)
-        L = zeros(K,D,Mp1,D)
+        L_matlab = zeros(D*K,D*M)
+        L = zeros(K,D,M,D)
         # allocate buffers for L!
-        LL = zeros(K,Mp1,D,D) 
-        JJ = zeros(Mp1,D,D)
-        L0 = zeros(K,Mp1,D,D);
+        LL = zeros(K,M,D,D) 
+        JJ = zeros(M,D,D)
+        L0 = zeros(K,M,D,D);
         ##
         L0!(L0,Vp,sig)
-        @assert norm(reshape(permutedims(L0,(1,3,2,4)), K*D,Mp1*D) - L0_matlab) / norm(L0_matlab) < 1e2*eps() "L0 is bad"
+        @assert norm(reshape(permutedims(L0,(1,3,2,4)), K*D,M*D) - L0_matlab) / norm(L0_matlab) < 1e2*eps() "L0 is bad"
         ##
         @time L_matlab!(L_matlab, w_rand, L0_matlab,L1_matlab)
         @time begin 
             L!(L, LL, JJ, w_rand, sig, L0, _jacuF!, uobs) 
-            L_matrix = reshape(L, K*D, Mp1*D)
+            L_matrix = reshape(L, K*D, M*D)
         end;
         return  norm(L_matrix - L_matlab) / norm(L_matlab) < 1e2*eps()
     end
@@ -211,7 +211,7 @@ function test_residual(;dataFile::String=joinpath(@__DIR__, "../data/Lw_hindmars
         Vp = data["Vp"]
         _, _F! = getRHS(mdl)
 
-        D, Mp1 = size(uobs)
+        D, M = size(uobs)
         J = length(parameters(mdl))
         K = size(V, 1)
         ##
@@ -219,7 +219,7 @@ function test_residual(;dataFile::String=joinpath(@__DIR__, "../data/Lw_hindmars
         r = zeros(K*D)
         Gw = zeros(K, D)
         B = zeros(K,D)
-        FF = zeros(Mp1,D)
+        FF = zeros(M,D)
         Gw_matlab = G_matlab *w_rand  
 
         ##
@@ -235,7 +235,23 @@ function test_residual(;dataFile::String=joinpath(@__DIR__, "../data/Lw_hindmars
             )
     end
 end
+function test_VVp_Hindmarsh(;dataFile::String=joinpath(@__DIR__, "../data/Lw_hindmarsh_test.mat", ll::Logging.LogLevel=Logging.Warn))
+    with_logger(ConsoleLogger(stderr, ll)) do
+        mdl = HINDMARSH_ROSE_MODEL
+        data = matread()
+        tobs = Vector(data["tobs"][:])
+        uobs = Matrix(data["xobs"]')
+        G_matlab = data["G_0"]
+        b_matlab = data["b_0"][:]
+        V_matlab = data["V"]
+        Vp_matlab = data["Vp"]
+        ##
+        V,Vp,Vfull = pruneMeth(tobs,uobs,ϕ,K_min,K_max,mt_params);
 
+        return n(orm(V - diagm(sign.(diag(V * V_matlab'))) * V_matlab ) / norm(V_matlab) < 1e2*eps() 
+            && norm(Vp - diagm(sign.(diag(Vp * Vp_matlab'))) * Vp_matlab ) / norm(Vp_matlab) < 1e2*eps())
+    end
+end
 
 ##
 @testset "NLPMLE.jl" begin

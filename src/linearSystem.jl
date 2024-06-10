@@ -1,123 +1,151 @@
-function B!(B, Vp, uobs)
-    @tullio B[k,d] = - Vp[k,m] * uobs[d,m]
+using Tullio,LinearAlgebra
+##
+function F!(FF::AbstractMatrix{T}, w::AbstractVector{T}, u::AbstractMatrix{T}, _F!::Function) where T<:Real
+    for m in 1:size(FF,2)
+        _F!(view(FF,:,m), w,  view(u,:,m))
+    end
     nothing
 end
 
-function G!(G, FF, w, V, _F!, uobs) 
-    F!(FF, w,_F!,uobs)
-    @tullio G[k,d] = V[k,m] * FF[m,d]
+function G!(GG::AbstractMatrix{T}, FF::AbstractMatrix{T}, V::AbstractMatrix{T}, w::AbstractVector{T}, u::AbstractMatrix{T}, _F!::Function)where T<:Real
+    F!(FF, w, u, _F!)
+    mul!(GG, V, FF')
     nothing
 end
 
-function residual!(r, G,FF,B,w,V,Vp,_F!,uobs)
-    G!(G, FF, w,V,_F!,uobs) 
-    B!(B, Vp, uobs)
-    r[:] = reshape(G, prod(size(G))) - reshape(B, prod(size(B)))
+function B!(BB::AbstractMatrix{T}, Vp::AbstractMatrix{T},u::AbstractMatrix{T})where T<:Real
+    mul!(BB, Vp, u',-1,0)
     nothing
 end
 
-function jacG!(jacG,JJ,V,w) 
-    JJ = jacF(w)
-    @tullio jacG[k,d1,d2] = V[k,m] * JJ[m,d1,d2]
-    return jacG 
-end 
-
-function F!(F, w, _F!, uobs)
-    for m in 1:Mp1
-        _F!(view(F,m,:),w,uobs[:,m])
-    end 
+function _J!(JJ::AbstractArray{T,3},w::AbstractVector{T},u::AbstractMatrix{T}, _jacuF!::Function) where T<:Real
+    @inbounds for m in 1:size(JJ,3)
+        um = view(u,:,m)
+        jm = view(JJ,:,:,m)
+        _jacuF!(jm, w,um)
+    end
     nothing
 end
 
-function jacuF!(jacF, w, _jacuF!,uobs)
-    for m in 1:Mp1
-        @time _jacuF!(view(jacF,m,:,:), w, uobs[:,m])
-    end 
+function _L!(L_mat::AbstractMatrix{T}, L::AbstractArray{T,4}, LL::AbstractArray{T,4}, JJ::AbstractArray{T,3},w::AbstractVector{T},u::AbstractMatrix{T}, V::AbstractMatrix{T}, Vp::AbstractMatrix{T}, sig::AbstractVector{T}, _jacuF!::Function) where T<:Real
+    K,D,M,_ = size(L)
+    _J!(JJ, w, u, _jacuF!)
+    @tullio LL[k,d2,d1,m] = V[k,m] * JJ[d2,d1,m] * sig[d1]
+    @tullio LL[k,d,d,m] += Vp[k,m]*sig[d]
+    # LL_tmp = reshape
+    permutedims!(L,LL,(1,2,4,3))
+    L_mat .= reshape(L,K*D,M*D)
     nothing
 end
 
-function jacwF!(jacF, w, _jacwF!, uobs)
-    for m in 1:Mp1
-        _jacwF!(view(jacF,m,:,:), w, uobs[:,m])
-    end 
-    nothing
-end
-function L0!(L0,Vp,sig)
-    @tullio L0[k,m,d,d] = Vp[k,m]*sig[d]
-    nothing
-end 
 
-function LL!(LL,JJ, w, sig, L0, _jacuF!, uobs) 
-    jacuF!(JJ,w,_jacuF!, uobs)
-    @tullio LL[k,m,d2,d1] = V[k,m] * JJ[m,d2,d1] * sig[d1]
-    LL[:] += L0[:]
-    nothing
+##
+abstract type LMatrix end
+
+struct LNonlinear{T}<:LMatrix where T<:Real
+    JJ::AbstractArray{T,3}
+    LL::AbstractArray{T,4}
+    L::AbstractArray{T,4}
+    L_mat::AbstractMatrix{T}
+    V::AbstractMatrix{T}
+    Vp::AbstractMatrix{T}
+    u::AbstractMatrix{T}
+    sig::AbstractVector{T}
+    _jacuF!::Function 
 end
 
-function L!(L,LL,JJ, w, sig, L0, _jacuF!, uobs) 
-    LL!(LL,JJ, w, sig, L0, _jacuF!, uobs) 
-    permutedims!(L,LL,(1,3,2,4))
-    nothing
+function LNonlinear(u::AbstractMatrix{T}, V::AbstractMatrix{T}, Vp::AbstractMatrix{T}, sig::AbstractVector{T}, _jacuF!::Function) where T<:Real
+    D, M = size(u)
+    K, _ = size(V)
+    JJ = zeros(D,D,M)
+    LL = zeros(K,D,D,M)
+    L  = zeros(K,D,M,D)
+    L_mat  = zeros(K*D,M*D)
+    LNonlinear(JJ, LL, L, L_mat, V, Vp, u, sig, _jacuF!)
 end
 
-function S!(S, L, LL,JJ, w, sig, L0, _jacuF!, uobs)
-
+function (s::LNonlinear)(w::AbstractVector{<:Real})
+    _L!(s.L_mat, s.L, s.LL, s.JJ, w, s.u, s.V, s.Vp, s.sig, s._jacuF!)
+    return s.L_mat 
 end
 
+abstract type IRWLS_Iter end 
 
+struct IRWLS_Iter_Linear{T}<:IRWLS_Iter where T<:Real
+    Lgetter::LNonlinear
+    S::AbstractMatrix{T}
+    R0::AbstractMatrix{T}
+    R::AbstractMatrix{T}
+    G0::AbstractMatrix{T}
+    G::AbstractMatrix{T}
+    b0::AbstractVector{T}
+    b::AbstractVector{T}
+    diag_reg::T
+end
 
-# @btime L_naive!($L1, $buf, $uobs,$w_rand)#;L0=ZZ)
-# @btime L_naive!($L11, $FF, $w_rand)#;L0=ZZ)
-# @time L_naive!(L1, buf, uobs,w_rand)#;L0=ZZ)
-# @time L_naive!(L11, FF, w_rand)#;L0=ZZ)
-# @btime L_naive2!($L2, $FF, $w_rand)#;L0=ZZ)
-# relErr0 = norm(L11-L1)/norm(L1)
-# relErr1 = norm(L2-L1)/norm(L1)
-# relErr2 = norm(L_tullio-L1)/norm(L1)
-# @info "relErr naive1 = $relErr0"
-# @info "relErr naive2 = $relErr1"
-# @info "relErr tullio = $relErr2"
+function IRWLS_Iter_Linear(u::AbstractMatrix{T}, V::AbstractMatrix{T}, Vp::AbstractMatrix{T}, sig::AbstractVector{T}, _jacuF!::Function, G0::AbstractMatrix{T}, b0::AbstractVector{T}) where T<:Real
+    D, M = size(u)
+    K, _ = size(V)
+    S = zeros(K*D,K*D)
+    R0 = Matrix{Float64}(I,K*D,K*D)
+    R = similar(R0)
+    G = similar(G0)
+    b = similar(b0)
+    Lgetter = LNonlinear(u,V,Vp,sig,_jacuF!)
+    IRWLS_Iter_Linear(Lgetter, S, R0, R, G0, G, b0, b, diag_reg)
+end
 
-# function L_naive!(L, buf, uobs, w; L0=L0)
-#     for m in 1:Mp1
-#         _jacuF!(buf, w, uobs[:,m])
-#         for k in 1:K
-#             for d1 in 1:D
-#                 for d2 in 1:D
-#                     L[k,m,d2,d1] = buf[d2,d1] * V[k,m]
-#                 end
-#             end
-#         end
-#     end
-  
-#     L += L0
-#     nothing
-# end
-# function L_naive!(L, FF, w; L0=L0)
-#     jacuF!(FF, w)
-#     for k in 1:K
-#         for m in 1:Mp1
-#             for d1 in 1:D
-#                 for d2 in 1:D
-#                     L[k,m,d2,d1] = FF[m,d2,d1] * V[k,m]
-#                 end
-#             end
-#         end
-#     end
-  
-#     L += L0
-#     nothing
-# end
+function (s::IRWLS_Iter_Linear)(wim1::AbstractVector{T}) where T<:Real
+    L = s.Lgetter(wim1)
+    mul!(s.S, L, L')
+    s.R .= s.R0
+    mul!(s.R, s.S, s.R0, 1-diag_reg,diag_reg)
+    cholesky!(Symmetric(s.R))
+    ldiv!(s.G, UpperTriangular(s.R)', s.G0)
+    ldiv!(s.b, UpperTriangular(s.R)', s.b0)
+    return  s.G \ s.b
+    # ldiv!(wi, s.G, s.b) ## this gives an error for some reason
+    # nothing
+end
 
-# function L_naive2!(L,FF, w; L0=L0)
-#     jacuF!(FF, w)
-#     for d1 in 1:D
-#         for d2 in 1:D
-#             for k in 1:K
-#                 L[k,:,d2,d1] = V[k,:] .* FF[:,d2,d1] 
-#             end      
-#         end
-#     end
-#     L += L0
-#     nothing
-# end
+function _G0!(G0::AbstractMatrix{T}, u::AbstractMatrix{T}, V::AbstractMatrix{T}, _F!::Function) where T<:Real
+    _, J = size(G0)
+    K, M = size(V)
+    D, _ = size(u)
+    FF = zeros(D,M)
+    GG = zeros(K,D)
+    ej = zeros(J)
+    for j in 1:J 
+        ej[j] = 1
+        G!(GG, FF, V, ej, u, _F!)
+        G0[:,j] = reshape(GG, K*D)
+        ej[j] = 0
+    end
+end
+
+function IRWLS_Linear(u::AbstractMatrix{T}, V::AbstractMatrix{T}, Vp::AbstractMatrix{T}, sig::AbstractVector{T}, _F!::Function, _jacuF!::Function, J::Int; maxIt::Int=100,tol::AbstractFloat=1e-10) where T<:Real
+    ## Get dimensions
+    D, M = size(u)
+    K,_ = size(V)
+    ## Preallocate
+    wit = zeros(J,maxIt)
+    B = zeros(K,D)
+    G0 = zeros(K*D, J)
+    B!(B, Vp, u)
+    b0 = reshape(B, K*D)
+    _G0!(G0, u, V, _F!)
+    iter = IRWLS_Iter_Linear(u, V, Vp, sig, _jacuF!, G0, b0) 
+    ## start algorithm
+    wit[:,1] = G0 \ b0
+    for i in 2:maxIt 
+        wit[:,i] = iter(wit[:,i-1])
+        if norm(wit[:,i] - wit[:,i-1]) / norm(wit[:,i-1]) < tol 
+            wit = wit[:,1:i]
+            break 
+        end
+        if i == maxIt 
+            @warn "Did not converge"
+        end
+    end
+    return wit[:,end], wit
+end
