@@ -119,8 +119,7 @@ function testBuildV(;dataFile::String=joinpath(@__DIR__,"../data/buildV.mat"), l
         K_min      = 10
         num_rad = length(mt_params);
         ## Compute mt_min/max
-        mt_max = Int(max(floor((Mp1-1)/2)-K_min,1));
-        mt_min = rad_select(tobs,xobs,ϕ,mt_max);
+        mt_min, mt_max = getMtMinMax(tobs, xobs, ϕ, Mp1, K, K_min)
         if mt_max != mt_max_matlab 
             @info "mt max does not match"
             return false 
@@ -130,12 +129,7 @@ function testBuildV(;dataFile::String=joinpath(@__DIR__,"../data/buildV.mat"), l
             return false 
         end 
         ##
-        mt = zeros(num_rad, D)
-        for (m, p) in enumerate(mt_params), d in 1:D
-            mt[m,d] = radMeth(xobs, tobs, ϕ, mt_min, mt_max, p)
-        end
-        mt = Int.(ceil.(1 ./ mean(1 ./ mt, dims=2)))
-        mt = mt[:]
+        mt = _getMt(tobs, xobs, ϕ, K_min)
         if any(mt .!= mt_matlab) 
             @info "mt does not match matlab"
             return false
@@ -148,7 +142,7 @@ function testBuildV(;dataFile::String=joinpath(@__DIR__,"../data/buildV.mat"), l
             return false 
         end
         ##
-        V,Vp = pruneMeth(mt,tobs,ϕ,K_min,K_max,D,num_rad);
+        V,Vp = pruneMeth(tobs,xobs,ϕ,K_min,K_max,mt_params);
         if norm(V - V_matlab) / norm(V_matlab) >= 1e2*eps() 
             @info "The V mat is bad"
             return false 
@@ -158,8 +152,91 @@ function testBuildV(;dataFile::String=joinpath(@__DIR__,"../data/buildV.mat"), l
             return false
         end
         return true
-        end
+    end
 end
+
+function L_matlab!(L, w, L0, L1)
+    @tullio L[k,m] = L1[k,m,j] * w[j]
+    L[:] += L0[:]
+    nothing
+end
+
+function test_L_to_matlab(;dataFile::String=joinpath(@__DIR__, "../data/Lw_hindmarsh_test.mat"), ll::Logging.LogLevel=Logging.Warn)
+    with_logger(ConoleLogger(stderr, ll)) do
+        ## Load example
+        mdl = HINDMARSH_ROSE_MODEL
+        data = matread(dataFile)
+        tobs = Vector(data["tobs"][:])
+        uobs = Matrix(data["xobs"]')
+        L0_matlab = data["L0"]
+        L1_matlab = data["L1"]
+        V = data["V"]
+        Vp = data["Vp"]
+        _, _jacuF! = getJacobian(mdl)
+        D, Mp1 = size(uobs)
+        J = length(parameters(mdl))
+        K = size(V, 1)
+        ##
+        sig = estimate_std(uobs)
+        ##
+        w_rand = rand(J)
+        L_matlab = zeros(D*K,D*Mp1)
+        L = zeros(K,D,Mp1,D)
+        # allocate buffers for L!
+        LL = zeros(K,Mp1,D,D) 
+        JJ = zeros(Mp1,D,D)
+        L0 = zeros(K,Mp1,D,D);
+        ##
+        L0!(L0,Vp,sig)
+        @assert norm(reshape(permutedims(L0,(1,3,2,4)), K*D,Mp1*D) - L0_matlab) / norm(L0_matlab) < 1e2*eps() "L0 is bad"
+        ##
+        @time L_matlab!(L_matlab, w_rand, L0_matlab,L1_matlab)
+        @time begin 
+            L!(L, LL, JJ, w_rand, sig, L0, _jacuF!, uobs) 
+            L_matrix = reshape(L, K*D, Mp1*D)
+        end;
+        return  norm(L_matrix - L_matlab) / norm(L_matlab) < 1e2*eps()
+    end
+end
+
+function test_residual(;dataFile::String=joinpath(@__DIR__, "../data/Lw_hindmarsh_test.mat"), ll::Logging.LogLevel=Logging.Warn)
+    with_logger(ConsoleLogger(stderr, ll)) do
+        mdl = HINDMARSH_ROSE_MODEL
+        data = matread(joinpath(@__DIR__, "../data/Lw_hindmarsh_test.mat"))
+        tobs = Vector(data["tobs"][:])
+        uobs = Matrix(data["xobs"]')
+        G_matlab = data["G_0"]
+        b_matlab = data["b_0"][:]
+        V = data["V"]
+        Vp = data["Vp"]
+        _, _F! = getRHS(mdl)
+
+        D, Mp1 = size(uobs)
+        J = length(parameters(mdl))
+        K = size(V, 1)
+        ##
+        w_rand = rand(J)
+        r = zeros(K*D)
+        Gw = zeros(K, D)
+        B = zeros(K,D)
+        FF = zeros(Mp1,D)
+        Gw_matlab = G_matlab *w_rand  
+
+        ##
+        G!(Gw, FF, w_rand, V, _F!, uobs)
+        B!(B, Vp, uobs)
+        residual!(r,Gw,FF,B,w_rand,V,Vp,_F!,uobs)
+        r_matlab = Gw_matlab - b_matlab 
+        Gw_vec = reshape(Gw, K*D)
+        b = reshape(B, K*D)
+        return (norm(b- b_matlab)/norm(b_matlab) < 1e2*eps() &&
+            norm(Gw_vec- Gw_matlab)/norm(Gw_matlab) < 1e2*eps() &&
+            norm(r- r_matlab)/norm(r_matlab) < 1e2*eps() 
+            )
+    end
+end
+
+
 ##
 @testset "NLPMLE.jl" begin
     @testset "Compare to MATLAB Implementation..." begin
@@ -167,6 +244,8 @@ end
         @test testRadSelect()
         @test testTestFunctionDiscritization()
         @test testBuildV()
+        @test test_L_to_matlab()
+        @test test_residual()
     end
     @testset "Create Test DataSet..." begin
         @test testCreateTestData()

@@ -30,7 +30,7 @@ The following estimation problem is solved in variety of ways:
 $$w = \underset{\nu}{\operatorname{armin}} \tfrac{1}{2}\|\Theta \nu - \dot{\tilde{u}}\|_2^2 +\lambda\|\nu\|_*$$
 The $\|\cdot\|_*$ is a regularizer on $w$ chosen to promote sparse solutions. This in practice can be the 1 norm or 0 norm. This can per solved via LASSO or orthogonal matching pursuit (varieties of alternative) respectively. 
 ### WSINDy 
-. This extends the SINDy framework but now instead of looking at the strong for we have 
+This extends the SINDy framework but now instead of looking at the strong for we have 
 $$-\langle \dot{\Phi},u\rangle=\langle\Phi,\Theta\rangle w$$
 where $\langle \Phi, \cdot \rangle_k \approx \int_{t_1}^{t_J} \varphi_k(\tau) (\cdot(\tau)) d\tau$ where $\varphi_k \in C_c^\infty[t_1,t_J]$. These are the familiar test functions for the weak form of the differential equation. The boon here is that the derivative can be passed to the test functions to forgo the approximating the derivative. This along with other properties intrinsic to the weak form make it more robust to noisy data. 
 Again this is posed as a regularized least squares
@@ -42,7 +42,7 @@ References:
 ### WENDy
  This algorithm aims to work from a statistical framework instead of looking at the squared error of the coefficients, we instead isolated the error that is related to noise and come up with an estimator based on the asymptotic distribution of the residual. After much derivation and some assumption due to integration error and model mismatch error being negligible we find
 $$S_w^{-1/2}(\langle\Phi,\Theta\rangle w +\langle \dot{\Phi},u\rangle) \stackrel{asymp}{\sim} N(0, I)$$
-where $L_w = \underbrace{\dot{\Phi}}_{\stackrel{\Delta}{=} L_0} + \underbrace{\langle \Phi, \nabla_u \Theta \rangle}_{\stackrel{\Delta}{=} L_1} \times_3 w$ 
+where $L_w = \underbrace{ \mathbb{I}_D \circ \dot{\Phi}}_{\stackrel{\Delta}{=} L_0} + \underbrace{\nabla_u \Theta \circ \Phi, }_{\stackrel{\Delta}{=} L_1} \times_3 w$ 
 and $S_w = L_wL_w^T$.   $S_w^{1/2}$ is the Cholesky Factorization of $S_w$.
 Looking at the negative log-likelihood
 $$-\mathcal{L}(w;u) \stackrel{asymp}{=} (Gw-b)^TS_w^{-1}(Gw-b) + \log(\det(S_w))$$
@@ -93,23 +93,42 @@ Notice that while $b$ is linear in $u$ by the nature of the inner product $G$ is
 $$\begin{align*}
 	r(w) &= G(w) - b \\
 	&= G(w)+ G^*(w) - G^*(w) +G^*(w^*) -G^*(w^*) - b^* - b^\epsilon\\
-	&= \underbrace{G(w) - G^*(w)}_{e^\Theta} + \underbrace{G^*(w) -G^*(w^*)}_{e^{\text{int}}} + \underbrace{G^*(w^*) - b^*}_{r^*} -b^\epsilon
+	&= \underbrace{G(w) - G^*(w)}_{e^\Theta} + \underbrace{G^*(w) -G^*(w^*)}_{r^*} + \underbrace{G^*(w^*) - b^*}_{e^{\text{int}}} -b^\epsilon
 \end{align*}$$
-The WENDy paper states that in the linear case that $e^\text{int}$ is due to numerical integration. This still should be largely true, there could be some more numerical error because evaluation $G(\cdot)$ may have non-negligible noise, but for the sake of simplicity perhaps we can say this is still small. The $r^*$ is the residual evaluated at the true weights, so in general this should be small if enough data is present so that evaluation of $G$ can be done to high accuracy. Ok so maybe we still can say that as the number of points gets large
+Investigating the potential sources of error: 
+- $e^\text{int}$ is due to numerical integration because the only source of error is building $G^*(w),b^*$ with perfect data that satisfies the ODE. 
+- $r^*$ is the difference of the RHS of the weak form evaluated at the true weights vs the approximated one. $$\begin{align*}
+		\begin{cases}r^* = \|\nabla_w G^*(w-w^*)\| ,& \text{ when $G$ is linear in parameters}\\
+		r^*\le \|\nabla_w G_*\|\|w-w^*\| ,& \text{ when $G$ is non-linear in parameters}
+\end{cases}
+	\end{align*}$$As  $w^*\rightarrow w$ (i.e. method is convergent),  $r^* \rightarrow 0$. 
+
+We still can say that as the number of points gets large and the method converges that:
 $$r(w) \rightarrow e^\Theta -b^\epsilon$$
-Inspecting this quantity, we see that we need to linearize $G$ about the true data $u^*$:
+Inspecting this quantity, we see that we need to linearize $G$ about the  data $u$:
 $$\begin{align*}
-	e^\Theta-b^\epsilon &= G^*(w) + \langle \nabla_u G^*(w), \epsilon\rangle + H(u^*,w,\epsilon) - G^*(w) -b^\epsilon \\
-	&= \langle \nabla_u G^*(w), \epsilon\rangle  -b^\epsilon + H(u^*,w,\epsilon)\\
-	&= \langle \nabla_u G^*(w) - \dot{\Phi}, \epsilon\rangle
+	e^\Theta-b^\epsilon &= G(u,w) - G(u^*,w) + \langle \dot{\Phi}, \epsilon \rangle \\
+	&= G(u, w) + \langle \dot{\Phi}, \epsilon \rangle \\
+	&- \Big(G(u,w) - \langle \nabla_u G(u,w), \epsilon \rangle + H(u^*,w,\epsilon) \Big) \\
+	&\approx \langle \nabla_u G(u,w) + \dot{\Phi}, \epsilon\rangle
 \end{align*}$$
-```ad-warning
-title: Wait a second
-We can't evaluate $\nabla_u G^*$! We in practice approximate with $\nabla_u G$. Is this part of the assymptotic argument... seems sketchy...
+Notice that because $\epsilon_m \stackrel{iid}{\sim} N(0,\sigma^2) \Leftrightarrow \epsilon \sim N(0, \sigma^2 I)$. Now if we say that $|\epsilon| \ll 1$ then because $H = O(\epsilon^2)$ and can be throw out. 
+```ad-failure
+title: Asymptotic Distribution Derivation
+
+Assuming that $w \rightarrow w^*$ and $M \gg 1$, then we have
+$$\begin{align*}
+	\mathbb{E}[r(w^*)] &= \mathbb{E}[e^\Theta -b^\epsilon]\\
+	&= \Phi \mathbb{E}[\langle \nabla_u F(w,u), \epsilon \rangle] + \dot{\Phi} \mathbb{E}[\epsilon ] \\
+	&= \Phi \mathbb{E}[\nabla_u F(w,u)\times_3 \epsilon] \\
+	\mathbb{Var}[r(w)] &= \mathbb{E}[r(w)r(w)^T ]  \\ 
+	&\approx \Phi \mathbb{E}[\nabla_u F(w,u)\times_3 \epsilon \;\epsilon^T \times_3 \nabla_u F(w,u)]\Phi^T\\
+	&+ 2 \Phi \mathbb{E}[\nabla_u F(w,u)\times_3 \epsilon \;\epsilon^T ]\dot{\Phi}^T\\
+	&+ \dot{\Phi} \underbrace{\mathbb{E}[ \epsilon \;\epsilon^T ]}_{\sigma^2 I_{D\times (M+1)}}\dot{\Phi}^T\\
+	S_w^{-1/2} (e^\Theta - b^\epsilon) &\stackrel{asymp}{\sim} N(0, I)\\
+\end{align*}$$
+But now  $L_w =  \underbrace{\mathbb{I}_D \circ \dot{\Phi}}_{\stackrel{\Delta}{=} L_0} + \underbrace{\nabla_u F(u,w) \circ \Phi}_{\stackrel{\Delta}{=} L_1(w)}$,
 ```
-Notice that because $\epsilon_m \stackrel{iid}{\sim} N(0,\sigma^2) \Leftrightarrow \epsilon \sim N(0, \sigma^2 I)$. Now if we say that $|\epsilon| \ll 1$ then because $H = O(\epsilon^2)$ and can be throw out, we have linear function of a multivariate gaussian, which is itself multivariate Gaussian
-$$S_w^{-1/2} (e^\Theta - b^\epsilon) \stackrel{asymp}{\sim} N(0, I)$$
-But now  $L_w = \underbrace{\dot{\Phi}}_{\stackrel{\Delta}{=} L_0} + \underbrace{\langle \Phi, \nabla_u F(u,w) \rangle}_{\stackrel{\Delta}{=} L_1(w)}$,
 $S_w = L_wL_w^T$, and $S_w^{-1/2}$ is the Cholesky factorization. This now has a negative log likelihood:
 $$-\mathcal{L}(w; u) = \underbrace{(G(w)-b)^TS_w^{-1}(G(w)-b)}_{f(w;u)} + \log(\det(S_w))$$Neglecting  the $\log\det$ term due to its lack of contribution in general, we obtain 
 $$\begin{align*}
@@ -137,16 +156,32 @@ $$\begin{align*}
 $$G(w) = \langle \Phi,F(u,w)\rangle$$
 So evaluating the cost function require computing the inner product with the test functions. 
 ```
+### Fleshing out $L_w$ 
+Recall that 
+$$\begin{align*}
+F&: \mathbb{R}^{J \times D} \rightarrow \mathbb{R}^D\\
+F(w,u) &= \begin{bmatrix}f_1(w,u)\\
+\vdots \\
+f_D(w,u)\end{bmatrix}\\
+\nabla_uF &: \mathbb{R}^{J \times D} \rightarrow \mathbb{R}^{D\times D}\\\\
+\nabla_uF &=  \begin{bmatrix} \partial_{u_1} f_1(w,u) & \cdots & \partial_{u_D} f_1\\
+\vdots  & \ddots & \vdots\\
+\partial_{u_1} f_D(w,u) & \cdots & \partial_{u_D}f_D(w,u) \end{bmatrix}\\
+G&:\mathbb{R}^{J \times D} \rightarrow \mathbb{R}^{K \times D}\\
+G(w,u) &= \langle \Phi, F(w,u)\rangle = \Phi^T F(w,u)\\
+\nabla_u G&:\mathbb{R}^{J \times D} \rightarrow \mathbb{R}^{K \times D \times D}\\
+\nabla_u G(w,u) &= \langle\Phi, \nabla_uF(w,u)\rangle
+\end{align*}
+$$
+
 ### Picking an initial $w_0$
 Two obvious options: 
-- We can use the McClaurin or Taylor series of $F$ and solve the least squares problem.	$$\begin{align*}
-		F(u,w) &\approx F(u, 0) + \langle\nabla_w F(u,0), w\rangle\\
-		r(w) &\approx \underbrace{\langle \Phi, u\rangle - F(u, 0)}_y - \underbrace{\langle\nabla_w F(u,0), w\rangle}_{Aw}\\
-		\|r(w)\|_2 &\approx \|Aw - y\|_2 \\
-		w &= \underset{\nu}{\operatorname{argmin}} \|r(w)\|_2\\
-		&= (A^TA)^{-1}A^Tb
+- Solve the non-linear least squares problem neglecting the covariance. This is equivalent to the "WSINDy" $w_0$. We can doe this with any local minimization method, we can use a derivative free method or use the gradient of $G$:$$\begin{align*}
+		\min_{w} \frac{1}{2} \|G(w)-b\|_2^2\\\\
+		G(w) &= \Phi F(w)\\
+		\nabla_w G(w) &= \Phi \nabla_w F(w)
 	\end{align*}$$
-- Randomly pick in a desired domain or prior distribution? 
+- Randomly pick in a desired domain or prior distribution? I think it is reasonable to allow the use of prior knoledge or constraints on the parameter values.
 ## Test Problems
 ### FitzHugh–Nagumo Equations
 $$
@@ -210,27 +245,4 @@ title: Outstanding Questions
 	- _Continuously Stirred Tank Reactor Equations_ from [[Ramsay et al. - 2007 - Parameter Estimation for Differential Equations a.pdf#page=4|Ramsay]]
 ```
 
-## Identifiably of Parameters
-[Julia Implementation](https://docs.sciml.ai/ModelingToolkit/stable/tutorials/parameter_identifiability/) 
 
-## Question for Dan
-## Computing $V,V^\prime$
-- Why are there different coefficients for trap rule when we move $V$ to $V^\prime$?
-	$$\begin{align*}
-		\Phi &= \begin{bmatrix*}\phi_1 \cdots \phi_K \end{bmatrix*}\\
-		\mathcal{Q} &= \operatorname{diag}[(\tfrac{\Delta t}{2},\Delta t,\cdots ,\Delta t,\tfrac{\Delta t}{2})]\\
-		\text{In paper} &\rightarrow \begin{cases} 
-		V &= \Phi \mathcal{Q}\\
-		V^\prime &= -\dot{\Phi} \mathcal{Q}
-		 \end{cases}\\
-\text{In code} &\rightarrow \begin{cases} 
-		V &= \Phi \mathcal{Q}\\
-		V^\prime &= -\frac{1}{m_t*\Delta t} \dot{\Phi} \mathcal{Q} 
-		 \end{cases}
-	\end{align*}$$
-### SVD reduction of $V,V^\prime$ 
-
-### Bugs in Code
-- Error in `fdcoeffF.m` 
-- Index bug in `_getTestFunctionWeights`
-- Index bug in `VVp_svd` Fixing symmetry?

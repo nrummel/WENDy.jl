@@ -20,23 +20,23 @@ include("testFunctions.jl")
 
 function runAlgo(;
     exampleFile::String=joinpath(@__DIR__, "../data/LogisticGrowth.mat"),
-    noise_ratio::Real=0.05,
-    subsample::Int=1,
-    mt_params::AbstractVector = 2 .^(0:3),
-    K_max::Real=5e3,
-    radMeth::RadMethod=MtminRadMethod(),
-    seed::Real=1.0,
+    mdl::ODESystem=LOGISTIC_GROWTH_MODEL,
     ϕ::Function=ExponentialTestFun(),
-    toggle_VVp_svd::Union{Int, Nothing}=nothing
+    noise_ratio::Real=0.05,
+    time_subsample_rate::Int=1,
+    mt_params::AbstractVector = 2 .^(0:3),
+    radMeth::RadMethod=MtminRadMethod(),
+    pruneMeth::TestFunctionPruningMethod=SingularValuePruningMethod(UniformDiscritizationMethod())
+    seed::Real=1.0,
 )
     BSON.@load exampleFile t u 
-    Mp1, D = size(u)
-    num_test_fun_params = length(mt_params)
     @assert Mp1 == length(t) "Number of time points should match dependent variable array"
-    @assert mod(subsample,2) ==0 || subsample == 1 "Subsample rate should be divisible by 2"
+    @assert mod(time_subsample_rate,2) ==0 || time_subsample_rate == 1 "Subsample rate should be divisible by 2"
     ## Subsample the data
-    tobs = t[1:subsample:end]
-    uobs = u[:,1:subsample:end]
+    tobs = t[1:time_subsample_rate:end]
+    uobs = u[:,1:time_subsample_rate:end]
+    Mp1, D = size(uobs)
+    num_rad = length(mt_params)
     ## Add noise 
     Random.seed!(seed)
     uobs = generateNoise(uobs, noise_ratio)
@@ -47,7 +47,7 @@ function runAlgo(;
     mt_max = maximum(floor((M-1)/2)-K_min,1) 
     mt_min = rad_select(tobs,xobs,ϕ,mt_max)
     
-    mt = zeros(num_test_fun_params, D)
+    mt = zeros(num_rad, D)
     for (n,mtp) in enumerate(mt_params),d in 1:N
         mt[n,d] = radMeth(xobs, tobs, ϕ, mtp, mt_min, mt_max)
     end

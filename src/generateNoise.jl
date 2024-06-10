@@ -25,16 +25,16 @@ function generateNoise(U_exact::AbstractMatrix{<:Real}, noise_ratio::Real, noise
     elseif noise_alg == 1 # multiplicative
         U = U_exact.*(1 + noise)
     end
-    noise_ratio_obs = norm(U(:)-U_exact(:))/norm(U_exact(:))
+    noise_ratio_obs = norm(U[:]-U_exact[:])/norm(U_exact[:])
 
     return U,noise,noise_ratio_obs,sigma
 end
 ## estimate the standard deviation of noise by filtering then computing rmse
-function estiamte_std(uobs::AbstractMatrix{<:Real}; k::Int=6)
-    num_states = size(uobs,2) 
-    std = zeros(num_states)
-    for d = 1:num_states
-        f = uobs[:,d]
+function estimate_std(uobs::AbstractMatrix{<:Real}; k::Int=6)
+    D,Mp1 = size(uobs) 
+    std = zeros(D)
+    for d = 1:D
+        f = uobs[d,:]
         C = fdcoeffF(k,0,-k-2:k+2)
         filter = C[:,end]
         filter = filter / norm(filter,2)

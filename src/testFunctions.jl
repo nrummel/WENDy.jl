@@ -10,11 +10,11 @@ function (ϕ::QuadradicTestFun)(x::Number,η::Real=9)
     (1-x.^2).^η
 end
 ##
-function rad_select(t0::AbstractVector,y::AbstractMatrix,
+function rad_select(t0::AbstractVector,uobs::AbstractMatrix,
     ϕ::TestFunction, m_max::Int;inc::Real=1,
     sub::Real=2.1,q::Real=0.0,s::Real=1.0,m_min::Int=2
 )::Int
-    M,nstates = size(y)
+    D,Mp1 = size(uobs)
     
     if isnothing(ϕ)
         return m_min
@@ -22,66 +22,66 @@ function rad_select(t0::AbstractVector,y::AbstractMatrix,
         return m_min
     end
     dt = mean(diff(t0))
-    t = 0:dt/inc:(M-1)*dt
-    ms = m_min:m_max
-    errs = zeros(length(ms))
-    for (ix,m) in enumerate(ms)
-        l = 2*inc*m-1
-        t_phi = range(-1+dt/inc,1-dt/inc,Int(l))
-        Qs = 1:Int(floor(s*inc*m)):Int(length(t)-2*inc*m)
-        errs_temp = zeros(nstates,length(Qs))
-        for Q in 1:length(Qs)
+    t = 0:dt/inc:(Mp1-1)*dt
+    mts = m_min:m_max
+    errs = zeros(length(mts))
+    for (b,mt) in enumerate(mts)
+        l = Int(2*inc*mt-1)
+        t_phi = range(-1+dt/inc,1-dt/inc,l)
+        IX = 1:Int(floor(s*inc*mt)):Int(length(t)-2*inc*mt)
+        errs_temp = zeros(D,length(IX))
+        for (i,ix) in enumerate(IX)
             phi_vec = zeros(length(t))
-            phi_vec[Qs[Q]:Qs[Q]+length(t_phi)-1] = ϕ.(t_phi)
+            phi_vec[ix:ix+length(t_phi)-1] = ϕ.(t_phi)
             phi_vec /= norm(phi_vec,2)
-            for nn=1:nstates
-                phiu_fft = (dt/sqrt(M*dt))*fft(phi_vec .* y[:,nn])
-                alias = phiu_fft[1:Int(floor(M/sub)):Int(floor(inc*M/2))]
-                errs_temp[nn,Q] = 2*(2*pi/sqrt(M*dt))*sum((0:length(alias)-1).*imag(alias[:]'))
+            for d=1:D
+                phiu_fft = (dt/sqrt(Mp1*dt))*fft(phi_vec .* uobs[d,:])
+                alias = phiu_fft[1:Int(floor(Mp1/sub)):Int(floor(inc*Mp1/2))]
+                errs_temp[d,i] = 2*(2*pi/sqrt(Mp1*dt))*sum((0:length(alias)-1).*imag(alias[:]'))
             end
         end
-        errs[ix] = sqrt(mean(errs_temp[:].^2))
+        errs[b] = sqrt(mean(errs_temp[:].^2))
     end
-    b = getcorner(log.(errs),ms) # This corresponds to when 'pow' is empty
-    return ms[b]
+    l = getcorner(log.(errs),mts) # This corresponds to when 'pow' is empty
+    return mts[l]
 end
 function fftshift(arr::AbstractArray)
     return circshift(arr, Int(floor(length(arr)/2)))
 end
 ## Find where the error is with the secand line approximation is minimized in L1
-function getcorner(U::AbstractVector{<:Real},xx::Union{AbstractVector{<:Real},Nothing}=nothing)
-    NN = length(U)
-    U = U / maximum(abs.(U))*NN
+function getcorner(v::AbstractVector{<:Real},xx::Union{AbstractVector{<:Real},Nothing}=nothing)
+    NN = length(v)
+    v = (v ./ maximum(abs.(v)))*NN
     errs = zeros(NN)
     for k=1:NN
-        L1,L2,U1,U2 = build_lines(U,k,xx)
+        l1,l2,u1,u2 = build_lines(v,k,xx)
         # relative L1 err
-        errs[k] = sum(abs.((L1-U1)./U1)) + sum(abs.((L2-U2)./U2))
+        errs[k] = sum(abs.((l1-u1)./u1)) + sum(abs.((l2-u2)./u2))
     end
     replace!(errs, NaN=>Inf)
     _,ix = findmin(errs)
     return ix
 end
-## build secant lines splitting U
-function build_lines(U::AbstractVector{<:Real},k::Int,xx::Union{AbstractVector,Nothing}=nothing)
-   NN = length(U)
+## build secant lines splitting v
+function build_lines(v::AbstractVector{<:Real},k::Int,xx::Union{AbstractVector,Nothing}=nothing)
+   NN = length(v)
    subinds1 = 1:k
    subinds2 = k:NN
    x1 = isnothing(xx) ? subinds1 : xx[subinds1]
    x2 = isnothing(xx) ? subinds2 : xx[subinds2]
-   U1 = U[subinds1]
-   U2 = U[subinds2]
-   m1,b1,L1 = lin_regress(U1,x1)
-   m2,b2,L2 = lin_regress(U2,x2)
-    return L1,L2,U1,U2
+   v1 = v[subinds1]
+   v2 = v[subinds2]
+   m1,b1,l1 = lin_regress(v1,x1)
+   m2,b2,l2 = lin_regress(v2,x2)
+    return l1,l2,v1,v2
 end
 ## fit a line with the secant of the end points
-function lin_regress(U::AbstractVector{<:Real},x::AbstractVector{<:Real})
-    m = (U[end]-U[1])/(x[end]-x[1])
+function lin_regress(v::AbstractVector{<:Real},x::AbstractVector{<:Real})
+    m = (v[end]-v[1])/(x[end]-x[1])
     a = m*x[1]
-    b = U[1] - a
-    L = U[1] .+ m.*x .- a
-    return m,b,L
+    b = v[1] - a
+    l = v[1] .+ m.*x .- a
+    return m,b,l
 end 
 ## Define RadMethods
 abstract type RadMethod end 
@@ -89,14 +89,47 @@ struct DirectRadMethod <:RadMethod end
 struct TimeFracRadMethod<:RadMethod end
 struct MtminRadMethod <:RadMethod end
 
-function (meth::DirectRadMethod)(xobs::AbstractVecOrMat{<:Real}, tobs::AbstractVector{<:Real}, ϕ::TestFunction, mtmin::Real, mtmax::Real, p::Real)
-    return min(mtmax, p)
-end 
-function (meth::DirectRadMethod)(xobs::AbstractVecOrMat{<:Real}, tobs::AbstractVector{<:Real}, ϕ::TestFunction, mtmin::Real, mtmax::Real, p::Real)
-    return min(mtmax, floor(length(tobs)*p))
+function _getMtMinMax(tobs::AbstractVector{<:Real}, uobs::AbstractMatrix{<:Real}, ϕ::TestFunction, K_min::Int)
+    Mp1 = size(uobs,2)
+    mt_max = Int(max(floor((Mp1-1)/2)-K_min,1));
+    mt_min = rad_select(tobs,uobs,ϕ,mt_max);
+    return mt_min, mt_max 
 end
-function (meth::MtminRadMethod)(xobs::AbstractVecOrMat{<:Real}, tobs::AbstractVector{<:Real}, ϕ::TestFunction, mtmin::Real, mtmax::Real, p::Real)
-    return min(mtmax, p*mtmin)
+
+function (::DirectRadMethod)(tobs::AbstractVector{<:Real},uobs::AbstractVecOrMat{<:Real},  ϕ::TestFunction, K_min::Int)
+    mt_min, mt_max = _getMtMinMax(tobs, uobs, ϕ, K_min)
+    D = size(uobs,1)
+    num_rad=length(mt_params)
+    mts = zeros(num_rad, D)
+    for (m, p) in enumerate(mt_params), d in 1:D
+        mts[m,d] = min(mt_max, p)
+    end
+    mts = Int.(ceil.(1 ./ mean(1 ./ mts, dims=2)))
+    return mts[:]
+end 
+
+function (::TimeFracRadMethod)(tobs::AbstractVector{<:Real},uobs::AbstractVecOrMat{<:Real},  ϕ::TestFunction, K_min::Int)
+    mt_min, mt_max = _getMtMinMax(tobs, uobs, ϕ, K_min)
+    D = size(uobs,1)
+    num_rad=length(mt_params)
+    mt = zeros(num_rad, D)
+    for (m, p) in enumerate(mt_params), d in 1:D
+        mt[m,d] = min(mt_max, floor(length(tobs)*p))
+    end
+    mt = Int.(ceil.(1 ./ mean(1 ./ mt, dims=2)))
+    return mt[:]
+end
+
+function (::MtminRadMethod)(tobs::AbstractVector{<:Real},uobs::AbstractVecOrMat{<:Real},  ϕ::TestFunction, K_min::Int)
+    mt_min, mt_max = _getMtMinMax(tobs, uobs, ϕ, K_min)
+    D = size(uobs,1)
+    num_rad=length(mt_params)
+    mt = zeros(num_rad, D)
+    for (m, p) in enumerate(mt_params), d in 1:D
+        mt[m,d] = min(mt_max, p*mt_min)
+    end
+    mt = Int.(ceil.(1 ./ mean(1 ./ mt, dims=2)))
+    return mt[:]
 end
 ## Helper to get derivative of test functions
 function _computeDerivative(ϕ::TestFunction, deg::Int) 
@@ -139,17 +172,17 @@ struct SpecifiedDiscritizationMethod <:TestFunDiscritizationMethod
 end  
 function _prepare_discritization(mt::Int,t::AbstractVector{<:Real},ϕ::TestFunction,max_derivative::Int)
     dt = mean(diff(t));
-    M = length(t);
+    Mp1 = length(t);
     Φ = _getTestFunctionWeights(ϕ,mt,max_derivative);
-    return dt, M, Φ
+    return dt, Mp1, Φ
 end 
 
 function (meth::UniformDiscritizationMethod)(mt::Int,t::AbstractVector{<:Real},ϕ::TestFunction,max_derivative::Int, K::Real)
-    dt, M, Φ = _prepare_discritization(mt,t,ϕ,max_derivative)
-    gap     = Int(max(1,floor((M-2*mt)/K)));
-    dd      = 0:gap:M-2*mt-1;
-    dd      = dd[1:min(K,end)];
-    V       = zeros(length(dd),M);
+    dt, Mp1, Φ = _prepare_discritization(mt,t,ϕ,max_derivative)
+    gap      = Int(max(1,floor((Mp1-2*mt)/K)));
+    dd       = 0:gap:Mp1-2*mt-1;
+    dd       = dd[1:min(K,end)];
+    V        = zeros(length(dd),Mp1);
     for j=1:length(dd)
         for (i,d) = enumerate(0:max_derivative)
             V[j,gap*(j-1)+1:gap*(j-1)+2*mt+1,i] = Φ[i,:]*(mt*dt)^(-d)*dt;
@@ -159,9 +192,9 @@ function (meth::UniformDiscritizationMethod)(mt::Int,t::AbstractVector{<:Real},�
 end
 
 function (meth::RandomDiscritizationMethod)(mt::Int,t::AbstractVector{<:Real},ϕ::TestFunction,max_derivative::Int, K::Real)
-    dt, M, Φ = _prepare_discritization(mt,t,ϕ,max_derivative)
-    gaps = randperm(M-2*mt,K);        
-    V = zeros(K,M);
+    dt, Mp1, Φ = _prepare_discritization(mt,t,ϕ,max_derivative)
+    gaps = randperm(Mp1-2*mt,K);        
+    V = zeros(K,Mp1);
     for j=1:K
         for (i,d) = enumerate(0:max_derivative)
             V[j,gaps[j]:gaps[j]+2*mt,i] = Φ[i,:]*(mt*dt)^(-d)*dt;
@@ -171,10 +204,10 @@ function (meth::RandomDiscritizationMethod)(mt::Int,t::AbstractVector{<:Real},ϕ
 end
 
 function (meth::SpecifiedDiscritizationMethod)(mt::Int,t::AbstractVector{<:Real},ϕ::TestFunction,max_derivative::Int, ::Real)
-    dt, M, Φ = _prepare_test_fun_svd(mt,t,ϕ,max_derivative)
-    center_scheme = unique(max.(min.(meth.ix,M-mt),mt+1));
+    dt, Mp1, Φ = _prepare_test_fun_svd(mt,t,ϕ,max_derivative)
+    center_scheme = unique(max.(min.(meth.ix,Mp1-mt),mt+1));
     K = length(center_scheme);
-    V = zeros(K,M,max_derivative+1);
+    V = zeros(K,Mp1,max_derivative+1);
     for j=1:K
         for (i,d) = enumerate(0:max_derivative)
             V[j,center_scheme[j]-mt:center_scheme[j]+mt,i] = Φ[i,:]*(mt*dt)^(-d)*dt;
@@ -185,13 +218,15 @@ end
 ## Pruning Methods
 abstract type TestFunctionPruningMethod end 
 struct NoPruningMethod <: TestFunctionPruningMethod
-    discMethod::TestFunDiscritizationMethod
+    radMeth::RadMethod
+    discMeth::TestFunDiscritizationMethod
 end 
 struct SingularValuePruningMethod <: TestFunctionPruningMethod 
-    discMethod::TestFunDiscritizationMethod
+    radMeth::RadMethod
+    discMeth::TestFunDiscritizationMethod
     val::UInt 
-    function SingularValuePruningMethod(discMethod::TestFunDiscritizationMethod=UniformDiscritizationMethod(),val::UInt=UInt(0))
-        return new(discMethod, val)
+    function SingularValuePruningMethod(radMeth::RadMethod,discMeth::TestFunDiscritizationMethod,val::UInt=UInt(0))
+        return new(radMeth,discMeth, val)
     end
 end
 
@@ -199,27 +234,32 @@ function _getK(K_max::Int, D::Int, num_rad::Int, Mp1::Int)
     return Int(min(floor(K_max/(D*num_rad)), Mp1))
 end
 
-function (meth::NoPruningMethod)(mt::AbstractVector{<:Real}, t::AbstractVector{<:Real}, ϕ::TestFunction,K_min::Int,K_max::Int,D::Int,num_rad)
+function (meth::NoPruningMethod)(tobs::AbstractVector{<:Real},uobs::AbstractMatrix{<:Real}, ϕ::TestFunction,K_min::Int,K_max::Int,mt_params::AbstractVector{<:Real})
+    Mp1, D = size(uobs)
+    num_rad = length(mt_params)
+    mt = meth.radMeth(tobs, uobs, ϕ, K_min)
     K = _getK(K_max, D, num_rad, length(t))
     V = cat(discMeth(m,t,ϕ,1,K) for m in mt;dims=1)
     return V[:,:,1], V[:,:,2]
 end
 
-function (meth::SingularValuePruningMethod)(mt::AbstractVector{<:Real},t::AbstractVector{<:Real},ϕ::TestFunction, K_min::Int,K_max::Int,D::Int,num_rad::Int)
-    if length(mt) == 1
-        return NoPruningMethod(meth.discMethod)(mt, t, ϕ, K)
+function (meth::SingularValuePruningMethod)(tobs::AbstractVector{<:Real}, uobs::AbstractMatrix{<:Real}, ϕ::TestFunction,K_min::Int,K_max::Int,mt_params::AbstractVector{<:Real})
+    num_rad = length(mt_params)
+    if num_rad == 1
+        return NoPruningMethod(meth.randMeth, meth.discMeth)(mt, tobs, ϕ, K)
     end
-    K = _getK(K_max, D, num_rad, length(t))
-    V = reduce(vcat,meth.discMethod(m,t,ϕ,0, K) for m in mt)
-    Mp1 = length(t);
-    dt = mean(diff(t));
-    svd_fact = svd(V';full=false);
+    D, Mp1 = size(uobs)
+    mt = meth.radMeth(tobs, uobs, ϕ, K_min)
+    K = _getK(K_max, D, num_rad, length(tobs))
+    Vfull = reduce(vcat,meth.discMeth(m,tobs,ϕ,0, K) for m in mt)
+    Mp1 = length(tobs);
+    dt = mean(diff(tobs));
+    svd_fact = svd(Matrix(Vfull'); full=false);
     U = svd_fact.U 
     sings = svd_fact.S;
     if meth.val == 0 
         # default is to find the corner adaptively
         corner_data = cumsum(sings)/sum(sings);
-        corner_data[1:15]'
         ix = getcorner(corner_data);
         ix = min(max(K_min,ix),K);
     else 
@@ -245,5 +285,6 @@ function (meth::SingularValuePruningMethod)(mt::AbstractVector{<:Real},t::Abstra
         Vp_hat[Int(Mp1/2)] = 0;        
     end
     Vp = Matrix(imag(ifft(Vp_hat,(1,)))');
-    return V, Vp
+    return V, Vp, Vfull
 end
+
