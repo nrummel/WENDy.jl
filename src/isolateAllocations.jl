@@ -202,9 +202,9 @@ res_float64(w_rand...; ll=Logging.Info)
 jacRes_float64(w_rand...;ll=Logging.Info)
 ##
 @info " Benchmark res float"
-@btime res_float64($w_rand...);
+@time res_float64(w_rand...);
 @info " Benchmark jacRes float"
-@btime jacRes_float64($w_rand...);
+@time jacRes_float64(w_rand...);
 nothing
 ## 
 @info "Test the memoize function in isolation"
