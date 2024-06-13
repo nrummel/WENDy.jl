@@ -1,12 +1,12 @@
 using BenchmarkTools,  MAT, UnicodePlots
 @info "Loading generateNoise..."
-includet("generateNoise.jl")
+includet("../src/generateNoise.jl")
 @info "Loading exampleProblems..."
-includet("exampleProblems.jl")
+includet("../src/exampleProblems.jl")
 @info "Loading computeGradients..."
-includet("computeGradients.jl")
+includet("../src/computeGradients.jl")
 @info "Loading linearSystem..."
-includet("linearSystem.jl")
+includet("../src/linearSystem.jl")
 ##
 mdl = HINDMARSH_ROSE_MODEL
 data = matread(joinpath(@__DIR__, "../data/Lw_hindmarsh_test.mat"))

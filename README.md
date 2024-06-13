@@ -42,7 +42,7 @@ References:
 ### WENDy
  This algorithm aims to work from a statistical framework instead of looking at the squared error of the coefficients, we instead isolated the error that is related to noise and come up with an estimator based on the asymptotic distribution of the residual. After much derivation and some assumption due to integration error and model mismatch error being negligible we find
 $$S_w^{-1/2}(\langle\Phi,\Theta\rangle w +\langle \dot{\Phi},u\rangle) \stackrel{asymp}{\sim} N(0, I)$$
-where $L_w = \underbrace{ \mathbb{I}_D \circ \dot{\Phi}}_{\stackrel{\Delta}{=} L_0} + \underbrace{\nabla_u \Theta \circ \Phi, }_{\stackrel{\Delta}{=} L_1} \times_3 w$ 
+where $L_w = \underbrace{ \mathbb{I}_D \otimes \dot{\Phi}}_{\stackrel{\Delta}{=} L_0} + \underbrace{\nabla_u \Theta \circ_2 \Phi, }_{\stackrel{\Delta}{=} L_1} \times_3 w$ 
 and $S_w = L_wL_w^T$.   $S_w^{1/2}$ is the Cholesky Factorization of $S_w$.
 Looking at the negative log-likelihood
 $$-\mathcal{L}(w;u) \stackrel{asymp}{=} (Gw-b)^TS_w^{-1}(Gw-b) + \log(\det(S_w))$$
@@ -57,7 +57,7 @@ The cost function can be minimized in others ways. For instance a local optimiza
 
 Deriving the gradient of the $f$ we see 
 $$\begin{align*}
-\nabla_w f &= 2S_w^{-1}(Gw-b) + (Gw-b)^T(\nabla_w S_w^{-1})(Gw-b)  \\
+\nabla_w f &= 2G^TS_w^{-1}(Gw-b) + (Gw-b)^T(\nabla_w S_w^{-1})(Gw-b)  \\
 \nabla_w S_w^{-1} &= S_w^{-1}\times_3(L_0 \times_1 L_1^T + L_1 \times_3 L_0^T)\times_4S_w^{-1}
 \end{align*}$$
 ##### Results
@@ -65,7 +65,7 @@ I implemented a large sweep comparing using this local optimization solver compa
 - In general the MLE and IRWLS gives similar approximations of $w$ while the MLE is slower
 - This does address the Hindmarsh-Rose behavior at high noise and lower number of data points by giving a improved answer to the OLS solution while the IRWLS diverges. 
 ```
-
+[****]()
 ```ad-note
 title: Global Optimization Effort
 While the local optimization methods gives a more robust solution to the IRWLS in general. There is no gaurentee that it is converging to a global or local minimum. So I have been developing a Branch and Bound algorithm for the MLE.
@@ -113,22 +113,20 @@ $$\begin{align*}
 	&\approx \langle \nabla_u G(u,w) + \dot{\Phi}, \epsilon\rangle
 \end{align*}$$
 Notice that because $\epsilon_m \stackrel{iid}{\sim} N(0,\sigma^2) \Leftrightarrow \epsilon \sim N(0, \sigma^2 I)$. Now if we say that $|\epsilon| \ll 1$ then because $H = O(\epsilon^2)$ and can be throw out. 
-```ad-failure
-title: Asymptotic Distribution Derivation
-
 Assuming that $w \rightarrow w^*$ and $M \gg 1$, then we have
 $$\begin{align*}
-	\mathbb{E}[r(w^*)] &= \mathbb{E}[e^\Theta -b^\epsilon]\\
-	&= \Phi \mathbb{E}[\langle \nabla_u F(w,u), \epsilon \rangle] + \dot{\Phi} \mathbb{E}[\epsilon ] \\
-	&= \Phi \mathbb{E}[\nabla_u F(w,u)\times_3 \epsilon] \\
-	\mathbb{Var}[r(w)] &= \mathbb{E}[r(w)r(w)^T ]  \\ 
-	&\approx \Phi \mathbb{E}[\nabla_u F(w,u)\times_3 \epsilon \;\epsilon^T \times_3 \nabla_u F(w,u)]\Phi^T\\
-	&+ 2 \Phi \mathbb{E}[\nabla_u F(w,u)\times_3 \epsilon \;\epsilon^T ]\dot{\Phi}^T\\
-	&+ \dot{\Phi} \underbrace{\mathbb{E}[ \epsilon \;\epsilon^T ]}_{\sigma^2 I_{D\times (M+1)}}\dot{\Phi}^T\\
+	\mathbb{E}[r(w^*)|u] &= \mathbb{E}[e^\Theta -b^\epsilon |u]\\
+	&= \langle \Phi \nabla_u F(w,u) \mathbb{E}[\epsilon | u] \rangle + \dot{\Phi} \mathbb{E}[\epsilon | u] \\
+	&= 0 \\ 
+	\mathbb{Var}[r(w^*)|u] &= E\big[r(w^*) r(w^*)^T\big]\\
+	&=  \\
 	S_w^{-1/2} (e^\Theta - b^\epsilon) &\stackrel{asymp}{\sim} N(0, I)\\
 \end{align*}$$
 But now  $L_w =  \underbrace{\mathbb{I}_D \circ \dot{\Phi}}_{\stackrel{\Delta}{=} L_0} + \underbrace{\nabla_u F(u,w) \circ \Phi}_{\stackrel{\Delta}{=} L_1(w)}$,
-```
+
+
+
+
 $S_w = L_wL_w^T$, and $S_w^{-1/2}$ is the Cholesky factorization. This now has a negative log likelihood:
 $$-\mathcal{L}(w; u) = \underbrace{(G(w)-b)^TS_w^{-1}(G(w)-b)}_{f(w;u)} + \log(\det(S_w))$$Neglecting  the $\log\det$ term due to its lack of contribution in general, we obtain 
 $$\begin{align*}

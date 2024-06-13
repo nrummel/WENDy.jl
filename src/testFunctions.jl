@@ -1,5 +1,6 @@
 using FFTW: fft, ifft
-
+using Symbolics 
+using Symbolics: @variables
 ## Two types of test functions of ϕ
 abstract type TestFunction end 
 struct ExponentialTestFun <: TestFunction end 

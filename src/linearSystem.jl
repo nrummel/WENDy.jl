@@ -1,33 +1,33 @@
 using Tullio,LinearAlgebra
 ##
-function F!(FF::AbstractMatrix{T}, w::AbstractVector{T}, u::AbstractMatrix{T}, _F!::Function) where T<:Real
+function F!(FF::AbstractMatrix, w::AbstractVector,  u::AbstractMatrix, _F!::Function) 
     for m in 1:size(FF,2)
-        _F!(view(FF,:,m), w,  view(u,:,m))
+        _F!(view(FF,:,m), w, view(u,:,m))
     end
     nothing
 end
 
-function G!(GG::AbstractMatrix{T}, FF::AbstractMatrix{T}, V::AbstractMatrix{T}, w::AbstractVector{T}, u::AbstractMatrix{T}, _F!::Function)where T<:Real
+function G!(GG::AbstractMatrix, FF::AbstractMatrix, V::AbstractMatrix, w::AbstractVector,  u::AbstractMatrix, _F!::Function)
     F!(FF, w, u, _F!)
     mul!(GG, V, FF')
     nothing
 end
 
-function B!(BB::AbstractMatrix{T}, Vp::AbstractMatrix{T},u::AbstractMatrix{T})where T<:Real
+function B!(BB::AbstractMatrix, Vp::AbstractMatrix,u::AbstractMatrix) 
     mul!(BB, Vp, u',-1,0)
     nothing
 end
 
-function _J!(JJ::AbstractArray{T,3},w::AbstractVector{T},u::AbstractMatrix{T}, _jacuF!::Function) where T<:Real
+function _J!(JJ::AbstractArray{<:Any,3}, w::AbstractVector, u::AbstractMatrix, _jacF!::Function) 
     @inbounds for m in 1:size(JJ,3)
         um = view(u,:,m)
         jm = view(JJ,:,:,m)
-        _jacuF!(jm, w,um)
+        _jacF!(jm, w, um)
     end
     nothing
 end
 
-function _L!(L_mat::AbstractMatrix{T}, L::AbstractArray{T,4}, LL::AbstractArray{T,4}, JJ::AbstractArray{T,3},w::AbstractVector{T},u::AbstractMatrix{T}, V::AbstractMatrix{T}, Vp::AbstractMatrix{T}, sig::AbstractVector{T}, _jacuF!::Function) where T<:Real
+function _L!(L_mat::AbstractMatrix, L::AbstractArray{<:Any,4}, LL::AbstractArray{<:Any,4}, JJ::AbstractArray{<:Any,3},w::AbstractVector, u::AbstractMatrix, V::AbstractMatrix, Vp::AbstractMatrix, sig::AbstractVector, _jacuF!::Function) 
     K,D,M,_ = size(L)
     _J!(JJ, w, u, _jacuF!)
     @tullio LL[k,d2,d1,m] = V[k,m] * JJ[d2,d1,m] * sig[d1]
@@ -42,19 +42,19 @@ end
 ##
 abstract type LMatrix end
 
-struct LNonlinear{T}<:LMatrix where T<:Real
-    JJ::AbstractArray{T,3}
-    LL::AbstractArray{T,4}
-    L::AbstractArray{T,4}
-    L_mat::AbstractMatrix{T}
-    V::AbstractMatrix{T}
-    Vp::AbstractMatrix{T}
-    u::AbstractMatrix{T}
-    sig::AbstractVector{T}
+struct LNonlinear<:LMatrix 
+    JJ::AbstractArray{<:Any,3}
+    LL::AbstractArray{<:Any,4}
+    L::AbstractArray{<:Any,4}
+    L_mat::AbstractMatrix
+    V::AbstractMatrix
+    Vp::AbstractMatrix
+    u::AbstractMatrix
+    sig::AbstractVector
     _jacuF!::Function 
 end
 
-function LNonlinear(u::AbstractMatrix{T}, V::AbstractMatrix{T}, Vp::AbstractMatrix{T}, sig::AbstractVector{T}, _jacuF!::Function) where T<:Real
+function LNonlinear(u::AbstractMatrix, V::AbstractMatrix, Vp::AbstractMatrix, sig::AbstractVector, _jacuF!::Function) 
     D, M = size(u)
     K, _ = size(V)
     JJ = zeros(D,D,M)
@@ -71,19 +71,19 @@ end
 
 abstract type IRWLS_Iter end 
 
-struct IRWLS_Iter_Linear{T}<:IRWLS_Iter where T<:Real
+struct IRWLS_Iter_Linear<:IRWLS_Iter 
     Lgetter::LNonlinear
-    S::AbstractMatrix{T}
-    R0::AbstractMatrix{T}
-    R::AbstractMatrix{T}
-    G0::AbstractMatrix{T}
-    G::AbstractMatrix{T}
-    b0::AbstractVector{T}
-    b::AbstractVector{T}
-    diag_reg::T
+    S::AbstractMatrix
+    R0::AbstractMatrix
+    R::AbstractMatrix
+    G0::AbstractMatrix
+    G::AbstractMatrix
+    b0::AbstractVector
+    b::AbstractVector
+    diag_reg::Real
 end
 
-function IRWLS_Iter_Linear(u::AbstractMatrix{T}, V::AbstractMatrix{T}, Vp::AbstractMatrix{T}, sig::AbstractVector{T}, _jacuF!::Function, G0::AbstractMatrix{T}, b0::AbstractVector{T}) where T<:Real
+function IRWLS_Iter_Linear(u::AbstractMatrix, V::AbstractMatrix, Vp::AbstractMatrix, sig::AbstractVector, _jacuF!::Function, G0::AbstractMatrix, b0::AbstractVector)
     D, M = size(u)
     K, _ = size(V)
     S = zeros(K*D,K*D)
@@ -95,11 +95,11 @@ function IRWLS_Iter_Linear(u::AbstractMatrix{T}, V::AbstractMatrix{T}, Vp::Abstr
     IRWLS_Iter_Linear(Lgetter, S, R0, R, G0, G, b0, b, diag_reg)
 end
 
-function (s::IRWLS_Iter_Linear)(wim1::AbstractVector{T}) where T<:Real
+function (s::IRWLS_Iter_Linear)(wim1::AbstractVector) 
     L = s.Lgetter(wim1)
     mul!(s.S, L, L')
     s.R .= s.R0
-    mul!(s.R, s.S, s.R0, 1-diag_reg,diag_reg)
+    mul!(s.R, s.S, s.R0, 1-s.diag_reg, s.diag_reg)
     cholesky!(Symmetric(s.R))
     ldiv!(s.G, UpperTriangular(s.R)', s.G0)
     ldiv!(s.b, UpperTriangular(s.R)', s.b0)
@@ -108,7 +108,7 @@ function (s::IRWLS_Iter_Linear)(wim1::AbstractVector{T}) where T<:Real
     # nothing
 end
 
-function _G0!(G0::AbstractMatrix{T}, u::AbstractMatrix{T}, V::AbstractMatrix{T}, _F!::Function) where T<:Real
+function _G0!(G0::AbstractMatrix, u::AbstractMatrix, V::AbstractMatrix, _F!::Function)
     _, J = size(G0)
     K, M = size(V)
     D, _ = size(u)
@@ -118,12 +118,12 @@ function _G0!(G0::AbstractMatrix{T}, u::AbstractMatrix{T}, V::AbstractMatrix{T},
     for j in 1:J 
         ej[j] = 1
         G!(GG, FF, V, ej, u, _F!)
-        G0[:,j] = reshape(GG, K*D)
+        G0[:,j] .= reshape(GG, K*D)
         ej[j] = 0
     end
 end
 
-function IRWLS_Linear(u::AbstractMatrix{T}, V::AbstractMatrix{T}, Vp::AbstractMatrix{T}, sig::AbstractVector{T}, _F!::Function, _jacuF!::Function, J::Int; maxIt::Int=100,tol::AbstractFloat=1e-10) where T<:Real
+function IRWLS_Linear(u::AbstractMatrix, V::AbstractMatrix, Vp::AbstractMatrix, sig::AbstractVector, _F!::Function, _jacuF!::Function, J::Int; maxIt::Int=100,tol::AbstractFloat=1e-10)
     ## Get dimensions
     D, M = size(u)
     K,_ = size(V)

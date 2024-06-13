@@ -1,8 +1,8 @@
-using ModelingToolkit
+using OrdinaryDiffEq, BSON, ModelingToolkit, Logging
+using OrdinaryDiffEq: ODESolution
 using ModelingToolkit: t_nounits as t, D_nounits
 using ModelingToolkit: @mtkmodel, @mtkbuild, ODESystem
-using DifferentialEquations, BSON
-using Logging
+
 ## See Wendy paper
 _LOGISTIC_T_RNG = (0, 10)
 @mtkmodel LogisticGrowthModel begin
@@ -181,7 +181,7 @@ function _solve_ode(mdl::ODESystem, t_rng::Tuple, num_pts::Int;
     return solve(p, alg,reltol=reltol, abstol = abstol, saveat=t_step)
 end
 ##
-function _saveSol(sol::DifferentialEquations.ODESolution, saveFile::String)
+function _saveSol(sol::ODESolution, saveFile::String)
     u = hcat(sol.u...)
     t = sol.t 
     BSON.@save joinpath(@__DIR__, "..", "data", saveFile) t u

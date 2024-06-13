@@ -1,12 +1,12 @@
 using BenchmarkTools,  MAT, UnicodePlots
 @info "Loading generateNoise..."
-includet("generateNoise.jl")
+includet("../src/generateNoise.jl")
 @info "Loading exampleProblems..."
-includet("exampleProblems.jl")
+includet("../src/exampleProblems.jl")
 @info "Loading computeGradients..."
-includet("computeGradients.jl")
+includet("../src/computeGradients.jl")
 @info "Loading linearSystem..."
-includet("linearSystem.jl")
+includet("../src/linearSystem.jl")
 ## Build custome functions to try to beat what the ModelingToolkit builds 
 function _f!(jm::AbstractMatrix{T}, w::AbstractVector{T}, um::AbstractVector{T}) where T<:Real
     jm[1] = 2*w[3]*um[1] + 3*w[2]*um[1]^2

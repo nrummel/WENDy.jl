@@ -8,6 +8,9 @@ includet("../src/exampleProblems.jl")
 includet("../src/computeGradients.jl")
 @info "Loading linearSystem..."
 includet("../src/linearSystem.jl")
+@info "Loading nonlinearSystem..."
+# includet("../src/gradDescent.jl")
+includet("../src/nonlinearSystem.jl")
 @info "Loading testFunctions..."
 includet("../src/testFunctions.jl")
 ##
@@ -27,9 +30,10 @@ pruneMeth           = SingularValuePruningMethod(
     MtminRadMethod(),
     UniformDiscritizationMethod()
 );
+w_true = Float64[ModelingToolkit.getdefault(p) for p in parameters(mdl)]
 _, _F!         = getRHS(mdl)
 _, _jacuF! = getJacobian(mdl);
-##
+_, _jacwF! = getParameterJacobian(mdl);
 Random.seed!(seed)
 data = BSON.load(exampleFile) 
 tt = data[:t] 
@@ -43,10 +47,31 @@ sig = estimate_std(uobs)
 #
 V,Vp,Vfull = pruneMeth(tobs,uobs,ϕ,K_min,K_max,mt_params);
 ##
-@info "IRWLS (Linear): "
+K,M = size(V)
+D, _ = size(uobs)
+J = length(w_true)
+G0 = zeros(K*D, J)
+_G0!(G0, uobs, V, _F!)
+B = zeros(K,D)
+G0 = zeros(K*D, J)
+_G0!(G0, uobs, V, _F!)
+B!(B, Vp, uobs)
+b0 = reshape(B, K*D);
+##
+jac = JacGgetter(uobs,V,_jacwF!)
+jacG = jac(zeros(J))
+@assert norm(reshape(jacG,K*D,J) - G0) / norm(G0) < 1e2*eps()
+##
+G = GFun(uobs,V,_F!)
+res = G(w_true) - b0
+@assert norm(res - (G0*w_true -b0)) / norm(res) < 1e2*eps()
+##
+diag_reg = 1e-10
+Lgetter = LNonlinear(uobs,V,Vp,sig,_jacuF!);
+##
+@info "IRWLS (Nonlinear): "
 @info "   Runtime info: "
-@time what, wit = IRWLS_Linear(uobs, V, Vp, sig, _F!, _jacuF!, J)
-w_true = [ModelingToolkit.getdefault(p) for p in parameters(mdl)]
+@time what, wit = IRWLS_Nonlinear(uobs, V, Vp, sig, _F!, _jacuF!, _jacwF!, J)
 relErr = norm(wit[:,end] - w_true) / norm(w_true)
 @info "   coeff rel err = $relErr"
 @info "   iterations    = $(size(wit,2)-1)"
