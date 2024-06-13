@@ -7,7 +7,7 @@ includet("../src/computeGradients.jl")
 @info "Loading testFunctions..."
 includet("../src/testFunctions.jl")
 @info "Loading other dependencies..."
-using JuMP, Ipopt, LinearAlgebra, Tullio, BenchmarkTools, Random
+using JuMP, Ipopt, LinearAlgebra, Tullio, BenchmarkTools, Random, Logging 
 ## 
 # Specify the parameters/data/models
 @info "Specifying the parameters/data/models..."
@@ -76,7 +76,7 @@ function RTfun(U::AbstractMatrix, V::AbstractMatrix, Vp::AbstractMatrix, sig::Ab
     cholesky!(Symmetric(R))
     return UpperTriangular(R)'
 end
-# Define G function to do as little allocation as possible 
+# Define residual function to do as little allocation as possible 
 function _res(RT::AbstractMatrix, U::AbstractMatrix, V::AbstractMatrix, b::AbstractVector, f!::Function, ::Val{T}, w::AbstractVector{W}; ll::Logging.LogLevel=Logging.Warn) where {W,T}
     with_logger(ConsoleLogger(stderr, ll)) do 
         K, M = size(V)
@@ -106,7 +106,7 @@ function _res(RT::AbstractMatrix, U::AbstractMatrix, V::AbstractMatrix, b::Abstr
         return res
     end
 end
-# Jacobian of G with respect to the parameters w 
+# Define Jacobian of residual with respect to the parameters w 
 function _jacRes(RT::AbstractMatrix, U::AbstractMatrix, V::AbstractMatrix, jacwf!::Function, ::Val{T}, w::AbstractVector{W}; showFlag::Bool=false, ll::Logging.LogLevel=Logging.Warn) where {W,T}
     with_logger(ConsoleLogger(stderr, ll)) do 
         showFlag && println(stderr, "Hello")
@@ -148,7 +148,7 @@ function IRWLS_Nonlinear(U, V, Vp, b0, sig, diag_reg, J, f!, jacuf!, jacwf!; ll=
         for n = 1:maxIt 
             RT = RTfun(U,V,Vp,sig,diag_reg,jacuf!,wnm1)
             b = RT \ b0 
-            res_AffExpr(w::AbstractVector) = _res(RT,U,V,b,f!,Val(AffExpr), w; ll=Logging.Info)
+            res_AffExpr(w::AbstractVector) = _res(RT,U,V,b,f!,Val(AffExpr), w)
             jacRes_AffExpr(w::AbstractVector) = _jacRes(RT,U,V,jacwf!,Val(AffExpr),w;showFlag=true)
             w_star = _jacRes(RT, U, V, jacwf!, Val(Float64), zeros(J)) \ b 
             ##
