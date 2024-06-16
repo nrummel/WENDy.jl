@@ -1,11 +1,11 @@
 @info "Loading generateNoise..."
-includet("../src/generateNoise.jl")
+includet("../src/wendyNoise.jl")
 @info "Loading exampleProblems..."
-includet("../src/exampleProblems.jl")
+includet("../examples/exampleProblems.jl")
 @info "Loading computeGradients..."
-includet("../src/computeGradients.jl")
+includet("../src/wendySymbolics.jl")
 @info "Loading testFunctions..."
-includet("../src/testFunctions.jl")
+includet("../src/wendyTestFunctions.jl")
 @info "Loading other dependencies..."
 using JuMP, Ipopt, LinearAlgebra, Tullio, BenchmarkTools, Random, Logging 
 ## 
@@ -14,19 +14,19 @@ using JuMP, Ipopt, LinearAlgebra, Tullio, BenchmarkTools, Random, Logging
 mdl                 = HINDMARSH_ROSE_MODEL
 exampleFile         = joinpath(@__DIR__, "../data/HindmarshRose.bson")
 ϕ                   = ExponentialTestFun()
-diag_reg            = 1e-10
-noise_ratio         = 0.05
-time_subsample_rate = 2
-mt_params           = 2 .^(0:3)
+diagReg            = 1e-10
+noiseRatio         = 0.05
+timeSubsampleRate = 2
+mtParams           = 2 .^(0:3)
 seed                = Int(1)
-K_min               = 10
-K_max               = Int(5e3)
+Kmin               = 10
+Kmax               = Int(5e3)
 pruneMeth           = SingularValuePruningMethod( 
     MtminRadMethod(),
     UniformDiscritizationMethod()
 );
-w_true = Float64[ModelingToolkit.getdefault(p) for p in parameters(mdl)]
-J = length(w_true)
+wTrue = Float64[ModelingToolkit.getdefault(p) for p in parameters(mdl)]
+J = length(wTrue)
 @info "Build julia functions from symbolic expressions of ODE..."
 _,f!         = getRHS(mdl)
 _,jacuf! = getJacobian(mdl);
@@ -36,24 +36,24 @@ Random.seed!(seed)
 data = BSON.load(exampleFile) 
 tt_full = data[:t] 
 U_full = data[:u] 
-num_rad = length(mt_params)
+numRad = length(mtParams)
 @info "Subsample data and add noise..."
-tt = tt_full[1:time_subsample_rate:end]
-U = U_full[:,1:time_subsample_rate:end]
-U, noise, noise_ratio_obs, sigma = generateNoise(U, noise_ratio)
+tt = tt_full[1:timeSubsampleRate:end]
+U = U_full[:,1:timeSubsampleRate:end]
+U, noise, noise_ratio_obs, sigma = generateNoise(U, noiseRatio)
 D, M = size(U)
 @info "============================="
 @info "Start of Algo..."
 @info "Estimate the noise in each dimension..."
 sig = estimate_std(U)
 @info "Build test function matrices..."
-V,Vp,Vfull = pruneMeth(tt,U,ϕ,K_min,K_max,mt_params);
+V,Vp,Vfull = pruneMeth(tt,U,ϕ,Kmin,Kmax,mtParams);
 K,_ = size(V)
 @info "Build right hand side to NLS..."
 b0 = reshape(-Vp * U', K*D);
 ##
 @info "Building functions..."
-function RTfun(U::AbstractMatrix, V::AbstractMatrix, Vp::AbstractMatrix, sig::AbstractVector, diag_reg::Real, jacuf!::Function, w::AbstractVector)
+function RTfun(U::AbstractMatrix, V::AbstractMatrix, Vp::AbstractMatrix, sig::AbstractVector, diagReg::Real, jacuf!::Function, w::AbstractVector)
     ## Preallocate for L 
     D, M = size(U)
     K, _ = size(V)
@@ -72,7 +72,7 @@ function RTfun(U::AbstractMatrix, V::AbstractMatrix, Vp::AbstractMatrix, sig::Ab
     ## Preallocate for R
     
     S = L * L'
-    R = (1-diag_reg)*S + diag_reg*I
+    R = (1-diagReg)*S + diagReg*I
     cholesky!(Symmetric(R))
     return UpperTriangular(R)'
 end
@@ -125,7 +125,7 @@ function _jacRes(RT::AbstractMatrix, U::AbstractMatrix, V::AbstractMatrix, jacwf
 end
 @info "Test Allocations with with Float64"
 w_rand = rand(J)
-RT = RTfun(U,V,Vp,sig,diag_reg,jacuf!,w_rand)
+RT = RTfun(U,V,Vp,sig,diagReg,jacuf!,w_rand)
 b = RT \ b0 
 res_float64(w, ll) = _res(RT,U,V,b,f!,Val(Float64), w; ll=ll)
 res_float64(w_rand, Logging.Info)
@@ -133,7 +133,7 @@ res_float64(w_rand, Logging.Info)
 nothing
 ## Compute the non lin least square solution 
 @info "Defining IRWLS_Nonlinear..."
-function IRWLS_Nonlinear(U, V, Vp, b0, sig, diag_reg, J, f!, jacuf!, jacwf!; ll=Logging.Info,maxIt=100, relTol=1e-4)
+function IRWLS_Nonlinear(U, V, Vp, b0, sig, diagReg, J, f!, jacuf!, jacwf!; ll=Logging.Info,maxIt=100, relTol=1e-4)
     with_logger(ConsoleLogger(stderr,ll)) do 
         @info "Initializing the linearization least squares solution  ..."
         D, M = size(U)
@@ -146,7 +146,7 @@ function IRWLS_Nonlinear(U, V, Vp, b0, sig, diag_reg, J, f!, jacuf!, jacwf!; ll=
         wn = similar(w0)
     
         for n = 1:maxIt 
-            RT = RTfun(U,V,Vp,sig,diag_reg,jacuf!,wnm1)
+            RT = RTfun(U,V,Vp,sig,diagReg,jacuf!,wnm1)
             b = RT \ b0 
             res_AffExpr(w::AbstractVector) = _res(RT,U,V,b,f!,Val(AffExpr), w)
             jacRes_AffExpr(w::AbstractVector) = _jacRes(RT,U,V,jacwf!,Val(AffExpr),w;showFlag=true)
@@ -191,8 +191,8 @@ end
 ##
 @info "IRWLS (Nonlinear): "
 @info "   Runtime info: "
-@time what, wit, resit = IRWLS_Nonlinear(U, V, Vp, b0, sig, diag_reg, J, f!, jacuf!, jacwf!; ll=Logging.Warn)
-relErr = norm(wit[:,end] - w_true) / norm(w_true)
+@time what, wit, resit = IRWLS_Nonlinear(U, V, Vp, b0, sig, diagReg, J, f!, jacuf!, jacwf!; ll=Logging.Warn)
+relErr = norm(wit[:,end] - wTrue) / norm(wTrue)
 @info "   coeff rel err = $relErr"
 @info "   iterations    = $(size(wit,2)-1)"
 nothing 

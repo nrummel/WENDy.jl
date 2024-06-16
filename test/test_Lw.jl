@@ -1,12 +1,12 @@
 using BenchmarkTools,  MAT, UnicodePlots
 @info "Loading generateNoise..."
-includet("../src/generateNoise.jl")
+includet("../src/wendyNoise.jl")
 @info "Loading exampleProblems..."
-includet("../src/exampleProblems.jl")
+includet("../examples/exampleProblems.jl")
 @info "Loading computeGradients..."
-includet("../src/computeGradients.jl")
+includet("../src/wendySymbolics.jl")
 @info "Loading linearSystem..."
-includet("../src/linearSystem.jl")
+includet("../src/wendyEquations.jl")
 ## Build custome functions to try to beat what the ModelingToolkit builds 
 function _f!(jm::AbstractMatrix{T}, w::AbstractVector{T}, um::AbstractVector{T}) where T<:Real
     jm[1] = 2*w[3]*um[1] + 3*w[2]*um[1]^2
@@ -97,7 +97,7 @@ Lw_matlab = data["Lw"];
 Sw_matlab = data["Sw"];
 RT_matlab = data["RT"];
 true_vec = data["true_vec"][:];
-diag_reg = data["diag_reg"];
+diagReg = data["diagReg"];
 Ltime_matlab = data["Ltime"];
 KD,MD,J = size(L1_matlab)
 K,M = size(V)

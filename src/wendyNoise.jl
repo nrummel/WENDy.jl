@@ -1,6 +1,6 @@
 using ImageFiltering: imfilter, Inner # equivalent to conv
 ##
-function generateNoise(U_exact::AbstractMatrix{<:Real}, noise_ratio::Real, noise_dist::Int=0, noise_alg::Int=0)
+function generateNoise(U_exact::AbstractMatrix{<:Real}, noiseRatio::Real, noise_dist::Int=0, noise_alg::Int=0)
     if noise_alg == 0 # additive
         stdv = sqrt(mean(U_exact[:] .^2))
     elseif noise_alg == 1 # multiplicative
@@ -8,17 +8,17 @@ function generateNoise(U_exact::AbstractMatrix{<:Real}, noise_ratio::Real, noise
     end
     dims = size(U_exact)
     if noise_dist == 0 # white noise
-        if noise_ratio>0
-            sigma = noise_ratio*sqrt(stdv)
+        if noiseRatio>0
+            sigma = noiseRatio*sqrt(stdv)
         else
-            sigma=-noise_ratio
+            sigma=-noiseRatio
         end
         noise = randn(dims) * sigma
     elseif noise_dist == 1 # uniform noise
-        if noise_ratio > 0
-            sigma = (3*noise_ratio^2*stdv)^(1/2)
+        if noiseRatio > 0
+            sigma = (3*noiseRatio^2*stdv)^(1/2)
         else
-            sigma=-noise_ratio
+            sigma=-noiseRatio
         end
         noise = sigma*(2*rand(dims)-1)
     end

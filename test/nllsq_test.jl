@@ -185,7 +185,7 @@ norm(xstar - value.(x)) /norm(xstar)
 
 
 ##
-w0 = w_true 
+w0 = wTrue 
 wstar = G0 \ b0
 
 
@@ -211,7 +211,7 @@ G(x) = G0*x-b0
 gradres(x) = G0
 ##
 mdl = Model(Ipopt.Optimizer)
-w0 = w_true
+w0 = wTrue
 @variable(mdl, w[i = 1:J], start = w0[i])
 @variable(mdl, r[k = 1:K*D])
 @operator(mdl, compRes, J, G, gradres)
@@ -227,7 +227,7 @@ norm(wstar - what) /norm(wstar)
 for i = 1:1000
     # L = Lgetter(wim1)
     # S0 =  L * L'
-    # S = S0* (1-diag_reg) + I * diag_reg
+    # S = S0* (1-diagReg) + I * diagReg
     # S = cholesky(S)
     # S = I 
     # rim1 = r(wim1)

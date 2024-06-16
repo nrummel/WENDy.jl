@@ -85,8 +85,61 @@ function (s::JacwGFun)(w::AbstractVector)
     jacwG!(s.JG, s._JG, s.JF, s.U, s.V, s.jacwf!, w) 
     return s.jacGmat
 end 
-## Compare to naive implementations
-# G_float = GFun(U,V,f!,Val(Float64)) 
-# jacG_float = JacwGFun(U, V, jacwf!, J, Val(Float64))
-# @assert norm(G_float(w_rand) - naiveG(U,V,f!,w_rand))/norm(G_float(w_rand)) < eps()
-# @assert norm(jacG_float(w_rand) - naiveJacG(U,V,jacwf!,w_rand))/norm(jacG_float(w_rand))  < eps()
+
+function jacG!(jacG::AbstractArray{<:Any,3}, jacGbuf::AbstractArray{<:Any,3}, JJ::AbstractArray{<:Any,3},  w::AbstractVector, u::AbstractMatrix, _jacwF!::Function) 
+    _J!(JJ, w, u, _jacwF!)
+    @tullio jacGbuf[d,j,k] = V[k,m] * JJ[d,j,m] 
+    permutedims!(jacG, jacGbuf, (3,1,2))
+    nothing
+end
+##
+struct GFun<:Any
+    u::AbstractMatrix
+    V::AbstractMatrix
+    GG::AbstractMatrix
+    FF::AbstractMatrix
+    g::AbstractVector
+    _F!::Function 
+    K::Int
+    D::Int
+end
+##
+function GFun(u::AbstractMatrix{T}, V::AbstractMatrix{T}, _F!::Function) where T
+    D, M = size(u)
+    K, _ = size(V)
+    # FF = Matrix{Union{T, AbstractJuMPScalar}}(undef,D,M)
+    # GG = Matrix{Union{T, AbstractJuMPScalar}}(undef,K,D)
+    FF = zeros(AffExpr,D,M)
+    GG = zeros(AffExpr,K,D)
+    g = reshape(GG,K*D)
+    GFun(u,V,GG,FF,g,_F!,K,D)
+end
+##
+function (s::GFun)(w::AbstractVector) 
+    G!(s.GG, s.FF, s.V, w, s.u, s._F!)
+    return s.g 
+end
+
+struct JacGgetter<:Any
+    u::AbstractMatrix
+    jacG::AbstractArray{<:Any,3}
+    jacGbuf::AbstractArray{<:Any,3}
+    JJ::AbstractArray{<:Any,3}
+    jacGmat::AbstractMatrix
+    _jacwF!::Function
+end
+
+function JacGgetter(u::AbstractMatrix, V::AbstractMatrix, _jacwF!::Function)
+    D, M = size(u)
+    K, _ = size(V)
+    jacG = zeros(K,D,J)
+    jacGbuf = zeros(D,J,K)
+    JJ = zeros(D,J,M);
+    jacGmat = reshape(jacG,K*D,J) 
+    JacGgetter(u, jacG, jacGbuf, JJ, jacGmat, _jacwF!)
+end
+
+function (s::JacGgetter)(w::AbstractVector) 
+    jacG!(s.jacG, s.jacGbuf, s.JJ, w, s.u, s._jacwF!)
+    return s.jacGmat
+end

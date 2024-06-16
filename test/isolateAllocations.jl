@@ -11,7 +11,7 @@ K = 100
 M = 1000
 J = 10 
 D = 3
-diag_reg = 1e-10
+diagReg = 1e-10
 # Build Random data datrix
 U = rand(D, M)
 u = reshape(U, D*M)
@@ -60,7 +60,7 @@ function jacwf!(jfm, w, um)
     nothing
 end
 # Get the cholesky decomposition of our current approximation of the covariance
-function RTfun(U::AbstractMatrix, V::AbstractMatrix, Vp::AbstractMatrix, sig::AbstractVector, diag_reg::Real, jacuf!::Function, w::AbstractVector)
+function RTfun(U::AbstractMatrix, V::AbstractMatrix, Vp::AbstractMatrix, sig::AbstractVector, diagReg::Real, jacuf!::Function, w::AbstractVector)
     # Preallocate for L 
     D, M = size(U)
     K, _ = size(V)
@@ -79,7 +79,7 @@ function RTfun(U::AbstractMatrix, V::AbstractMatrix, Vp::AbstractMatrix, sig::Ab
     # compute covariance
     S = L * L'
     # regularize for possible ill conditioning
-    R = (1-diag_reg)*S + diag_reg*I
+    R = (1-diagReg)*S + diagReg*I
     # compute cholesky for lin solv efficiency
     cholesky!(Symmetric(R))
     return UpperTriangular(R)'
@@ -184,7 +184,7 @@ end
 ## 
 @info "Test Allocations with with Float64"
 w_rand = rand(J)
-RT = RTfun(U,V,Vp,sig,diag_reg,jacuf!,w_rand)
+RT = RTfun(U,V,Vp,sig,diagReg,jacuf!,w_rand)
 b = RT \ b0 
 # because this problem is linear in w the jacobian is constant, 
 # and we could solve this problem with backslash because 
@@ -245,7 +245,7 @@ relerr = abserr / obj_star
 @info "Relative coeff error = $relerr"
 # ## Compute the non lin least square solution 
 # @info "Defining IRWLS_Nonlinear..."
-# function IRWLS_Nonlinear(U, V, Vp, b0, sig, diag_reg, J, f!, jacuf!, jacwf!; ll=Logging.Info,maxIt=100, relTol=1e-4)
+# function IRWLS_Nonlinear(U, V, Vp, b0, sig, diagReg, J, f!, jacuf!, jacwf!; ll=Logging.Info,maxIt=100, relTol=1e-4)
 #     with_logger(ConsoleLogger(stderr,ll)) do 
 #         @info "Initializing the linearization least squares solution  ..."
 #         D, M = size(U)
@@ -257,7 +257,7 @@ relerr = abserr / obj_star
 #         wnm1 = w0 
 #         wn = similar(w0)
 #         for n = 1:maxIt 
-#             RT = RTfun(U,V,Vp,sig,diag_reg,jacuf!,wnm1)
+#             RT = RTfun(U,V,Vp,sig,diagReg,jacuf!,wnm1)
 #             b = RT \ b0 
 #             ll = (n == 1) ? Logging.Info : Logging.Warn 
 #             res_AffExpr(w::AbstractVector) = _res(RT,U,V,b,f!,Val(AffExpr), w; ll=ll)
@@ -303,5 +303,5 @@ relerr = abserr / obj_star
 # ##
 # @info "IRWLS (Nonlinear): "
 # @info "   Runtime info: "
-# @time what, wit, resit = IRWLS_Nonlinear(U, V, Vp, b0, sig, diag_reg, J, f!, jacuf!, jacwf!; ll=Logging.Warn)
+# @time what, wit, resit = IRWLS_Nonlinear(U, V, Vp, b0, sig, diagReg, J, f!, jacuf!, jacwf!; ll=Logging.Warn)
 # @info "   iterations    = $(size(wit,2)-1)"

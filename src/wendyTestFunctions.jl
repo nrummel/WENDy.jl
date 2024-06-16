@@ -91,43 +91,43 @@ struct DirectRadMethod <:RadMethod end
 struct TimeFracRadMethod<:RadMethod end
 struct MtminRadMethod <:RadMethod end
 
-function _getMtMinMax(tobs::AbstractVector{<:Real}, uobs::AbstractMatrix{<:Real}, ϕ::TestFunction, K_min::Int)
+function _getMtMinMax(tobs::AbstractVector{<:Real}, uobs::AbstractMatrix{<:Real}, ϕ::TestFunction, Kmin::Int)
     M = size(uobs,2)
-    mt_max = Int(max(floor((M-1)/2)-K_min,1));
+    mt_max = Int(max(floor((M-1)/2)-Kmin,1));
     mt_min = rad_select(tobs,uobs,ϕ,mt_max);
     return mt_min, mt_max 
 end
 
-function (::DirectRadMethod)(tobs::AbstractVector{<:Real},uobs::AbstractVecOrMat{<:Real},  ϕ::TestFunction, K_min::Int)
-    mt_min, mt_max = _getMtMinMax(tobs, uobs, ϕ, K_min)
+function (::DirectRadMethod)(tobs::AbstractVector{<:Real},uobs::AbstractVecOrMat{<:Real}, ϕ::TestFunction, mtParams::AbstractVector{<:Int}, Kmin::Int)
+    mt_min, mt_max = _getMtMinMax(tobs, uobs, ϕ, Kmin)
     D = size(uobs,1)
-    num_rad=length(mt_params)
-    mts = zeros(num_rad, D)
-    for (m, p) in enumerate(mt_params), d in 1:D
+    numRad=length(mtParams)
+    mts = zeros(numRad, D)
+    for (m, p) in enumerate(mtParams), d in 1:D
         mts[m,d] = min(mt_max, p)
     end
     mts = Int.(ceil.(1 ./ mean(1 ./ mts, dims=2)))
     return mts[:]
 end 
 
-function (::TimeFracRadMethod)(tobs::AbstractVector{<:Real},uobs::AbstractVecOrMat{<:Real},  ϕ::TestFunction, K_min::Int)
-    mt_min, mt_max = _getMtMinMax(tobs, uobs, ϕ, K_min)
+function (::TimeFracRadMethod)(tobs::AbstractVector{<:Real},uobs::AbstractVecOrMat{<:Real}, ϕ::TestFunction, mtParams::AbstractVector{<:Int}, Kmin::Int)
+    mt_min, mt_max = _getMtMinMax(tobs, uobs, ϕ, Kmin)
     D = size(uobs,1)
-    num_rad=length(mt_params)
-    mt = zeros(num_rad, D)
-    for (m, p) in enumerate(mt_params), d in 1:D
+    numRad=length(mtParams)
+    mt = zeros(numRad, D)
+    for (m, p) in enumerate(mtParams), d in 1:D
         mt[m,d] = min(mt_max, floor(length(tobs)*p))
     end
     mt = Int.(ceil.(1 ./ mean(1 ./ mt, dims=2)))
     return mt[:]
 end
 
-function (::MtminRadMethod)(tobs::AbstractVector{<:Real},uobs::AbstractVecOrMat{<:Real},  ϕ::TestFunction, K_min::Int)
-    mt_min, mt_max = _getMtMinMax(tobs, uobs, ϕ, K_min)
+function (::MtminRadMethod)(tobs::AbstractVector{<:Real},uobs::AbstractVecOrMat{<:Real},  ϕ::TestFunction, mtParams::AbstractVector{<:Int}, Kmin::Int)
+    mt_min, mt_max = _getMtMinMax(tobs, uobs, ϕ, Kmin)
     D = size(uobs,1)
-    num_rad=length(mt_params)
-    mt = zeros(num_rad, D)
-    for (m, p) in enumerate(mt_params), d in 1:D
+    numRad=length(mtParams)
+    mt = zeros(numRad, D)
+    for (m, p) in enumerate(mtParams), d in 1:D
         mt[m,d] = min(mt_max, p*mt_min)
     end
     mt = Int.(ceil.(1 ./ mean(1 ./ mt, dims=2)))
@@ -232,27 +232,27 @@ struct SingularValuePruningMethod <: TestFunctionPruningMethod
     end
 end
 
-function _getK(K_max::Int, D::Int, num_rad::Int, M::Int)
-    return Int(min(floor(K_max/(D*num_rad)), M))
+function _getK(Kmax::Int, D::Int, numRad::Int, M::Int)
+    return Int(min(floor(Kmax/(D*numRad)), M))
 end
 
-function (meth::NoPruningMethod)(tobs::AbstractVector{<:Real},uobs::AbstractMatrix{<:Real}, ϕ::TestFunction,K_min::Int,K_max::Int,mt_params::AbstractVector{<:Real})
+function (meth::NoPruningMethod)(tobs::AbstractVector{<:Real},uobs::AbstractMatrix{<:Real}, ϕ::TestFunction,Kmin::Int,Kmax::Int,mtParams::AbstractVector{<:Real})
     M, D = size(uobs)
-    num_rad = length(mt_params)
-    mt = meth.radMeth(tobs, uobs, ϕ, K_min)
-    K = _getK(K_max, D, num_rad, length(t))
+    numRad = length(mtParams)
+    mt = meth.radMeth(tobs, uobs, ϕ, Kmin)
+    K = _getK(Kmax, D, numRad, length(t))
     V = cat(discMeth(m,t,ϕ,1,K) for m in mt;dims=1)
     return V[:,:,1], V[:,:,2]
 end
 
-function (meth::SingularValuePruningMethod)(tobs::AbstractVector{<:Real}, uobs::AbstractMatrix{<:Real}, ϕ::TestFunction,K_min::Int,K_max::Int,mt_params::AbstractVector{<:Real})
-    num_rad = length(mt_params)
-    if num_rad == 1
+function (meth::SingularValuePruningMethod)(tobs::AbstractVector{<:Real}, uobs::AbstractMatrix{<:Real}, ϕ::TestFunction,Kmin::Int,Kmax::Int,mtParams::AbstractVector{<:Real})
+    numRad = length(mtParams)
+    if numRad == 1
         return NoPruningMethod(meth.randMeth, meth.discMeth)(mt, tobs, ϕ, K)
     end
     D, M = size(uobs)
-    mt = meth.radMeth(tobs, uobs, ϕ, K_min)
-    K = _getK(K_max, D, num_rad, length(tobs))
+    mt = meth.radMeth(tobs, uobs, ϕ, mtParams, Kmin)
+    K = _getK(Kmax, D, numRad, length(tobs))
     Vfull = reduce(vcat,meth.discMeth(m,tobs,ϕ,0, K) for m in mt)
     M = length(tobs);
     dt = mean(diff(tobs));
@@ -263,7 +263,7 @@ function (meth::SingularValuePruningMethod)(tobs::AbstractVector{<:Real}, uobs::
         # default is to find the corner adaptively
         corner_data = cumsum(sings)/sum(sings);
         ix = getcorner(corner_data);
-        ix = min(max(K_min,ix),K);
+        ix = min(max(Kmin,ix),K);
     else 
         # one can specify the "corner" or where the svd values start falling off
         ix = findfirst(cumsum(sings.^2)/sum(sings.^2)>meth.val^2 > 0 );

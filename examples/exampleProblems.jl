@@ -1,8 +1,4 @@
-using OrdinaryDiffEq, BSON, ModelingToolkit, Logging
-using OrdinaryDiffEq: ODESolution
-using ModelingToolkit: t_nounits as t, D_nounits
-using ModelingToolkit: @mtkmodel, @mtkbuild, ODESystem
-
+include("../src/wendyData.jl")
 ## See Wendy paper
 _LOGISTIC_T_RNG = (0, 10)
 @mtkmodel LogisticGrowthModel begin
@@ -17,7 +13,9 @@ _LOGISTIC_T_RNG = (0, 10)
         D_nounits(u) ~ w1 * u + w2 * u^2
     end
 end
-@mtkbuild LOGISTIC_GROWTH_MODEL = LogisticGrowthModel()
+@mtkbuild LOGISTIC_GROWTH_SYSTEM = LogisticGrowthModel()
+LOGISTIC_GROWTH_FILE = joinpath(@__DIR__, "../data/LogisticGrowth.bson")
+LOGISTIC_GROWTH = (name="logisticGrowth", ode=LOGISTIC_GROWTH_SYSTEM, tRng=_LOGISTIC_T_RNG,M=1024,file=LOGISTIC_GROWTH_FILE)
 ## See Wendy paper
 _HINDMARSH_T_RNG = (0, 10)
 @mtkmodel HindmarshRoseModel begin
@@ -44,7 +42,9 @@ _HINDMARSH_T_RNG = (0, 10)
         D_nounits(u3) ~ w8 *u1 + w9 + w10 * u3
     end
 end
-@mtkbuild HINDMARSH_ROSE_MODEL = HindmarshRoseModel()
+@mtkbuild HINDMARSH_ROSE_SYSTEM = HindmarshRoseModel()
+HINDMARSH_ROSE_FILE = joinpath(@__DIR__, "../data/HindmarshRose.bson")
+HINDMARSH_ROSE = (name="hindmarshRose", ode=HINDMARSH_ROSE_SYSTEM, tRng=_HINDMARSH_T_RNG,M=1024,file=HINDMARSH_ROSE_FILE)
 ## Given in RAMSAY 2007
 _FITZ_T_RNG = (0.0, 20.0)         # Time in ms 20
 _FITZ_NUM_PTS = 400               # from the paper
@@ -65,7 +65,9 @@ _FTZ_PARAM_RNG = NaN              # Not mentioned in paper
         D_nounits(u2) ~ -1 / c * (u1 - a + b * u2);
     end
 end
-@mtkbuild FITZHUG_NAGUMO_MODEL = FitzHugNagumoModel()
+@mtkbuild FITZHUG_NAGUMO_SYSTEM = FitzHugNagumoModel()
+FITZHUG_NAGUMO_FILE = joinpath(@__DIR__, "../data/FitzHug_Nagumo.bson")
+FITZHUG_NAGUMO = (name="fitzHugNagumo", ode=FITZHUG_NAGUMO_SYSTEM, tRng=_FITZ_T_RNG,M=1024, file=FITZHUG_NAGUMO_FILE)
 ## See https://tspace.libraru.utoronto.ca/bitstream/1807/95761/3/Calver_Jonathan_J_201906_PhD_thesis.pdf#page=48
 _LOOP_T_RNG = (0.0, 80.0)                  #
 _LOOP_NLPARAM_RNG = [1e-2, 1e2]            # This is for σ and A?
@@ -94,7 +96,9 @@ _LOOP_LPARAM_RNG = NaN                     # Not mentioned in paper
         D_nounits(u3) ~ γ*u2-δ*u3
     end
 end
-@mtkbuild LOOP_MODEL = LoopModel()
+@mtkbuild LOOP_SYSTEM = LoopModel()
+LOOP_FILE = joinpath(@__DIR__, "../data/loop.bson")
+LOOP = (name="loopModel", ode=LOOP_SYSTEM, tRng=_LOOP_T_RNG,M=1024, file=LOOP_FILE)
 ## See https://tspace.libraru.utoronto.ca/bitstream/1807/95761/3/Calver_Jonathan_J_201906_PhD_thesis.pdf#page=51
 _MENDES_S_VALS = [0.1,0.46416,2.1544,10]
 _MENDES_P_VALS = [0.05,0.13572,0.3684,1]
@@ -167,57 +171,16 @@ _MENDES_PARAM_RNG = [1e−12, 1e6]    # everuthing else k, and q
               - (k15 * u6 * ((1) / (q20))*(u8-P)) / (1+((u8) / (q20))+((P) / (q21))))
     end
 end
-# @mtkbuild MENDES_MODEL = MendesModel()
-## Function used to odes problems in the format used here
-function _solve_ode(mdl::ODESystem, t_rng::Tuple, num_pts::Int;
-    alg=FBDF(), reltol::Real= 1e-8,abstol::Real=1e-8)
-    # Build parameter dictionary from the "true params" 
-    params = [p => ModelingToolkit.getdefault(p) for p in parameters(mdl)]
-    # Build the initial condition from the true initial condition
-    init_cond = [ic=>ModelingToolkit.getdefault(ic) for ic in unknowns(mdl)]
-    p = ODEProblem(mdl,init_cond , t_rng, params)
+MENDES_EXAMPLES = [(
+    name="mendes_S=$(S)_P=$P",
+    ode = begin 
+        @mtkbuild ode = MendesModel(S=S,P=P)
+        ode 
+    end,
+    tRng=_MENDES_T_RNG,
+    M=1024,
+    file=joinpath(@__DIR__, "../data/Mendes_S=$(S)_P=$P.bson") )
+for S in _MENDES_S_VALS, P in _MENDES_P_VALS][:]
 
-    t_step = (t_rng[end]-t_rng[1]) / (num_pts-1)
-    return solve(p, alg,reltol=reltol, abstol = abstol, saveat=t_step)
-end
-##
-function _saveSol(sol::ODESolution, saveFile::String)
-    u = hcat(sol.u...)
-    t = sol.t 
-    BSON.@save joinpath(@__DIR__, "..", "data", saveFile) t u
-end
-##
-function create_test_data(;ll::Logging.LogLevel=Logging.Warn, saveFlag::Bool=false, NumberOfPoints::Int=1024)
-    with_logger(ConsoleLogger(stderr,ll)) do
-        @info "Creating Logist Growth Data..."
-        @mtkbuild logistMdl = LogisticGrowthModel()
-        lg_sol = _solve_ode(logistMdl, _LOGISTIC_T_RNG, NumberOfPoints)
-        @info "Creating HindmarshRoseModel Data..."
-        @mtkbuild hindmarshMdl = HindmarshRoseModel()
-        hindmarsh_sol = _solve_ode(hindmarshMdl, _HINDMARSH_T_RNG, NumberOfPoints)
-        @info "Creating Fitz Data..."
-        @mtkbuild fitzModel = FitzHugNagumoModel()
-        fitz_sol = _solve_ode(fitzModel, _FITZ_T_RNG, NumberOfPoints)
-        @info "Creating Loop Data..."
-        @mtkbuild loopMdl = LoopModel()
-        loop_sol = _solve_ode(loopMdl, _LOOP_T_RNG, NumberOfPoints)
-        @info "Creating Mendes Data..."
-        mendes_sol = Matrix(undef, length(_MENDES_S_VALS), length(_MENDES_P_VALS))
-        for (i,S) in enumerate(_MENDES_S_VALS), (j,P) in enumerate(_MENDES_P_VALS)
-            @info "\tS=$S, P=$P"
-            @mtkbuild mendesMdl = MendesModel(S=S,P=P)
-            mendes_sol[i,j] = _solve_ode(mendesMdl, _MENDES_T_RNG, NumberOfPoints)
-        end
-        if saveFlag
-            @info "Saving solutions..."
-            _saveSol(lg_sol,"LogisticGrowth.bson")
-            _saveSol(hindmarsh_sol,"HindmarshRose.bson")
-            _saveSol(fitz_sol,"FitzHug_Nagumo.bson")
-            _saveSol(loop_sol,"Loop.bson")
-            for (i,S) in enumerate(_MENDES_S_VALS), (j,P) in enumerate(_MENDES_P_VALS)
-                _saveSol(mendes_sol[i,j],"Mendes_S=$(S)_P=$P.bson")
-            end
-        end
-        return lg_sol, hindmarsh_sol, fitz_sol, loop_sol, mendes_sol
-    end
-end
+## 
+EXAMPLES = vcat([LOGISTIC_GROWTH, HINDMARSH_ROSE, LOOP], MENDES_EXAMPLES)

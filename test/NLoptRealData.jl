@@ -1,12 +1,13 @@
 @info "Loading dependencies"
-@info " Loading generateNoise..."
-includet("../src/generateNoise.jl")
+@info " Loading noise calcutation..."
+includet("../src/wendyNoise.jl")
 @info " Loading exampleProblems..."
-includet("../src/exampleProblems.jl")
-@info " Loading computeGradients..."
-includet("../src/computeGradients.jl")
+includet("../src/wendyData.jl")
+includet("../examples/exampleProblems.jl")
+@info " Loading symbolic calcutations..."
+includet("../src/wendySymbolics.jl")
 @info " Loading testFunctions..."
-includet("../src/testFunctions.jl")
+includet("../src/wendyTestFunctions.jl")
 @info " Loading other dependencies..."
 # std lib
 using LinearAlgebra, Logging, Random
@@ -17,7 +18,7 @@ using LinearAlgebra, Tullio, BenchmarkTools, Random, Logging, NaNMath
 ## 
 # Specify the parameters/data/models
 @info "Specifying the parameters/data/models..."
-# mdl                 = FITZHUG_NAGUMO_MODEL # HINDMARSH_ROSE_MODEL
+# ex                 = FITZHUG_NAGUMO_MODEL # HINDMARSH_ROSE_MODEL
 # exampleFile         = joinpath(@__DIR__, "../data/FitzHug_Nagumo.bson")
 # mdl                 = LOOP_MODEL # HINDMARSH_ROSE_MODEL
 # exampleFile         = joinpath(@__DIR__, "../data/Loop.bson")
@@ -27,19 +28,19 @@ mdl = @mtkbuild MENDES_PROB_S_P = MendesModel(S=S,P=P)
 exampleFile         = joinpath(@__DIR__, "../data/Mendes_S=$(S)_P=$P.bson")
 @info "Running for Model $exampleFile)"
 ϕ                   = ExponentialTestFun()
-diag_reg            = 1e-10
-noise_ratio         = 0.05
-time_subsample_rate = 2
-mt_params           = 2 .^(0:3)
+diagReg            = 1e-10
+noiseRatio         = 0.05
+timeSubsampleRate = 2
+mtParams           = 2 .^(0:3)
 seed                = Int(1)
-K_min               = 10
-K_max               = Int(5e3)
+Kmin               = 10
+Kmax               = Int(5e3)
 pruneMeth           = SingularValuePruningMethod( 
     MtminRadMethod(),
     UniformDiscritizationMethod()
 );
-w_true = Float64[ModelingToolkit.getdefault(p) for p in parameters(mdl)]
-J = length(w_true)
+wTrue = Float64[ModelingToolkit.getdefault(p) for p in parameters(mdl)]
+J = length(wTrue)
 @info "Build julia functions from symbolic expressions of ODE..."
 _,f!         = getRHS(mdl)
 _,jacuf! = getJacobian(mdl);s
@@ -98,23 +99,23 @@ Random.seed!(seed)
 data = BSON.load(exampleFile) 
 tt_full = data[:t] 
 U_full = data[:u] 
-num_rad = length(mt_params)
+numRad = length(mtParams)
 @info "Subsample data and add noise..."
-tt = tt_full[1:time_subsample_rate:end]
-U = U_full[:,1:time_subsample_rate:end]
-U, noise, noise_ratio_obs, sigma = generateNoise(U, noise_ratio)
+tt = tt_full[1:timeSubsampleRate:end]
+U = U_full[:,1:timeSubsampleRate:end]
+U, noise, noise_ratio_obs, sigma = generateNoise(U, noiseRatio)
 D, M = size(U)
 @info "============================="
 @info "Start of Algo..."
 @info "Estimate the noise in each dimension..."
 sig = estimate_std(U)
 @info "Build test function matrices..."
-V,Vp,Vfull = pruneMeth(tt,U,ϕ,K_min,K_max,mt_params);
+V,Vp,Vfull = pruneMeth(tt,U,ϕ,Kmin,Kmax,mtParams);
 K,_ = size(V)
 @info "Build right hand side to NLS..."
 b0 = reshape(-Vp * U', K*D);
 # Get the cholesky decomposition of our current approximation of the covariance
-function RTfun(U::AbstractMatrix, V::AbstractMatrix, Vp::AbstractMatrix, sig::AbstractVector, diag_reg::Real, jacuf!::Function, w::AbstractVector)
+function RTfun(U::AbstractMatrix, V::AbstractMatrix, Vp::AbstractMatrix, sig::AbstractVector, diagReg::Real, jacuf!::Function, w::AbstractVector)
     # Preallocate for L 
     D, M = size(U)
     K, _ = size(V)
@@ -133,7 +134,7 @@ function RTfun(U::AbstractMatrix, V::AbstractMatrix, Vp::AbstractMatrix, sig::Ab
     # compute covariance
     S = L * L'
     # regularize for possible ill conditioning
-    R = (1-diag_reg)*S + diag_reg*I
+    R = (1-diagReg)*S + diagReg*I
     # compute cholesky for lin solv efficiency
     cholesky!(Symmetric(R))
     return UpperTriangular(R)'
@@ -236,8 +237,8 @@ f(w::AbstractVector{W}, ::Any=nothing; ll::Logging.LogLevel=Logging.Warn) where 
 ∇f!(∇f::AbstractVector{<:Real}, w::AbstractVector{W}, ::Any=nothing; ll::Logging.LogLevel=Logging.Warn) where W = ∇f!(∇f,RT,U,V,b,jacwf!,w;ll=ll)
 ## 
 @info "Test Allocations with with Float64"
-w_rand = w_true + abs.(w_true) .* randn(J)
-RT = RTfun(U,V,Vp,sig,diag_reg,jacuf!,w_rand)
+w_rand = wTrue + abs.(wTrue) .* randn(J)
+RT = RTfun(U,V,Vp,sig,diagReg,jacuf!,w_rand)
 b = RT \ b0 
 # because this problem is linear in w the jacobian is constant, 
 # and we could solve this problem with backslash because 
@@ -280,7 +281,7 @@ relerr = abs(f(w_star)- f_hat) / f(w_star)
 @info "Relative coeff error = $relerr"
 ## Compute the non lin least square solution 
 @info "Defining IRWLS_Nonlinear..."
-function IRWLS_Nonlinear(U::AbstractMatrix{T}, V, Vp, b0, sig, diag_reg, J, f!, jacuf!, jacwf!; ll=Logging.Info,maxIt=100, relTol=1e-10,w0=nothing) where T
+function IRWLS_Nonlinear(U::AbstractMatrix{T}, V, Vp, b0, sig, diagReg, J, f!, jacuf!, jacwf!; ll=Logging.Info,maxIt=100, relTol=1e-10,w0=nothing) where T
     with_logger(ConsoleLogger(stderr,ll)) do 
         @info "Initializing the linearization least squares solution  ..."
         D, M = size(U)
@@ -300,7 +301,7 @@ function IRWLS_Nonlinear(U::AbstractMatrix{T}, V, Vp, b0, sig, diag_reg, J, f!, 
         wnm1 = w0 
         wn = similar(w0)
         for n = 1:maxIt 
-            RT = RTfun(U,V,Vp,sig,diag_reg,jacuf!,wnm1)
+            RT = RTfun(U,V,Vp,sig,diagReg,jacuf!,wnm1)
             b = RT \ b0 
             G = ∇res(RT,U,V,jacwf!,zeros(J))
             w_star = G \ b 
@@ -347,9 +348,9 @@ end
 ##
 @info "IRWLS (Nonlinear): "
 @info "   Runtime info: "
-@time what, wit, resit = IRWLS_Nonlinear(U, V, Vp, b0, sig, diag_reg, J, f!, jacuf!, jacwf!; ll=Logging.Info, w0=w_rand)
+@time what, wit, resit = IRWLS_Nonlinear(U, V, Vp, b0, sig, diagReg, J, f!, jacuf!, jacwf!; ll=Logging.Info, w0=w_rand)
 if typeof(what) <:AbstractVector 
-    relErr = norm(wit[:,end] - w_true) / norm(w_true)
+    relErr = norm(wit[:,end] - wTrue) / norm(wTrue)
     @info "   coeff rel err = $relErr"
 end
 @info "   iterations    = $(size(wit,2)-1)"

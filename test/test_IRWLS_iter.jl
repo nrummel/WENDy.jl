@@ -1,12 +1,12 @@
 using BenchmarkTools,  MAT, UnicodePlots
 @info "Loading generateNoise..."
-includet("../src/generateNoise.jl")
+includet("../src/wendyNoise.jl")
 @info "Loading exampleProblems..."
-includet("../src/exampleProblems.jl")
+includet("../examples/exampleProblems.jl")
 @info "Loading computeGradients..."
-includet("../src/computeGradients.jl")
+includet("../src/wendySymbolics.jl")
 @info "Loading linearSystem..."
-includet("../src/linearSystem.jl")
+includet("../src/wendyEquations.jl")
 ##
 mdl = HINDMARSH_ROSE_MODEL
 data = matread(joinpath(@__DIR__, "../data/Lw_hindmarsh_test.mat"))
@@ -21,7 +21,7 @@ Lw_matlab = data["Lw"];
 Sw_matlab = data["Sw"];
 RT_matlab = data["RT"];
 true_vec = data["true_vec"][:];
-diag_reg = data["diag_reg"];
+diagReg = data["diagReg"];
 w0_matlab = data["w0"];
 KD,MD,J = size(L1_matlab)
 K,M = size(V)
@@ -52,7 +52,7 @@ w0 = G0 \ b0
 L = Lgetter(w)
 mul!(S, L, L')
 R .= R0
-mul!(R, S, R0, 1-diag_reg,diag_reg)
+mul!(R, S, R0, 1-diagReg,diagReg)
 cholesky!(Symmetric(R))
 
 Giter = UpperTriangular(R)' \ G0

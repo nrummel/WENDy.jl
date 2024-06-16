@@ -1,12 +1,12 @@
 using BenchmarkTools,  MAT
 @info "Loading generateNoise..."
-includet("../src/generateNoise.jl")
+includet("../src/wendyNoise.jl")
 @info "Loading exampleProblems..."
-includet("../src/exampleProblems.jl")
+includet("../examples/exampleProblems.jl")
 @info "Loading computeGradients..."
-includet("../src/computeGradients.jl")
+includet("../src/wendySymbolics.jl")
 @info "Loading linearSystem..."
-includet("../src/linearSystem.jl")
+includet("../src/wendyEquations.jl")
 ##
 mdl = HINDMARSH_ROSE_MODEL
 data = matread(joinpath(@__DIR__, "../data/Lw_hindmarsh_test.mat"))
@@ -21,7 +21,7 @@ Lw_matlab = data["Lw"];
 Sw_matlab = data["Sw"];
 RT_matlab = data["RT"];
 true_vec = data["true_vec"][:];
-diag_reg = data["diag_reg"];
+diagReg = data["diagReg"];
 w0_matlab = data["w0"];
 what_matlab = data["w_hat"];
 wits_matlab = data["w_hat_its"];
