@@ -123,10 +123,6 @@ $$\begin{align*}
 	S_w^{-1/2} (e^\Theta - b^\epsilon) &\stackrel{asymp}{\sim} N(0, I)\\
 \end{align*}$$
 But now  $L_w =  \underbrace{\mathbb{I}_D \circ \dot{\Phi}}_{\stackrel{\Delta}{=} L_0} + \underbrace{\nabla_u F(u,w) \circ \Phi}_{\stackrel{\Delta}{=} L_1(w)}$,
-
-
-
-
 $S_w = L_wL_w^T$, and $S_w^{-1/2}$ is the Cholesky factorization. This now has a negative log likelihood:
 $$-\mathcal{L}(w; u) = \underbrace{(G(w)-b)^TS_w^{-1}(G(w)-b)}_{f(w;u)} + \log(\det(S_w))$$Neglecting  the $\log\det$ term due to its lack of contribution in general, we obtain 
 $$\begin{align*}

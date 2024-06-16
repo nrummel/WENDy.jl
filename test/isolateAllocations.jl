@@ -85,17 +85,14 @@ function RTfun(U::AbstractMatrix, V::AbstractMatrix, Vp::AbstractMatrix, sig::Ab
     return UpperTriangular(R)'
 end
 # Define residual function 
-function _res(RT::AbstractMatrix, U::AbstractMatrix, V::AbstractMatrix, b::AbstractVector, f!::Function, ::Val{T}, wargs::W...; ll::Logging.LogLevel=Logging.Warn) where {T,W}
+function res(RT::AbstractMatrix, U::AbstractMatrix, V::AbstractMatrix, b::AbstractVector, f!::Function, w::AbstractVector{W}; ll::Logging.LogLevel=Logging.Warn) where W
     with_logger(ConsoleLogger(stderr, ll)) do 
         @info "++++ Res Eval ++++"
-        @info " vcating wargs "
-        dt = @elapsed a = @allocations w = vcat(wargs...)
-        @info "  $dt s, $a allocations"
         K, M = size(V)
         D, _ = size(U)
         @info " Evaluate F "
         dt = @elapsed a = @allocations begin 
-            F = zeros(T, D, M)
+            F = zeros(W, D, M)
             for m in 1:size(F,2)
                 f!(view(F,:,m), w, view(U,:,m))
             end
@@ -118,18 +115,15 @@ function _res(RT::AbstractMatrix, U::AbstractMatrix, V::AbstractMatrix, b::Abstr
     end
 end
 # Define Jacobian of residual with respect to the parameters w 
-function _jacRes(RT::AbstractMatrix, U::AbstractMatrix, V::AbstractMatrix, jacwf!::Function, ::Val{T}, wargs::W...; ll::Logging.LogLevel=Logging.Warn) where {T,W}
+function ∇res(RT::AbstractMatrix, U::AbstractMatrix, V::AbstractMatrix, jacwf!::Function, w::AbstractVector{W}; ll::Logging.LogLevel=Logging.Warn) where W
     with_logger(ConsoleLogger(stderr, ll)) do 
         @info "++++ Jac Res Eval ++++"
-        @info " vcating wargs "
-        dt = @elapsed a = @allocations w = vcat(wargs...)
-        @info "  $dt s, $a allocations"
         K, M = size(V)
         D, _ = size(U)
         J = length(w)
         @info " Evaluating jacobian of F"
         dt = @elapsed a = @allocations begin
-            JwF = zeros(T,D,J,M)
+            JwF = zeros(W,D,J,M)
             for m in 1:M
                 jacwf!(view(JwF,:,:,m), w, view(U,:,m))
             end
@@ -145,121 +139,106 @@ function _jacRes(RT::AbstractMatrix, U::AbstractMatrix, V::AbstractMatrix, jacwf
         dt = @elapsed a = @allocations jacG = reshape(JG, K*D, J)
         @info "  $dt s, $a allocations"
         @info " Linsolve"
-        dt = @elapsed a = @allocations jacRes = RT \ jacG
+        dt = @elapsed a = @allocations ∇res = RT \ jacG
         @info "  $dt s, $a allocations"
-        @info " Make into array of vectors"
-        dt = @elapsed a = @allocations jacResList = [jacRes[kd,:] for kd in 1:K*D]
-        @info "  $dt s, $a allocations"
-        return jacResList
+        return ∇res
     end
 end
-function memoize_res(f::Function, K::Int)
-    last_w, last_f = nothing, nothing
-    last_dw, last_dfdw = nothing, nothing
-    function f_k(wargs::W...; k::Int=1) where {W<:Real}
-        if W == Float64
-            if wargs !== last_w
-                last_w, last_f = wargs, f(wargs...)
-            end
-            return last_f[k]::W
-        else
-            if wargs !== last_dw
-                last_dw, last_dfdw = wargs, f(wargs...)
-            end
-            return last_dfdw[k]::W
+function memorize_f(f::Function, KD::Int, ::Val{J}, ::Val{W}) where W
+    _w, _f = NTuple{J,W}(zeros(W,J)), zeros(W,J)
+    function f_kd(kd::Int, wargs::W...)
+        if wargs !== _w
+                _w, _f = wargs, f(wargs...)
         end
+        return  _f[kd]::W 
     end
-    return [(wargs...) -> f_k(wargs...;k=k) for k in 1:K]
+    return [(wargs...) -> f_kd(kd, wargs...) for kd in 1:KD]
 end
-function memoize_jacRes(jacFun::Function, K::Int)
-    last_w, last_f = nothing, nothing
-    last_dw, last_dfdw = nothing, nothing
-    function ∇f_k(∇f::AbstractVector{W}, wargs::W...; k::Int=1) where {W<:Real}
-        if W == Float64
-            if wargs !== last_w
-                last_w, last_f = wargs, jacFun(wargs...)
-            end
-            ∇f .= last_f[k]::AbstractVector{W}
-            return nothing 
-        else
-            if wargs !== last_dw
-                last_dw, last_dfdw = wargs, jacFun(wargs...)
-            end
-            ∇f .= last_dfdw[k]::AbstractVector{W}
-            return nothing 
+ 
+function memorize_∇f!(∇f::Function, KD::Int, ::Val{J}, ::Val{W}) where W
+    _w, _∇f = NTuple{J,W}(zeros(W,J)), zeros(W,KD,J)
+    function ∇f_kd!(ret::AbstractVector{W}, kd::Int, wargs::W...)
+        if wargs !== _w
+            _w = wargs
+            _∇f = ∇f(wargs...)
         end
+        ret .= view(_∇f, kd, :)  
+        nothing 
     end
-    return [(wargs...) -> ∇f_k(wargs...;k=k) for k in 1:K]
+    return [(∇f_kd, wargs...) -> ∇f_kd!(∇f_kd, kd, wargs...) for kd in 1:KD]
 end
-##
+#
+res(w::AbstractVector{W}; ll::Logging.LogLevel=Logging.Warn) where W = res(RT,U,V,b,f!,w;ll=ll)
+∇res(w::AbstractVector{W}; ll::Logging.LogLevel=Logging.Warn) where W = ∇res(RT,U,V,jacwf!,w;ll=ll)
+res(wargs::W...; ll::Logging.LogLevel=Logging.Warn) where W = res(collect(wargs);ll=ll)
+∇res(wargs::W...; ll::Logging.LogLevel=Logging.Warn) where W = ∇res(collect(wargs);ll=ll)
+res_kd = memorize_f(res, K*D, Val(J), Val(eltype(U)))
+∇res_kd = memorize_∇f!(∇res, K*D, Val(J), Val(eltype(U)))
+res_mem(wargs::W...) where W = reduce(vcat, res_kd[kd](wargs...) for kd in 1:K*D)
+function ∇res_mem!(∇res::AbstractMatrix{W}, wargs::W...) where W
+    for kd in 1:K*D
+        ∇res_kd[kd](view(∇res,kd,:), wargs...) 
+    end
+    nothing
+end 
+## 
 @info "Test Allocations with with Float64"
 w_rand = rand(J)
 RT = RTfun(U,V,Vp,sig,diag_reg,jacuf!,w_rand)
 b = RT \ b0 
-res_float64(wargs::Float64...; ll::Logging.LogLevel=Logging.Warn) = _res(RT,U,V,b,f!,Val(Float64), wargs...; ll=ll)
-jacRes_float64(wargs::Float64...; ll::Logging.LogLevel=Logging.Warn) = _jacRes(RT,U,V,jacwf!,Val(Float64), wargs...; ll=ll)
-res_float64(w_rand...; ll=Logging.Info)
-jacRes_float64(w_rand...;ll=Logging.Info)
+# because this problem is linear in w the jacobian is constant, 
+# and we could solve this problem with backslash because 
+# it is really a linear least squares problem
+w_star = ∇res(zeros(J)) \ b 
 ##
-@info " Benchmark res float"
-@time res_float64(w_rand...);
-@info " Benchmark jacRes float"
-@time jacRes_float64(w_rand...);
-nothing
-## 
-@info "Test the memoize function in isolation"
-res_kd_float64 = memoize_res(res_float64, K*D)
-jacRes_kd_float64 = memoize_jacRes(jacRes_float64, K*D)
-@info "Calling to memorized residual..."
-# call one time to get compilation out of the way
-res_mem_cat(wargs...) = reduce(vcat, res_kd_float64[kd](wargs...) for kd in 1:K*D) 
-res_mem_cat(w_rand...)
-@time res_rand_mem = res_mem_cat(w_rand...)
-@info "Calling non-memorized residual ..."
-@time res_rand = res_float64(w_rand...)
-@assert all(res_rand_mem .== res_rand) "Memorize residual is not working properly"
-@info "Calling to memorized jacobian ..."
-function jacRes_mem_cat(wargs::W...) where W
-    jacRes_vec = Vector{Vector{W}}(undef, K*D) 
-    for kd in 1:K*D
-        jacRes_kd = zeros(W, J)
-        jacRes_kd_float64[kd](jacRes_kd, wargs...) 
-        jacRes_vec[kd] = jacRes_kd
-    end
-    return jacRes_vec
-end
-jacRes_mem_cat(w_rand...)
-@time jacRes_rand_mem = jacRes_mem_cat(w_rand...)
-@info "Calling non-memorized jacobian ..."
-@time jacRes_rand = jacRes_float64(w_rand...)
-@assert all(jacRes_rand_mem .== jacRes_rand) "Memorize jacobian is not working properly"
+res_w_rand = res(w_rand)
+res_w_rand_splat = res(w_rand...)
+res_mem_w_rand = res_mem(w_rand...)
+@assert all(res_w_rand .== res_w_rand_splat)
+@assert all(res_w_rand .== res_mem_w_rand)
+∇res_w_rand = ∇res(w_rand)
+∇res_w_rand_splat = ∇res(w_rand...) 
+∇res_mem_w_rand = zeros(K*D,J)
+∇res_mem!(∇res_mem_w_rand,w_rand...)
+@assert all(∇res_w_rand .== ∇res_w_rand_splat)
+@assert all(∇res_w_rand .== ∇res_mem_w_rand)
 nothing 
 ##
-@info "Test the NLS in isolation"
-RT = RTfun(U,V,Vp,sig,diag_reg,jacuf!,w_rand)
-b = RT \ b0 
-ll = Logging.Info 
-w_star = reduce(hcat, _jacRes(RT, U, V, jacwf!, Val(Float64), zeros(J)))' \ b 
+@info " Benchmark res"
+@time res(rand(J))
+@info " Benchmark res splatting"
+@time res(rand(J)...)
+@info " Benchmark res memorized"
+@time res_mem(rand(J)...)
+@info " Benchmark ∇res "
+@time ∇res(rand(J))
+@info " Benchmark ∇res splatting"
+@time ∇res(rand(J)...) 
+@info " Benchmark ∇res memorized"
+∇res_mem_w_rand = zeros(K*D,J)
+@time ∇res_mem!(∇res_mem_w_rand,rand(J)...);
+nothing
 ##
+@info "Test the NLS in isolation"
 @info "Defining model for Ipopt"
 mdl = Model(Ipopt.Optimizer)
 @variable(mdl, w[j = 1:J], start = w_rand[j])
 @variable(mdl, r[k = 1:K*D])
 for kd in 1:K*D
     fk = Symbol("f$kd")
-    register(mdl, fk, J, res_kd_float64[kd],jacRes_kd_float64[kd];autodiff=false)
+    register(mdl, fk, J, res_kd[kd], ∇res_kd[kd];autodiff=false)
     add_nonlinear_constraint(mdl, :($(fk)($(w)...) == $(r[kd])) )
 end
-@time @objective(mdl, Min, sum(r .^2 ) ) 
+@objective(mdl, Min, sum(r .^2 ) ) 
 set_silent(mdl)
 @info "Running optimizer"
-dtn = @elapsed optimize!(mdl)
+@time optimize!(mdl)
 w_hat = value.(w)
 abserr = norm(w_hat - w_star)
 relerr = abserr / norm(w_star)
 @info "Absolute coeff error = $abserr"
 @info "Relative coeff error = $relerr"
-obj_star = sum(res_float64(w_star...).^2)
+obj_star = sum(res(w_star...).^2)
 abserr = abs(objective_value(mdl) - obj_star)
 relerr = abserr / obj_star
 @info "Absolute coeff error = $abserr"
@@ -271,7 +250,7 @@ relerr = abserr / obj_star
 #         @info "Initializing the linearization least squares solution  ..."
 #         D, M = size(U)
 #         K, _ = size(V)
-#         G0 = _jacRes(Matrix{Float64}(I, K*D,K*D), U, V, jacwf!, Val(Float64), zeros(J))
+#         G0 = _∇res(Matrix{Float64}(I, K*D,K*D), U, V, jacwf!,, zeros(J))
 #         w0 = G0 \ b0 
 #         wit = zeros(J,maxIt)
 #         resit = zeros(J,maxIt)
@@ -282,15 +261,15 @@ relerr = abserr / obj_star
 #             b = RT \ b0 
 #             ll = (n == 1) ? Logging.Info : Logging.Warn 
 #             res_AffExpr(w::AbstractVector) = _res(RT,U,V,b,f!,Val(AffExpr), w; ll=ll)
-#             jacRes_AffExpr(w::AbstractVector) = _jacRes(RT,U,V,jacwf!,Val(AffExpr),w;showFlag=true)
-#             w_star = _jacRes(RT, U, V, jacwf!, Val(Float64), zeros(J)) \ b 
+#             ∇res_AffExpr(w::AbstractVector) = _∇res(RT,U,V,jacwf!,Val(AffExpr),w;showFlag=true)
+#             w_star = _∇res(RT, U, V, jacwf!,, zeros(J)) \ b 
 #             ##
 #             @info "Defining model for Ipopt"
 #             mdl = Model(Ipopt.Optimizer)
 #             @variable(mdl, w[j = 1:J], start = wnm1[j])
 #             @variable(mdl, r[k = 1:K*D])
 #             @show typeof(w)
-#             @operator(mdl, f, J, res_AffExpr, jacRes_AffExpr)
+#             @operator(mdl, f, J, res_AffExpr, ∇res_AffExpr)
 #             @constraint(mdl, r == f(w))
 #             @objective(mdl, Min, sum(r.^2 ) ) 
 #             set_silent(mdl)

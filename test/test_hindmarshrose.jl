@@ -45,8 +45,10 @@ V,Vp,Vfull = pruneMeth(tobs,uobs,ϕ,K_min,K_max,mt_params);
 ##
 @info "IRWLS (Linear): "
 @info "   Runtime info: "
-@time what, wit = IRWLS_Linear(uobs, V, Vp, sig, _F!, _jacuF!, J)
 w_true = [ModelingToolkit.getdefault(p) for p in parameters(mdl)]
+diag_reg = 1e-10
+J = length(w_true)
+@time what, wit = IRWLS_Linear(uobs, V, Vp, sig, _F!, _jacuF!, J)
 relErr = norm(wit[:,end] - w_true) / norm(w_true)
 @info "   coeff rel err = $relErr"
 @info "   iterations    = $(size(wit,2)-1)"
