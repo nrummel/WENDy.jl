@@ -42,6 +42,15 @@ function getJacobian(mdl::ODESystem)
     return jac, jac!
 end
 
+function getDoubleJacobian(mdl::ODESystem)
+    w = parameters(mdl)
+    u = unknowns(mdl)
+    jacu_sym = _getJacobian_sym(mdl)
+    jacuw_sym = jacobian(jacu_sym, w)
+    jac, jac! = build_function(jacuw_sym, w,u; expression=false)
+    return jac, jac!
+end
+
 ## Maybe put size checks in these functions? 
 # J = length(w)
 # D = length(u)

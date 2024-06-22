@@ -1,4 +1,5 @@
 include("../src/wendyData.jl")
+using Distributions
 ## See Wendy paper
 _LOGISTIC_T_RNG = (0, 10)
 @mtkmodel LogisticGrowthModel begin
@@ -15,7 +16,11 @@ _LOGISTIC_T_RNG = (0, 10)
 end
 @mtkbuild LOGISTIC_GROWTH_SYSTEM = LogisticGrowthModel()
 LOGISTIC_GROWTH_FILE = joinpath(@__DIR__, "../data/LogisticGrowth.bson")
-LOGISTIC_GROWTH = (name="logisticGrowth", ode=LOGISTIC_GROWTH_SYSTEM, tRng=_LOGISTIC_T_RNG,M=1024,file=LOGISTIC_GROWTH_FILE)
+LOGISTIC_GROWTH = (
+    name="logisticGrowth", 
+    ode=LOGISTIC_GROWTH_SYSTEM,
+    tRng=_LOGISTIC_T_RNG,M=1024,
+    file=LOGISTIC_GROWTH_FILE)
 ## See Wendy paper
 _HINDMARSH_T_RNG = (0, 10)
 @mtkmodel HindmarshRoseModel begin
@@ -44,7 +49,8 @@ _HINDMARSH_T_RNG = (0, 10)
 end
 @mtkbuild HINDMARSH_ROSE_SYSTEM = HindmarshRoseModel()
 HINDMARSH_ROSE_FILE = joinpath(@__DIR__, "../data/HindmarshRose.bson")
-HINDMARSH_ROSE = (name="hindmarshRose", ode=HINDMARSH_ROSE_SYSTEM, tRng=_HINDMARSH_T_RNG,M=1024,file=HINDMARSH_ROSE_FILE)
+MATLAB_HINDMARSH_ROSE_FILE = joinpath(@__DIR__, "../data/Hindmarsh_Rose_MATLAB.mat")
+HINDMARSH_ROSE = (name="hindmarshRose", ode=HINDMARSH_ROSE_SYSTEM, tRng=_HINDMARSH_T_RNG,M=1024,file=HINDMARSH_ROSE_FILE,matlab_file=MATLAB_HINDMARSH_ROSE_FILE)
 ## Given in RAMSAY 2007
 _FITZ_T_RNG = (0.0, 20.0)         # Time in ms 20
 _FITZ_NUM_PTS = 400               # from the paper
@@ -106,6 +112,7 @@ _MENDES_T_RNG = (0.0,120.0)
 _MENDES_NUM_PTS = 120               # This was 8 to be small for the forward solves
 _MENDES_HILL_PARAM_RNG = [1e-1,1e2] # q2,4,6,8,10,12 
 _MENDES_PARAM_RNG = [1e−12, 1e6]    # everuthing else k, and q
+
 @mtkmodel MendesModel begin
     @variables begin
         u1(t) = 0.66667
@@ -117,9 +124,12 @@ _MENDES_PARAM_RNG = [1e−12, 1e6]    # everuthing else k, and q
         u7(t) = 1.419
         u8(t) = 0.93464
     end
+    # # TODO: Do something smarter here... 
+    # @constants begin 
+    #     S = 0.1
+    #     P = 0.05 
+    # end
     @parameters begin
-        S
-        P
         k1=1
         k2=1
         k3=1
@@ -159,27 +169,30 @@ _MENDES_PARAM_RNG = [1e−12, 1e6]    # everuthing else k, and q
     end
     # define equations
     @equations begin
-        D_nounits(u1) ~ k1 / (1+((P) / (q1))^(q2)+(q3 / S)^(q4))-k2 * u1 
-        D_nounits(u2) ~ k3 / (1+((P) / (q5))^(q6)+(q7 / u7)^(q8))-k4 * u2 
-        D_nounits(u3) ~ k5 / (1+((P) / (q9))^(q10)+(q11 / u8)^(q12))-k6 * u3 
+        D_nounits(u1) ~ k1 / (1 + q1*0.05^(q2) + q3 * (0.1)^(-q4))-k2 * u1 
+        D_nounits(u2) ~ k3 / (1 + q5*0.05^(q6) + q7 * u7^(-q8))-k4 * u2 
+        D_nounits(u3) ~ k5 / (1 + q9*0.05^(q10) + q11 * u8^(-q12))-k6 * u3 
         D_nounits(u4) ~ (k7 * u1) / (u1+q13)-k8 * u4 
         D_nounits(u5) ~ (k9 * u2) / (u2+q14)-k10 * u5 
         D_nounits(u6) ~ (k11 * u3) / (u3+q15)-k12 * u6 
-        D_nounits(u7) ~ ((k13 * u4*((1) / (q16))*(S-u7)) / (1+((S) / (q16))+((u7) / (q17)))
+        D_nounits(u7) ~ ((k13 * u4*((1) / (q16))*((0.1)-u7)) / (1+(((0.1)) / (q16))+((u7) / (q17)))
               - (k14 * u5*((1) / (q18))*(u7-u8)) / (1+((u7) / (q18))+((u8) / (q19))) )
         D_nounits(u8) ~ ((k14 * u5 * ((1) / (q18))*(u7-u8)) / (1+((u7) / (q18))+((u8) / (q19)))
-              - (k15 * u6 * ((1) / (q20))*(u8-P)) / (1+((u8) / (q20))+((P) / (q21))))
+              - (k15 * u6 * ((1) / (q20))*(u8-0.05)) / (1+((u8) / (q20))+((0.05) / (q21))))
     end
 end
-MENDES_EXAMPLES = [(
-    name="mendes_S=$(S)_P=$P",
-    ode = begin 
-        @mtkbuild ode = MendesModel(S=S,P=P)
-        ode 
-    end,
-    tRng=_MENDES_T_RNG,
-    M=1024,
-    file=joinpath(@__DIR__, "../data/Mendes_S=$(S)_P=$P.bson") )
+MENDES_EXAMPLES = [
+    (
+        name="mendes_S=$(S)_P=$P",
+        ode = begin 
+            @mtkbuild ode = MendesModel() # usually could set S, P here but now that they are constants we cannot 
+            ode 
+        end,
+        tRng=_MENDES_T_RNG,
+        M=1024,
+        file=joinpath(@__DIR__, "../data/Mendes_S=$(S)_P=$P.bson"),
+        noise_dist=LogNormal
+    )
 for S in _MENDES_S_VALS, P in _MENDES_P_VALS][:]
 
 ## 

@@ -1,27 +1,25 @@
 using ImageFiltering: imfilter, Inner # equivalent to conv
+using Distributions 
 ##
-function generateNoise(U_exact::AbstractMatrix{<:Real}, noiseRatio::Real, noise_dist::Int=0, noise_alg::Int=0)
+function generateNoise(U_exact::AbstractMatrix{<:Real}, noiseRatio::Real, ::Val{DT}=Val(Normal), noise_alg::Int=0) where DT
+    @assert noiseRatio > 0 "Noise ratio must be possitive"
     if noise_alg == 0 # additive
         stdv = sqrt(mean(U_exact[:] .^2))
     elseif noise_alg == 1 # multiplicative
         stdv = 1
     end
-    dims = size(U_exact)
-    if noise_dist == 0 # white noise
-        if noiseRatio>0
-            sigma = noiseRatio*sqrt(stdv)
-        else
-            sigma=-noiseRatio
-        end
-        noise = randn(dims) * sigma
-    elseif noise_dist == 1 # uniform noise
-        if noiseRatio > 0
-            sigma = (3*noiseRatio^2*stdv)^(1/2)
-        else
-            sigma=-noiseRatio
-        end
-        noise = sigma*(2*rand(dims)-1)
-    end
+    # if noise_dist == 0 # white noise
+    σ = noiseRatio*sqrt(stdv)
+    dist = DT(0, σ)
+    noise = rand(dist,size(U_exact))
+    # elseif noise_dist« == 1 # uniform noise
+    #     if noiseRatio > 0
+    #         σ = (3*noiseRatio^2*stdv)^(1/2)
+    #     else
+    #         σ=-noiseRatio
+    #     end
+    #     noise = σ*(2*rand(dims)-1)
+    # end
     if noise_alg == 0 # additive
         U = U_exact + noise
     elseif noise_alg == 1 # multiplicative
@@ -29,7 +27,7 @@ function generateNoise(U_exact::AbstractMatrix{<:Real}, noiseRatio::Real, noise_
     end
     noise_ratio_obs = norm(U[:]-U_exact[:])/norm(U_exact[:])
 
-    return U,noise,noise_ratio_obs,sigma
+    return U,noise,noise_ratio_obs,σ
 end
 ## estimate the standard deviation of noise by filtering then computing rmse
 function estimate_std(uobs::AbstractMatrix{<:Real}; k::Int=6)

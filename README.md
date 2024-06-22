@@ -58,7 +58,7 @@ The cost function can be minimized in others ways. For instance a local optimiza
 Deriving the gradient of the $f$ we see 
 $$\begin{align*}
 \nabla_w f &= 2G^TS_w^{-1}(Gw-b) + (Gw-b)^T(\nabla_w S_w^{-1})(Gw-b)  \\
-\nabla_w S_w^{-1} &= S_w^{-1}\times_3(L_0 \times_1 L_1^T + L_1 \times_3 L_0^T)\times_4S_w^{-1}
+\nabla_w S_w^{-1} &= S_w^{-1}\times_3(L_w \times_1 \nabla_W L_w^T + \nabla_w L_w \times_3 L_w^T)\times_4S_w^{-1}
 \end{align*}$$
 ##### Results
 I implemented a large sweep comparing using this local optimization solver compared to IRWLS over all of the examples in the WENDy paper. 
@@ -178,15 +178,16 @@ Two obvious options:
 - Randomly pick in a desired domain or prior distribution? I think it is reasonable to allow the use of prior knoledge or constraints on the parameter values.
 ## Test Problems
 ### FitzHugh–Nagumo Equations
+Found in this [[Ramsay et al. - 2007 - Parameter Estimation for Differential Equations a.pdf#page=17|paper]]
 $$
 \begin{align*} 
 		\dot{V} &= c\left(V-\frac{V^3}{3}+R\right),  \\
 		\dot{R} &= -\frac{1}{c}(V-a+b R) 
 	\end{align*}
 $$
-As mentions this can be solved with linear in parameters with an equality constraint $w = (a,b,c,d), d = 1/c$, so perhaps not a necessary problem 
+As mentioned, this can be solved with linear in parameters with an equality constraint $w = (a,b,c,d), d = 1/c$, so perhaps not a necessary problem 
 ## From Other Literature
-Here is a thesis from a more recent work on the development of the Forward Solve Non-linear Least Squares [Calver Thesis Ch2.6](https://tspace.library.utoronto.ca/bitstream/1807/95761/3/Calver_Jonathan_J_201906_PhD_thesis.pdf#page=43). This chapter covers possible examples. A common theme is that they look for **time lags** which I don't know if our frame work would allow, but here are a couple relevent equations:
+Here is a thesis from a more recent work on the development of the Forward Solve Non-linear Least Squares [Calver Thesis Ch2.6](https://tspace.library.utoronto.ca/bitstream/1807/95761/3/Calver_Jonathan_J_201906_PhD_thesis.pdf#page=43). This chapter covers possible examples. A common theme is that they look for **time lags** which I don't know if our frame work would allow, but here are a couple relevant equations:
 ### Goodwin Example - *Loop model* 
 $$
 \begin{aligned} 
@@ -200,6 +201,15 @@ $$
 y_1^{\prime}(t) & =\frac{k_1}{1+\left(\frac{P}{q_1}\right)^{q_2}+\left(\frac{q_3}{S}\right)^{q_4}}-k_2 y_1 \\
  y_2^{\prime}(t) & =\frac{k_3}{1+\left(\frac{P}{q_5}\right)^{q_6}+\left(\frac{q_7}{y_7}\right)^{q_8}}-k_4 y_2 \\ y_3^{\prime}(t) & =\frac{k_5}{1+\left(\frac{P}{q_9}\right)^{q_{10}}+\left(\frac{q_{11}}{y_8}\right)^{q_{12}}}-k_6 y_3 \\ y_4^{\prime}(t) & =\frac{k_7 y_1}{y_1+q_{13}}-k_8 y_4 \\ y_5^{\prime}(t) & =\frac{k_9 y_2}{y_2+q_{14}}-k_{10} y_5 \\ y_6^{\prime}(t) & =\frac{k_{11} y_3}{y_3+q_{15}}-k_{12} y_6 \\ y_7^{\prime}(t) & =\frac{k_{13} y_4\left(\frac{1}{q_{16}}\right)\left(S-y_7\right)}{1+\left(\frac{S}{q_{16}}\right)+\left(\frac{y_7}{q_{17}}\right)}-\frac{k_{14} y_5\left(\frac{1}{q_{18}}\right)\left(y_7-y_8\right)}{1+\left(\frac{y_7}{q_{18}}\right)+\left(\frac{y_8}{q_{19}}\right)} \\ y_8^{\prime}(t) & =\frac{k_{14} y_5\left(\frac{1}{q_{18}}\right)\left(y_7-y_8\right)}{1+\left(\frac{y_7}{q_{18}}\right)+\left(\frac{y_8}{q_{19}}\right)}-\frac{k_{15} y_6\left(\frac{1}{q_{20}}\right)\left(y_8-P\right)}{1+\left(\frac{y_8}{q_{20}}\right)+\left(\frac{P}{q_{21}}\right)} \end{aligned}
 $$
+#### Reformulated
+$$\begin{aligned} 
+	y_1^{\prime}(t) &= \frac{k_1}{1+ \tilde{q}_1 P^{q_2}+\tilde{q}_3S^{q_4}}-k_2 y_1 \\
+	y_2^{\prime}(t) &= \frac{k_3}{1+ \tilde{q}_5P^{q_6}  + \tilde{q}_7{y_7}^{q_8}}-k_4 y_2 \\ 
+	y_3^{\prime}(t) &= \frac{k_5}{1+ \tilde{q}_9 P^{q_{10}} + \tilde{q}_{11}{y_8}^{q_{12}}}-k_6 y_3 \\ 
+	y_4^{\prime}(t) &= \frac{k_7 y_1}{y_1+q_{13}}-k_8 y_4 \\ 
+	y_5^{\prime}(t) &= \frac{k_9 y_2}{y_2+q_{14}}-k_{10} y_5 \\ 
+	y_6^{\prime}(t) &= \frac{k_{11} y_3}{y_3+q_{15}}-k_{12} y_6 \\ 
+	y_7^{\prime}(t) &= \frac{k_{13} y_4\left(\frac{1}{q_{16}}\right)\left(S-y_7\right)}{1+\left(\frac{S}{q_{16}}\right)+\left(\frac{y_7}{q_{17}}\right)}-\frac{k_{14} y_5\left(\frac{1}{q_{18}}\right)\left(y_7-y_8\right)}{1+\left(\frac{y_7}{q_{18}}\right)+\left(\frac{y_8}{q_{19}}\right)} \\ y_8^{\prime}(t) & =\frac{k_{14} y_5\left(\frac{1}{q_{18}}\right)\left(y_7-y_8\right)}{1+\left(\frac{y_7}{q_{18}}\right)+\left(\frac{y_8}{q_{19}}\right)}-\frac{k_{15} y_6\left(\frac{1}{q_{20}}\right)\left(y_8-P\right)}{1+\left(\frac{y_8}{q_{20}}\right)+\left(\frac{P}{q_{21}}\right)} \end{aligned}$$
 ### Michaelis-Menten Equation 
 ```ad-warning
 title: Not Immediately Relevant 
@@ -240,3 +250,9 @@ title: Outstanding Questions
 ```
 
 
+## See for MLE
+QUASI-MAXIMUM LIKELIHOOD ESTIMATION AND INFERENCE IN DYNAMIC MODELS WITH TIME-VARYING COVARIANCES
+
+see lemma A.2
+
+[https://en.wikipedia.org/wiki/Mackey%E2%80%93Glass_equations](https://en.wikipedia.org/wiki/Mackey%E2%80%93Glass_equations "https://en.wikipedia.org/wiki/Mackey%E2%80%93Glass_equations")
