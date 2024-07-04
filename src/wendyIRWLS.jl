@@ -1,7 +1,3 @@
-@info " Loading wendyProblems"
-include("wendyProblems.jl")
-@info " Loading wendyEquations"
-include("wendyEquations.jl")
 # external dependencies
 using Optimization, OptimizationNLopt
 using NonlinearSolve
@@ -16,8 +12,8 @@ function Linear_IRWLS_Iter(prob::AbstractWENDyProblem, params::WENDyParameters;l
     J = prob.J
     K = prob.K 
     G0 = ∇res(Matrix{Float64}(I,K*D,K*D),prob.U,prob.V,prob.jacwf!,zeros(J);ll=ll)
-    RT(w::AbstractVector{<:AbstractFloat}) = RTfun(prob.U,prob.V,prob.Vp,prob.sig,params.diagReg,prob.jacuf!, w)
-    Linear_IRWLS_Iter(prob.b0, G0, RT)
+    _RT = RTFun(prob, params)
+    Linear_IRWLS_Iter(prob.b0, G0, w->_RT(w))
 end
 function (m::Linear_IRWLS_Iter)(wnm1::AbstractVector{<:AbstractFloat};ll::Logging.LogLevel=Logging.Warn)
     with_logger(ConsoleLogger(stderr,ll)) do 
@@ -32,75 +28,28 @@ function (m::Linear_IRWLS_Iter)(wnm1::AbstractVector{<:AbstractFloat};ll::Loggin
         return wn
     end
 end
-## Using Optimization/OptimizationNLopt to solve the NLS prob
-struct NLopt_iter <: IRWLS_Iter
-    b0::AbstractVector
-    RT::Function 
-    f::Function
-    ∇f!::Function
-end 
-function NLopt_iter(prob::AbstractWENDyProblem, params::WENDyParameters;ll::Logging.LogLevel=Logging.Warn)
-    RT(w::AbstractVector{<:AbstractFloat}) = RTfun(prob.U,prob.V,prob.Vp,prob.sig,params.diagReg,prob.jacuf!,w;ll=ll)
-    objective(RT::AbstractMatrix,b::AbstractVector, w::AbstractVector; ll::Logging.LogLevel=Logging.Warn) = _weighted_l2_error(RT, prob.U,prob.V,b,prob.f!,w;ll=ll)
-    gradient_objective!(gradient::AbstractVector, RT::AbstractMatrix,b::AbstractVector, w::AbstractVector; ll::Logging.LogLevel=Logging.Warn) = _gradient_weighted_l2_error!(gradient,RT,prob.U,prob.V,b, prob.f!, prob.jacwf!,w;ll=ll)
-
-    NLopt_iter(prob.b0, RT, objective, gradient_objective!)
-end
-function (m::NLopt_iter)(wnm1::AbstractVector{<:AbstractFloat};ll::Logging.LogLevel=Logging.Warn)
-    with_logger(ConsoleLogger(stderr,ll)) do 
-        @info "  Running local optimization method"
-        RT = m.RT(wnm1)
-        b = RT \ m.b0 
-        fn(w::AbstractVector, ::Any; ll::Logging.LogLevel=Logging.Warn)= m.f(RT,b,w;ll=ll) 
-        ∇fn!(∇f::AbstractVector, w::AbstractVector, ::Any; ll::Logging.LogLevel=Logging.Warn) = m.∇f!(∇f,RT,b,w;ll=ll)
-                
-        optFun = OptimizationFunction(fn; grad=∇fn!)
-        problem = OptimizationProblem(optFun, wnm1; xtol_rel=1e-8, xtol_abs=1e-8)
-        # try 
-            a = @allocations sol = solve(problem,  Opt(:LD_LBFGS, J))
-        # catch err
-        #     return err
-        # end
-        @info """ 
-            iteration time  = $(sol.stats.time)
-            allocations     = $a
-            iterations      = $(sol.stats.iterations)
-            ret code        = $(sol.retcode)
-            objective_value = $(sol.objective)
-        """
-    return sol.u
-    end
-end
 ## using NonlinearSolve to solve the NLS problem
+# struct
 struct NLS_iter <: IRWLS_Iter
     b0::AbstractVector
-    RT::Function 
-    res!::Function
-    jac!::Function
+    _RT::RTFun 
+    _res!::ResFun
+    _jac!::∇resFun
+    reltol::AbstractFloat
+    maxiters::Int
 end 
-function NLS_iter(prob::AbstractWENDyProblem, params::WENDyParameters;ll::Logging.LogLevel=Logging.Warn)
-    RT(w::AbstractVector{<:AbstractFloat}) = RTfun(prob.U,prob.V,prob.Vp,prob.sig,params.diagReg,prob.jacuf!,w;ll=ll)
-    res!(
-        r::AbstractVector, 
-        RT::AbstractMatrix,
-        b::AbstractVector, 
-        w::AbstractVector; 
-        ll::Logging.LogLevel=Logging.Warn
-    ) = _res!(r, RT, prob.U, prob.V, b, prob.f!, w; ll=ll)
-    jac!(
-        ∇res::AbstractMatrix, 
-        RT::AbstractMatrix,
-        w::AbstractVector; 
-        ll::Logging.LogLevel=Logging.Warn
-    ) = _∇res!(∇res, RT, prob.U, prob.V, prob.jacwf!, w; ll=ll)
-
-    NLS_iter(prob.b0, RT, res!, jac!)
+# constructor
+function NLS_iter(prob::AbstractWENDyProblem, params::WENDyParameters; reltol::AbstractFloat=1e-8,maxiters::Int=10)
+    _RT = RTFun(prob, params)
+    _res = ResFun(prob, params)
+    _jac = ∇resFun(prob, params)
+    NLS_iter(prob.b0, _RT, _res, _jac, reltol, maxiters)
 end
-
+# method
 function (m::NLS_iter)(wnm1::AbstractVector{<:AbstractFloat};ll::Logging.LogLevel=Logging.Warn, _ll::Logging.LogLevel=Logging.Warn)
     with_logger(ConsoleLogger(stderr,ll)) do 
         @info "  Running local optimization method"
-        RT = m.RT(wnm1)
+        RT = m._RT(wnm1)
         b = RT \ m.b0 
         KD = length(b)
 
@@ -109,23 +58,29 @@ function (m::NLS_iter)(wnm1::AbstractVector{<:AbstractFloat};ll::Logging.LogLeve
             w::AbstractVector, 
             ::Any; 
             ll::Logging.LogLevel=_ll
-        )= m.res!(r, RT, b, w; ll=ll) 
+        ) = m._res!(r, RT, b, w; ll=ll) 
+
         jacn!(
             jac::AbstractMatrix, 
             w::AbstractVector, 
             ::Any; 
             ll::Logging.LogLevel=_ll
-        ) = m.jac!(jac, RT, w; ll=ll)
+        ) = m._jac!(jac, RT, w; ll=ll)
                 
         prob = NonlinearLeastSquaresProblem(
-            NonlinearFunction(resn!; jac=jacn!, resid_prototype=zeros(KD)),
+            NonlinearFunction(
+                resn!; 
+                jac=jacn!, 
+                resid_prototype=zeros(KD)
+            ),
             wnm1
         )
-        # try 
-        dt = @elapsed a = @allocations sol = solve(prob)
-        # catch err
-        #     return err
-        # end
+        dt = @elapsed a = @allocations sol = solve(
+            prob,
+            LevenbergMarquardt();
+            reltol=m.reltol,
+            maxiters=m.maxiters
+        )
         wn = sol.u
         res = zeros(KD)
         resn!(res, wn, nothing)
@@ -138,7 +93,7 @@ function (m::NLS_iter)(wnm1::AbstractVector{<:AbstractFloat};ll::Logging.LogLeve
             ret code        = $(sol.retcode)
             objective_value = $(fHat)
         """
-    return wn
+        return wn
     end
 end
 

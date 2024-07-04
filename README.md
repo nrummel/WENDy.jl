@@ -256,3 +256,19 @@ QUASI-MAXIMUM LIKELIHOOD ESTIMATION AND INFERENCE IN DYNAMIC MODELS WITH TIME-VA
 see lemma A.2
 
 [https://en.wikipedia.org/wiki/Mackey%E2%80%93Glass_equations](https://en.wikipedia.org/wiki/Mackey%E2%80%93Glass_equations "https://en.wikipedia.org/wiki/Mackey%E2%80%93Glass_equations")
+[SFN.jl]([https://github.com/RS-Coop/SFN.jl](https://github.com/RS-Coop/SFN.jl "https://github.com/RS-Coop/SFN.jl")) - [reading](https://arxiv.org/abs/2112.02089) 
+[scalable adaptive cubic regularization]([https://arxiv.org/abs/2103.16659](https://arxiv.org/abs/2103.16659 "https://arxiv.org/abs/2103.16659"))
+krylov.jl for fast shifted lanczos cg
+ARC.jl - cubic newton method
+qtest - benchmark for non-convex problems 
+FastDifferentiation.jl
+##### Autodiff 
+[[deep learning goodfellow.pdf|Deep Learning Book]] - Ian Goodfellow et all
+[SciML book](https://book.sciml.ai/notes/08-Forward-Mode_Automatic_Differentiation_(AD)_via_High_Dimensional_Algebras/) - Chris Rackauckas 
+
+
+import Base: exp
+
+exp(f::Dual) = Dual(exp(f.val), exp(f.val) * f.der)
+
+exp (generic function with 35 methods)
