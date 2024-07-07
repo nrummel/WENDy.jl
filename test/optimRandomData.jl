@@ -22,7 +22,7 @@ sig = rand(D)
 V = Matrix(qr(rand(M,K)).Q')[1:K,:]
 Vp = Matrix(qr(rand(M,K)).Q')[1:K,:];
 # Build lhs of ODE
-b0 = reshape(Vp * U', K*D)
+b₀ = reshape(Vp * U', K*D)
 nothing
 ## Define necessary functions 
 @info "Building functions..."
@@ -161,7 +161,7 @@ f(w::AbstractVector{W}; ll::Logging.LogLevel=Logging.Warn) where W = f(RT,U,V,b,
 @info "Test Allocations with with Float64"
 w_rand = rand(J)
 RT = RTfun(U,V,Vp,sig,diagReg,jacuf!,w_rand)
-b = RT \ b0 
+b = RT \ b₀ 
 # because this problem is linear in w the jacobian is constant, 
 # and we could solve this problem with backslash because 
 # it is really a linear least squares problem
@@ -196,20 +196,20 @@ relerr = abs(f(w_star)- f_hat) / f(w_star)
 @info "Relative coeff error = $relerr"
 ## Compute the non lin least square solution 
 @info "Defining IRWLS_Nonlinear..."
-function IRWLS_Nonlinear(U, V, Vp, b0, sig, diagReg, J, f!, jacuf!, jacwf!; ll=Logging.Info,maxIt=100, relTol=1e-10)
+function IRWLS_Nonlinear(U, V, Vp, b₀, sig, diagReg, J, f!, jacuf!, jacwf!; ll=Logging.Info,maxIt=100, relTol=1e-10)
     with_logger(ConsoleLogger(stderr,ll)) do 
         @info "Initializing the linearization least squares solution  ..."
         D, M = size(U)
         K, _ = size(V)
         G0 = ∇res(Matrix{Float64}(I, K*D,K*D), U, V, jacwf!, zeros(J))
-        w0 = G0 \ b0 
+        w0 = G0 \ b₀ 
         wit = zeros(J,maxIt)
         resit = zeros(J,maxIt)
         wnm1 = w0 
         wn = similar(w0)
         for n = 1:maxIt 
             RT = RTfun(U,V,Vp,sig,diagReg,jacuf!,wnm1)
-            b = RT \ b0 
+            b = RT \ b₀ 
             G = ∇res(RT,U,V,jacwf!,zeros(J))
             w_star = G \ b 
             fn(w::AbstractVector{W}; ll::Logging.LogLevel=Logging.Warn) where W = f(RT,U,V,b,f!,w;ll=ll)
@@ -244,5 +244,5 @@ end
 ##
 @info "IRWLS (Nonlinear): "
 @info "   Runtime info: "
-@time what, wit, resit = IRWLS_Nonlinear(U, V, Vp, b0, sig, diagReg, J, f!, jacuf!, jacwf!; ll=Logging.Warn)
+@time what, wit, resit = IRWLS_Nonlinear(U, V, Vp, b₀, sig, diagReg, J, f!, jacuf!, jacwf!; ll=Logging.Warn)
 @info "   iterations    = $(size(wit,2)-1)"

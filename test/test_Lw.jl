@@ -102,7 +102,7 @@ Ltime_matlab = data["Ltime"];
 KD,MD,J = size(L1_matlab)
 K,M = size(V)
 D = Int(KD/K)
-_, _jacuF! = getJacobian(mdl);
+_, _jacuF! = getJacu(mdl);
 nothing
 ##
 sig = estimate_std(u)

@@ -30,7 +30,7 @@ KD,MD,J = size(L1_matlab)
 K,M = size(V)
 D = Int(KD/K)
 _, _F!         = getRHS(mdl)
-_, _jacuF! = getJacobian(mdl)
+_, _jacuF! = getJacu(mdl)
 sig = estimate_std(u);
 
 ##

@@ -32,8 +32,8 @@ pruneMeth           = SingularValuePruningMethod(
 );
 wTrue = Float64[ModelingToolkit.getdefault(p) for p in parameters(mdl)]
 _, _F!         = getRHS(mdl)
-_, _jacuF! = getJacobian(mdl);
-_, _jacwF! = getParameterJacobian(mdl);
+_, _jacuF! = getJacu(mdl);
+_, _jacwF! = getJacw(mdl);
 Random.seed!(seed)
 data = BSON.load(exampleFile) 
 tt = data[:t] 
@@ -56,15 +56,15 @@ B = zeros(K,D)
 G0 = zeros(K*D, J)
 _G0!(G0, uobs, V, _F!)
 B!(B, Vp, uobs)
-b0 = reshape(B, K*D);
+b₀ = reshape(B, K*D);
 ##
 jac = JacGgetter(uobs,V,_jacwF!)
 jacG = jac(zeros(J))
 @assert norm(reshape(jacG,K*D,J) - G0) / norm(G0) < 1e2*eps()
 ##
 G = GFun(uobs,V,_F!)
-res = G(wTrue) - b0
-@assert norm(res - (G0*wTrue -b0)) / norm(res) < 1e2*eps()
+res = G(wTrue) - b₀
+@assert norm(res - (G0*wTrue -b₀)) / norm(res) < 1e2*eps()
 ##
 diagReg = 1e-10
 Lgetter = LNonlinear(uobs,V,Vp,sig,_jacuF!);

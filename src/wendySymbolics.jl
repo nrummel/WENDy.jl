@@ -13,42 +13,61 @@ function getRHS(mdl::ODESystem)
     return _rhs,_rhs! 
 end
 
-function _getParameterJacobian_sym(mdl::ODESystem)
+function _getJacw_sym(mdl::ODESystem)
     w = parameters(mdl)
     rhs_sym = _getRHS_sym(mdl)
     return jacobian(rhs_sym, w)
 end
 
-function getParameterJacobian(mdl::ODESystem)
+function getJacw(mdl::ODESystem)
     w = parameters(mdl)
     u = unknowns(mdl)
-    jac_sym = _getParameterJacobian_sym(mdl)
+    jac_sym = _getJacw_sym(mdl)
     jac,jac! = build_function(jac_sym, w,u; expression=false)
     
     return jac, jac!
 end
 
-function _getJacobian_sym(mdl::ODESystem)
+function _getJacu_sym(mdl::ODESystem)
     u = unknowns(mdl)
     rhs_sym = _getRHS_sym(mdl)
     return jacobian(rhs_sym, u)
 end
 
-function getJacobian(mdl::ODESystem)
+function getJacu(mdl::ODESystem)
     w = parameters(mdl)
     u = unknowns(mdl)
-    jac_sym = _getJacobian_sym(mdl)
+    jac_sym = _getJacu_sym(mdl)
     jac,jac! = build_function(jac_sym, w,u; expression=false)
     return jac, jac!
 end
 
-function getDoubleJacobian(mdl::ODESystem)
+function getJacwJacu(mdl::ODESystem)
     w = parameters(mdl)
     u = unknowns(mdl)
-    jacu_sym = _getJacobian_sym(mdl)
-    jacuw_sym = jacobian(jacu_sym, w)
-    jac, jac! = build_function(jacuw_sym, w,u; expression=false)
+    jacu_sym = _getJacu_sym(mdl)
+    jacwjacu_sym = jacobian(jacu_sym, w)
+    jac, jac! = build_function(jacwjacu_sym, w,u; expression=false)
     return jac, jac!
+end
+
+function getHeswJacu(mdl::ODESystem)
+    w = parameters(mdl)
+    u = unknowns(mdl)
+    jacu_sym = _getJacu_sym(mdl)
+    jacwjacu_sym = jacobian(jacu_sym, w)
+    heswjacu_sym = jacobian(jacwjacu_sym, w)
+    hes, hes! = build_function(heswjacu_sym, w,u; expression=false)
+    return hes, hes!
+end
+
+function getHesw(mdl::ODESystem)
+    w = parameters(mdl)
+    u = unknowns(mdl)
+    jacw_sym = _getJacw_sym(mdl)
+    hesw_sym = jacobian(jacw_sym, w)
+    hes, hes! = build_function(hesw_sym, w,u; expression=false)
+    return hes, hes!
 end
 
 ## Maybe put size checks in these functions? 

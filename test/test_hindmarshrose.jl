@@ -28,7 +28,7 @@ pruneMeth           = SingularValuePruningMethod(
     UniformDiscritizationMethod()
 );
 _, _F!         = getRHS(mdl)
-_, _jacuF! = getJacobian(mdl);
+_, _jacuF! = getJacu(mdl);
 ##
 Random.seed!(seed)
 data = BSON.load(exampleFile) 

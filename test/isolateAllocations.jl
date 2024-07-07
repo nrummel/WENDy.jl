@@ -21,7 +21,7 @@ sig = rand(D)
 V = Matrix(qr(rand(M,K)).Q')[1:K,:]
 Vp = Matrix(qr(rand(M,K)).Q')[1:K,:];
 # Build lhs of ODE
-b0 = reshape(Vp * U', K*D)
+b₀ = reshape(Vp * U', K*D)
 nothing
 ## Define necessary functions 
 @info "Building functions..."
@@ -185,7 +185,7 @@ end
 @info "Test Allocations with with Float64"
 w_rand = rand(J)
 RT = RTfun(U,V,Vp,sig,diagReg,jacuf!,w_rand)
-b = RT \ b0 
+b = RT \ b₀ 
 # because this problem is linear in w the jacobian is constant, 
 # and we could solve this problem with backslash because 
 # it is really a linear least squares problem
@@ -245,20 +245,20 @@ relerr = abserr / obj_star
 @info "Relative coeff error = $relerr"
 # ## Compute the non lin least square solution 
 # @info "Defining IRWLS_Nonlinear..."
-# function IRWLS_Nonlinear(U, V, Vp, b0, sig, diagReg, J, f!, jacuf!, jacwf!; ll=Logging.Info,maxIt=100, relTol=1e-4)
+# function IRWLS_Nonlinear(U, V, Vp, b₀, sig, diagReg, J, f!, jacuf!, jacwf!; ll=Logging.Info,maxIt=100, relTol=1e-4)
 #     with_logger(ConsoleLogger(stderr,ll)) do 
 #         @info "Initializing the linearization least squares solution  ..."
 #         D, M = size(U)
 #         K, _ = size(V)
 #         G0 = _∇res(Matrix{Float64}(I, K*D,K*D), U, V, jacwf!,, zeros(J))
-#         w0 = G0 \ b0 
+#         w0 = G0 \ b₀ 
 #         wit = zeros(J,maxIt)
 #         resit = zeros(J,maxIt)
 #         wnm1 = w0 
 #         wn = similar(w0)
 #         for n = 1:maxIt 
 #             RT = RTfun(U,V,Vp,sig,diagReg,jacuf!,wnm1)
-#             b = RT \ b0 
+#             b = RT \ b₀ 
 #             ll = (n == 1) ? Logging.Info : Logging.Warn 
 #             res_AffExpr(w::AbstractVector) = _res(RT,U,V,b,f!,Val(AffExpr), w; ll=ll)
 #             ∇res_AffExpr(w::AbstractVector) = _∇res(RT,U,V,jacwf!,Val(AffExpr),w;showFlag=true)
@@ -303,5 +303,5 @@ relerr = abserr / obj_star
 # ##
 # @info "IRWLS (Nonlinear): "
 # @info "   Runtime info: "
-# @time what, wit, resit = IRWLS_Nonlinear(U, V, Vp, b0, sig, diagReg, J, f!, jacuf!, jacwf!; ll=Logging.Warn)
+# @time what, wit, resit = IRWLS_Nonlinear(U, V, Vp, b₀, sig, diagReg, J, f!, jacuf!, jacwf!; ll=Logging.Warn)
 # @info "   iterations    = $(size(wit,2)-1)"

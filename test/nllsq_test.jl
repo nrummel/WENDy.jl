@@ -186,7 +186,7 @@ norm(xstar - value.(x)) /norm(xstar)
 
 ##
 w0 = wTrue 
-wstar = G0 \ b0
+wstar = G0 \ b₀
 
 
 function res!(r::Vector{T}, G::Matrix{T}, b::Vector{T}, x::Vector{W}) where {T,W}
@@ -206,8 +206,8 @@ function (s::MyRes)(x::Vector{W}) where W
     res!(s.r,s.G0,s.b,x)
     return s.r
 end
-res = MyRes(G0,b0)
-G(x) = G0*x-b0
+res = MyRes(G0,b₀)
+G(x) = G0*x-b₀
 gradres(x) = G0
 ##
 mdl = Model(Ipopt.Optimizer)

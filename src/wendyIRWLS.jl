@@ -3,7 +3,7 @@ using Optimization, OptimizationNLopt
 using NonlinearSolve
 abstract type IRWLS_Iter end 
 struct Linear_IRWLS_Iter <: IRWLS_Iter
-    b0::AbstractVector{<:AbstractFloat}
+    b₀::AbstractVector{<:AbstractFloat}
     G0::AbstractMatrix{<:AbstractFloat}
     RT::Function 
 end 
@@ -11,15 +11,19 @@ function Linear_IRWLS_Iter(prob::AbstractWENDyProblem, params::WENDyParameters;l
     D = prob.D
     J = prob.J
     K = prob.K 
-    G0 = ∇res(Matrix{Float64}(I,K*D,K*D),prob.U,prob.V,prob.jacwf!,zeros(J);ll=ll)
-    _RT = RTFun(prob, params)
-    Linear_IRWLS_Iter(prob.b0, G0, w->_RT(w))
+    G0 = zeros(K*D, J)
+    _∇r = ∇rw(prob, params)
+    _∇r(G0,zeros(J))
+    _RT = Rw(prob, params)
+    Linear_IRWLS_Iter(prob.b₀, G0, (Rᵀ,w)->_RT(Rᵀ,w))
 end
 function (m::Linear_IRWLS_Iter)(wnm1::AbstractVector{<:AbstractFloat};ll::Logging.LogLevel=Logging.Warn)
     with_logger(ConsoleLogger(stderr,ll)) do 
-        RT = m.RT(wnm1)
-        dt = @elapsed a = @allocations wn = (RT \ m.G0) \ (RT \ m.b0)
-        fHat = 1/2 * norm(RT \ (m.G0*wn - m.b0))^2
+        KD = length(m.b₀)
+        Rᵀ = zeros(KD,KD)
+        m.RT(Rᵀ, wnm1)
+        dt = @elapsed a = @allocations wn = (Rᵀ \ m.G0) \ (Rᵀ \ m.b₀)
+        fHat = 1/2 * norm(Rᵀ \ (m.G0*wn - m.b₀))^2
         @info """ 
             iteration time  = $dt
             allocations     = $a
@@ -31,26 +35,26 @@ end
 ## using NonlinearSolve to solve the NLS problem
 # struct
 struct NLS_iter <: IRWLS_Iter
-    b0::AbstractVector
-    _RT::RTFun 
-    _res!::ResFun
-    _jac!::∇resFun
+    b₀::AbstractVector
+    _RT::Rw 
+    _res!::rw
+    _jac!::∇rw
     reltol::AbstractFloat
     maxiters::Int
 end 
 # constructor
 function NLS_iter(prob::AbstractWENDyProblem, params::WENDyParameters; reltol::AbstractFloat=1e-8,maxiters::Int=10)
-    _RT = RTFun(prob, params)
-    _res = ResFun(prob, params)
-    _jac = ∇resFun(prob, params)
-    NLS_iter(prob.b0, _RT, _res, _jac, reltol, maxiters)
+    _RT = Rw(prob, params)
+    _res = rw(prob, params)
+    _jac = ∇rw(prob, params)
+    NLS_iter(prob.b₀, _RT, _res, _jac, reltol, maxiters)
 end
 # method
 function (m::NLS_iter)(wnm1::AbstractVector{<:AbstractFloat};ll::Logging.LogLevel=Logging.Warn, _ll::Logging.LogLevel=Logging.Warn)
     with_logger(ConsoleLogger(stderr,ll)) do 
         @info "  Running local optimization method"
         RT = m._RT(wnm1)
-        b = RT \ m.b0 
+        b = RT \ m.b₀ 
         KD = length(b)
 
         resn!(

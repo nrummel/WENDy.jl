@@ -7,10 +7,12 @@ includet("../src/wendySymbolics.jl")
 includet("../src/wendyProblems.jl")
 @info " Loading wendy equations..."
 includet("../src/wendyEquations.jl")
+@info " Loading wendy methods..."
+includet("../src/wendyMethods.jl")
 @info " Loading IRWLS..."
 includet("../src/wendyIRWLS.jl")
 @info " Loading other dependencies"
-using BenchmarkTools, OptimizationOptimJL, Plots, ForwardDiff
+using BenchmarkTools, OptimizationOptimJL, Plots, ForwardDiff, FiniteDiff
 gr()
 includet("../src/wendyCSE.jl")
 nothing 
@@ -21,84 +23,87 @@ ex = HINDMARSH_ROSE
 # ex = LOOP
 # ex = MENDES_EXAMPLES[1]
 params = WENDyParameters(;noiseRatio=0.05)
-wendyProb = _MATLAB_WENDyProblem(ex, params;ll=Logging.Info)
-# wendyProb = WENDyProblem(ex, params; ll=Logging.Info)
+wendyProb = WENDyProblem(ex, params; ll=Logging.Info)
 iter = NLS_iter(wendyProb, params)
-# iterLin = NLopt_iter(wendyProb, params)
 iterLin = Linear_IRWLS_Iter(wendyProb, params)
 wTrue = wendyProb.wTrue
 J = length(wTrue)
-w0 = wendyProb.data["w0"][:]
-# μ = 0.1
-# w0 = wTrue + μ * abs.(wTrue) .* randn(J)
-# w0 = iterLin(zeros(J));
+μ = 1
+w0 = wTrue + μ * abs.(wTrue) .* randn(J)
+K,M,D = wendyProb.K, wendyProb.M, wendyProb.D
+w0 = iterLin(zeros(J));
 nothing
-##
-@info "IRWLS"
-dt = @elapsed a = @allocations what, wit, resit = IRWLS(
-    wendyProb, params, iter, w0; 
-    ll=Logging.Info, 
-    # trueIter=iterLin, 
-    iterll=Logging.Info
-)
-@info """   
-    iterations  = $(size(wit,2)-1)
-    time        = $(dt)
-    allocations = $(a)
-"""
-if typeof(what) <:AbstractVector 
-    relErr = norm(wit[:,end] - wTrue) / norm(wTrue)
-    @info "   coeff rel err = $relErr"
-end
-
 ## solve with Maximum Likelihood Estimate
-m(
-    w::AbstractVector{<:Real},
-    ::Any=nothing; 
-    ll::Logging.LogLevel=Logging.Warn
-)::Real = _m(wendyProb.U, wendyProb.V, wendyProb.Vp, wendyProb.b0, wendyProb.sig, params.diagReg, wendyProb.f!, wendyProb.jacuf!, w; ll=ll)
-_∇m! = ∇mFun!(wendyProb.U, wendyProb.V, wendyProb.Vp, wendyProb.b0, wendyProb.sig, params.diagReg, wendyProb.f!, wendyProb.jacuf!, wendyProb.jacwf!, wendyProb.jacwjacuf!, J)
-∇m!(
-    ∇m::AbstractVector{<:AbstractFloat}, 
-    w::AbstractVector{<:AbstractFloat}, 
-    ::Any=nothing;
-    ll::Logging.LogLevel=Logging.Warn
-) = _∇m!(∇m, w; ll=ll)
-_∇m!_dual = ∇mFun!(wendyProb.U, wendyProb.V, wendyProb.Vp, wendyProb.b0, wendyProb.sig, params.diagReg, wendyProb.f!, wendyProb.jacuf!, wendyProb.jacwf!, wendyProb.jacwjacuf!, J, Val(ForwardDiff.Dual{ForwardDiff.Tag{Function, Float64}, Float64, 10}))
-∇m!(
-    ∇m::AbstractVector{T1}, 
-    w::AbstractVector{T2}, 
-    ::Any=nothing;
-    ll::Logging.LogLevel=Logging.Warn
-) where {T1<:ForwardDiff.Dual, T2<:ForwardDiff.Dual}= _∇m!_dual(∇m, w; ll=ll)
-function grad(w::AbstractVector{T}) where T<:Real
-    ∇m = zeros(T, length(w))
-    ∇m!(∇m, w)
-    return ∇m
-end
-# run once for JIT
-m(w0)
-∇m_test = zeros(J)
-##
-∇m!(∇m_test, w0)
-##
-grad(w0)
+_m_ = mw(wendyProb, params);
+_∇m!_ = ∇mw(wendyProb, params);
+_Hm!_ = Hmw(wendyProb, params);
 ##
 @info "Cost function call "
-@time m(w0)
+@time _m_(w0)
 ## Gradient computation 
-@info "Explict Gradient Computation"
-@time ∇m!(∇m_test, w0); 
-@info "Auto Diff for gradient "
-@time ∇m_auto = ForwardDiff.gradient(m, w0)::Vector{Float64}
-relErr = norm(∇m_test- ∇m_auto) / norm(∇m_test)
+∇m0 = zeros(J)
+@info "  Finite Diff for gradient"
+@time ∇m_fd = FiniteDiff.finite_difference_gradient(_m_, w0)
+@info "  Explict Gradient Computation"
+@time _∇m!_(∇m0, w0); 
+relErr = norm(∇m0 - ∇m_fd) / norm(∇m_fd)
 @info "  relErr = $relErr"
 ## Hessian computation 
-# @info "Hessian from gradient"
-# @time ForwardDiff.jacobian(grad, w0)
-@info "Hessian from obj"
-@time ForwardDiff.hessian(m, w0)
+# @info "Hessian from autodiff"
+# @time H_auto = ForwardDiff.hessian(m, w0)
 ##
+# testHessian 
+H0 = zeros(J,J)
+@info "Explicit Hessian "
+@time _Hm!_(H0, w0)
+@info "Finite Differences Hessian "
+Hfd = zeros(J,J)
+cache = FiniteDiff.HessianCache(w0,Val{:hcentral},Val{true})
+@time FiniteDiff.finite_difference_hessian!(Hfd, _m_, w0, cache)
+@info "Rel Error (finite diff) $(norm(H0 - Hfd) / norm(Hfd))"
+
+##
+f(w,p=nothing) = _m_(w)
+∇m(grad, w,p=nothing) = _∇m!_(grad,w)
+cache = FiniteDiff.HessianCache(w0)
+h(H,w,p=nothing) = FiniteDiff.finite_difference_hessian!(H, _m, w, cache)
+funfd = OptimizationFunction(f; grad=∇m, hess=h)
+probfd = OptimizationProblem(funfd, w0)
+solFd = solve(probfd, NewtonTrustRegion(), show_trace=true)
+@info "Trust Region Solve with Finite Difference Hessian "
+relErr = norm(solFd.u - wTrue) / norm(wTrue)
+@info "  relErr =  $(relErr*100)%"
+@info "  iter   =  $(solFd.stats.iterations)"
+##
+f(w,p=nothing) = _m_(w)
+∇m(grad, w,p=nothing) = _∇m!_(grad,w)
+h(H,w,p=nothing) = _Hm!_(H, w)
+fun = OptimizationFunction(f; grad=∇m, hess=h)
+prob = OptimizationProblem(fun, w0)
+sol = solve(prob, NewtonTrustRegion(),show_trace=true)
+@info "Trust Region Solve with Explicit Hessian "
+relErr = norm(sol.u - wTrue) / norm(wTrue)
+@info "  relErr =  $(relErr*100)%"
+@info "  iter   =  $(sol.stats.iterations)"
+##
+# v0 = w0
+# norm(Hfd * v0 - FiniteDiff.finite_difference_gradient(w->dot(_∇m(w),v0), w0)) / norm(Hfd * v0)
+# ##
+# function fg!(g, w)
+#     _∇m(g, w)
+#     _m(w)
+# end
+# function hv!(Hv, w, v)
+#     FiniteDiff.finite_difference_gradient!(
+#         Hv,
+#         w -> dot(_∇m(w),v),
+#         w
+#     )
+#     nothing
+# end
+# d = Optim.TwiceDifferentiableHV(m, fg!, hv!, zeros(length(w0)))
+# result = Optim.optimize(d, w0, Optim.KrylovTrustRegion())
+## 
 # includet("/Users/user/Documents/School/becker-misc/GradientTests/julia/gradientCheck.jl")
 # function ∇m(
 #     w::AbstractVector{<:Real}, 
@@ -136,30 +141,51 @@ relErr = norm(∇m_test- ∇m_auto) / norm(∇m_test)
 # """
 ##
 # SFN 
-@info "Loading SFN..."
+# @info "Loading SFN..."
 # # using SFN: SFNOptimizer, iterate!, hvp_power, Optimizer,RHvpOperator
 # import SFN.minimize!
 # includet("../../SFN/src/SFN.jl")
-includet("../../SFN/src/optimizers.jl")
-includet("../../SFN/src/stats.jl")
-includet("../../SFN/src/hvp.jl")
-includet("../../SFN/src/solvers.jl")
-includet("../../SFN/src/minimize.jl")
-includet("../../SFN/src/linesearch.jl")
-@info "Extending minimize to only take gradient but not hessian..."
-function minimize!(opt::O, x::S, f::F1, fg!::F2; itmax::I=1000, time_limit::T=Inf) where {O<:Optimizer, T<:AbstractFloat, S<:AbstractVector{T}, F1, F2, I}
-    @info "build the RHv operator"
-    Hv = RHvpOperator(f, x, power=hvp_power(opt.solver))
+# includet("../../SFN/src/optimizers.jl")
+# includet("../../SFN/src/stats.jl")
+# includet("../../SFN/src/hvp.jl")
+# includet("../../SFN/src/solvers.jl")
+# includet("../../SFN/src/minimize.jl")
+# includet("../../SFN/src/linesearch.jl")
+# @info "Extending minimize to only take gradient but not hessian..."
+# function minimize!(opt::O, x::S, f::F1, fg!::F2; itmax::I=1000, time_limit::T=Inf) where {O<:Optimizer, T<:AbstractFloat, S<:AbstractVector{T}, F1, F2, I}
+#     @info "build the RHv operator"
+#     Hv = RHvpOperator(f, x, power=hvp_power(opt.solver))
 
-    #iterate
-    @info "iterate!"
-    stats = iterate!(opt, x, f, fg!, Hv, itmax, time_limit)
+#     #iterate
+#     @info "iterate!"
+#     stats = iterate!(opt, x, f, fg!, Hv, itmax, time_limit)
 
-    return stats
-end
+#     return stats
+# end
+# ##
+# @info "Build optimizer"
+# opt = SFNOptimizer(length(w0))
+# @info "minimize!"
+# minimize!(opt, w0, m, ∇m!; itmax=10)
+
+
+
+
+
 ##
-@info "Build optimizer"
-opt = SFNOptimizer(length(w0))
-@info "minimize!"
-minimize!(opt, w0, m, ∇m!; itmax=10)
-
+# @info "IRWLS"
+# dt = @elapsed a = @allocations what, wit, resit = IRWLS(
+#     wendyProb, params, iter, w0; 
+#     ll=Logging.Info, 
+#     # trueIter=iterLin, 
+#     iterll=Logging.Info
+# )
+# @info """   
+#     iterations  = $(size(wit,2)-1)
+#     time        = $(dt)
+#     allocations = $(a)
+# """
+# if typeof(what) <:AbstractVector 
+#     relErr = norm(wit[:,end] - wTrue) / norm(wTrue)
+#     @info "   coeff rel err = $relErr"
+# end

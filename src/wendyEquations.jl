@@ -1,525 +1,263 @@
 using Tullio, LinearAlgebra, Logging, LoopVectorization
 ## Basic Functions
-## L(w)
-function _L!(L::AbstractMatrix{<:Real}, U::AbstractMatrix{<:Real}, V::AbstractMatrix{<:Real} , Vp::AbstractMatrix{<:Real}, sig::AbstractVector{<:Real}, jacuf!::Function, JuF::AbstractArray{<:Real, 3}, _L0::AbstractArray{<:Real, 4}, _Lbuff0::AbstractArray{<:Real, 4}, _Lbuff1::AbstractArray{<:Real, 4}, w::AbstractVector{<:Real}; ll::Logging.LogLevel=Logging.Warn) 
-    # with_logger(ConsoleLogger(stderr, ll)) do 
-        # @info "++++ Lw Eval ++++"    
-        K,D,M,_ = size(_Lbuff1)
-        # @info " Compute ∇uF "
-        # dt = @elapsed a = @allocations begin  
-            @inbounds for m in 1:M
-                jacuf!(view(JuF,:,:,m), w, view(U,:,m))
-            end
-        # end
-        # @info "  $dt s, $a allocations"
-        # @info " Compute L1 "
-        # dt = @elapsed a = @allocations begin 
-            # @avx for m in 1:M, d1 in 1:D, d2 in 1:D, k in 1:K
-            #     _Lbuff0[k,d2,d1,m] = JuF[d2,d1,m] * V[k,m] * sig[d1]
-            # end # increases runtime by 1e-3 s
-            @tullio _Lbuff0[k,d2,d1,m] = JuF[d2,d1,m] * V[k,m]* sig[d1] # increases allocation from 4 to 45 
-        # end
-        # @info "  $dt s, $a allocations"
-        # @info " add L0 "
-        # dt = @elapsed a = @allocations begin 
-             _Lbuff0 .+= _L0
-        # end
-        # @info "  $dt s, $a allocations"
-        # @info " permutedims Lw "
-        # dt = @elapsed a = @allocations begin 
-             permutedims!(_Lbuff1,_Lbuff0,(1,2,4,3))
-        # end
-        # @info "  $dt s, $a allocations"
-        # @info " Reshape Lw"
-        # dt = @elapsed a = @allocations begin 
-            @views L .= reshape(_Lbuff1,K*D,M*D)
-        # end
-        # @info "  $dt s, $a allocations"
-        nothing
-    # end
+# L₀
+function _L₀!(
+    L₀::AbstractMatrix, # output
+    Vp::AbstractMatrix, sig::AbstractVector, # data
+    __L₀::AbstractArray{<:Real,4}, _L₀::AbstractArray{<:Real,4} # buffers
+)
+    @tullio __L₀[k,d,d,m] = Vp[k,m]*sig[d]
+    permutedims!(_L₀,__L₀,(1,2,4,3))
+    K,D,M,_ = size(_L₀)
+    @views L₀ .= reshape(_L₀,K*D,M*D)
+    nothing 
 end
-# struct
-struct LFun 
-    L::AbstractMatrix{<:Real}
-    U::AbstractMatrix{<:Real} 
-    V::AbstractMatrix{<:Real} 
-    Vp::AbstractMatrix{<:Real}
-    sig::AbstractVector{<:Real}
-    jacuf!::Function
-    JuF::AbstractArray{<:Real, 3}
-    _L0::AbstractArray{<:Real, 4}
-    _Lbuff0::AbstractArray{<:Real, 4}
-    _Lbuff1::AbstractArray{<:Real, 4}
-end 
-# constructor
-function LFun(U::AbstractMatrix{<:Real}, V::AbstractMatrix{<:Real}, Vp::AbstractMatrix{<:Real}, sig::AbstractVector{<:Real}, jacuf!::Function, ::Val{T}=Val(Float64)) where T<:Real
-    D, M = size(U)
-    K, _ = size(V)
-    L = zeros(K*D,M*D)
-    JuF = zeros(T,D,D,M)
-    _L0 = zeros(T,K,D,D,M)
-    _Lbuff0 = zeros(T,K,D,D,M)
-    _Lbuff1  = zeros(T,K,D,M,D)
-    @tullio _L0[k,d,d,m] = Vp[k,m]*sig[d]
-    return LFun(L,U,V,Vp,sig, jacuf!, JuF, _L0, _Lbuff0, _Lbuff1)
+# L(w)
+function _L!(
+    L::AbstractMatrix{<:Real},w::AbstractVector{<:Real}, # output/input
+    U::AbstractMatrix{<:Real}, V::AbstractMatrix{<:Real}, L₀::AbstractMatrix{<:Real}, sig::AbstractVector{<:Real}, # data
+    jacuf!::Function, # functions
+    JuF::AbstractArray{<:Real, 3}, __L₁::AbstractArray{<:Real, 4}, _L₁::AbstractArray{<:Real, 4}; # buffers
+     ll::Logging.LogLevel=Logging.Warn # kwargs
+) 
+    K,D,M,_ = size(_L₁)
+    @inbounds for m in 1:M
+        jacuf!(view(JuF,:,:,m), w, view(U,:,m))
+    end
+    @tullio __L₁[k,d2,d1,m] = JuF[d2,d1,m] * V[k,m]* sig[d1] # increases allocation from 4 to 45 
+    permutedims!(_L₁,__L₁,(1,2,4,3))
+    @views L .= reshape(_L₁,K*D,M*D) + L₀
+    nothing
 end
-function LFun(prob::AbstractWENDyProblem, params::Union{WENDyParameters,Nothing}=nothing, ::Val{T}=Val(Float64)) where T<:Real
-    LFun(prob.U, prob.V, prob.Vp, prob.sig, prob.jacuf!, Val(T))
+# R(w)
+function _R!(
+    R::AbstractMatrix{<:Real}, w::AbstractVector{<:Real}, # output/input
+    L::AbstractMatrix{<:Real}, diagReg::AbstractFloat, # data
+    thisI::AbstractMatrix{<:Real}, Sreg::AbstractMatrix{<:Real}, S::AbstractMatrix{<:Real}; # buffers
+    doChol::Bool=true, ll::Logging.LogLevel=Logging.Warn #kwargs
+) 
+    mul!(S, L, L')
+    @views Sreg .= thisI
+    mul!(Sreg, S, I, (1-diagReg), diagReg)
+    if !doChol 
+        @views R .= Sreg
+        return nothing 
+    end 
+    cholesky!(Symmetric(Sreg))
+    @views R .= UpperTriangular(Sreg)
+    nothing
 end
-# method
-function (m::LFun)(w::AbstractVector{<:Real}; ll::Logging.LogLevel=Logging.Info) 
-    _L!(m.L, m.U, m.V , m.Vp, m.sig, m.jacuf!, m.JuF, m._L0, m._Lbuff0, m._Lbuff1, w; ll) 
-    m.L
+function _R!(
+    R::AbstractMatrix{<:Real}, w::AbstractVector{<:Real}, # output/input
+    U::AbstractMatrix{<:Real}, V::AbstractMatrix{<:Real}, L₀::AbstractMatrix{<:Real}, sig::AbstractVector{<:Real}, diagReg::AbstractFloat, # data
+    jacuf!::Function, # functions
+    JuF::AbstractArray{<:Real, 3}, __L₁::AbstractArray{<:Real, 4}, _L₁::AbstractArray{<:Real, 4},thisI::AbstractMatrix{<:Real}, Sreg::AbstractMatrix{<:Real}, S::AbstractMatrix{<:Real}, L::AbstractMatrix{<:Real};
+    doChol::Bool=true, ll::Logging.LogLevel=Logging.Warn
+)
+    _L!(
+        L,w,
+        U,V,L₀,sig,
+        jacuf!,
+        JuF,__L₁,_L₁;
+        ll=ll
+    )
+    _R!(
+        R,w,
+        L, diagReg,
+        thisI,Sreg,S;
+        doChol=doChol, ll=ll
+    )
+    nothing
 end
-## RT
-function _R!(R::AbstractMatrix, thisI::AbstractMatrix, S::AbstractMatrix, L::AbstractMatrix, diagReg::AbstractFloat; ll::Logging.LogLevel=Logging.Warn)
-    # with_logger(ConsoleLogger(stderr, ll)) do 
-        # @info " Compute Sw "
-        # dt = @elapsed a = @allocations begin
-             mul!(S, L, L')
-        # end
-        # @info "  $dt s, $a allocations"
-        # regularize for possible ill conditioning
-        # @info " Initialize R with I"
-        # dt = @elapsed a = @allocations begin
-             @views R .= thisI
-        # end
-        # @info "  $dt s, $a allocations"
-        # @info " Regularize Sw "
-        # dt = @elapsed a = @allocations begin
-             mul!(R, S, I, (1-diagReg), diagReg)
-        # end
-        # @info "  $dt s, $a allocations"
-        # compute cholesky for lin solv efficiency
-        # @info " Compute cholesky of Sw "
-        # dt = @elapsed a = @allocations begin
-             cholesky!(Symmetric(R))
-        # end
-        # @info "  $dt s, $a allocations"
-        # @info " UpperTriangular wrapper"
-        # dt = @elapsed a = @allocations begin
-             @views R .= UpperTriangular(R)
-        # end
-        # @info "  $dt s, $a allocations"
-        nothing
-    # end
-end
-# struct/method
-struct RTFun
-    S::AbstractMatrix{<:Real}
-    R::AbstractMatrix{<:Real}
-    thisI::AbstractMatrix{<:Real}
-    _L::LFun 
-    diagReg::Real
-end
-# constructors
-function RTFun(U::AbstractMatrix{<:Real}, V::AbstractMatrix{<:Real}, Vp::AbstractMatrix{<:Real}, sig::AbstractVector{<:Real}, jacuf!::Function,diagReg::Real, ::Val{T}=Val(Float64)) where T<:Real
+# G(w)
+function _g!(g::AbstractVector, w::AbstractVector, # output/input
+    U::AbstractMatrix, V::AbstractMatrix, # data
+    f!::Function, # function
+    F::AbstractMatrix{<:Real}, G::AbstractMatrix{<:Real}; # buffers
+    ll::Logging.LogLevel=Logging.Warn #kwargs
+)
+    K, M = size(V)
     D, _ = size(U)
-    K, _ = size(V)
-    S = zeros(K*D, K*D)
-    R = zeros(K*D, K*D)
-    thisI = Matrix{T}(I, K*D, K*D)
-    _L = LFun(U,V,Vp,sig, jacuf!)
-    RTFun(S, R, thisI, _L, diagReg)
-end
-function RTFun(prob::AbstractWENDyProblem, params::WENDyParameters, ::Val{T}=Val(Float64)) where T<:Real
-    RTFun(prob.U, prob.V, prob.Vp, prob.sig, prob.jacuf!, params.diagReg, Val(T))
-end
-# method
-function (m::RTFun)(w::AbstractVector{W};ll::Logging.LogLevel=Logging.Warn, transpose::Bool=true) where W<:Real
-    with_logger(ConsoleLogger(stderr, ll)) do 
-        @info "++++ Res Eval ++++"
-        L = m._L(w;ll=ll) 
-        _R!(m.R, m.thisI, m.S, L, m.diagReg; ll=ll)
-        return transpose ? m.R' : m.R
+    for m in 1:M
+        f!(view(F,:,m), w, view(U,:,m))
     end
-end
-# function without struct declaration
-function RT(U::AbstractMatrix{<:Real}, V::AbstractMatrix{<:Real}, Vp::AbstractMatrix{<:Real}, sig::AbstractVector{<:Real}, jacuf!::Function,diagReg::Real, w::AbstractVector{<:Real}; ll::Logging.LogLevel=Logging.Warn)
-    @warn "This allocates storage, please utilize the RTFun struct/method"
-    _RT = RTFun(U, V, Vp, sig, jacuf!,diagReg)
-    _RT(w,ll=ll)
-end
-## Residual RT(G(w) - b)
-function _res!(r::AbstractVector, RT::AbstractMatrix, U::AbstractMatrix, V::AbstractMatrix, F::AbstractMatrix{<:Real}, G::AbstractMatrix{<:Real}, g::AbstractVector, b::AbstractVector, f!::Function, w::AbstractVector; ll::Logging.LogLevel=Logging.Warn) 
-    # with_logger(ConsoleLogger(stderr, ll)) do 
-    #     @info "++++ Res Eval ++++"
-        K, M = size(V)
-        D, _ = size(U)
-        # @info " Evaluate F "
-        # dt = @elapsed a = @allocations begin 
-            for m in 1:M
-                f!(view(F,:,m), w, view(U,:,m))
-            end
-        # end
-        # @info "  Is Real? $(eltype(F)<:Real), $(eltype(F))"
-        # @info "  $dt s, $a allocations"
-        # @info " Mat Mat mult "
-        # dt = @elapsed a = @allocations begin
-            mul!(G, V, F')
-        # end
-        # @info "  $dt s, $a allocations"
-        # @info " Reshape "
-        # dt = @elapsed a = @allocations begin 
-            @views g .= reshape(G, K*D,1)
-        # end
-        # @info "  Is Real? $(eltype(g)<:Real), $(eltype(g))"
-        # @info "  $dt s, $a allocations"
-        # @info " Linear Solve "
-        # dt = @elapsed a = @allocations begin 
-            ldiv!(r, LowerTriangular(RT), g)
-        # end
-        # @info "  Is Real? $(eltype(res)<:Real), $(eltype(res))"
-        # @info "  $dt s, $a allocations"
-        # @info " Vec Vec add "
-        # dt = @elapsed a = @allocations begin 
-            @views r .-= b
-        # end
-        # @info "  Is Real? $(eltype(res)<:Real), $(eltype(res))"
-        # @info "  $dt s, $a allocations"
-        # @info "++++++++++++++++++"
-        nothing
-    # end
-end
-# struct
-struct ResFun 
-    r::AbstractVector{<:Real}
-    U::AbstractMatrix{<:Real}
-    V::AbstractMatrix{<:Real} 
-    F::AbstractMatrix{<:Real} 
-    G::AbstractMatrix{<:Real} 
-    g::AbstractVector{<:Real} 
-    f!::Function
-end
-# constructors 
-function ResFun(U::AbstractMatrix{<:Real}, V::AbstractMatrix{<:Real}, f!::Function, ::Val{T}=Val(Float64)) where T<:Real
-    D, M = size(U)
-    K, _ = size(V)
-    r = zeros(K*D)
-    F = zeros(T, D, M)
-    G = zeros(T, K, D)
-    g = zeros(T, K*D)
-    ResFun(r,U,V,F,G,g,f!)
-end
-function ResFun(prob::AbstractWENDyProblem, params::Union{WENDyParameters, Nothing}=nothing, ::Val{T}=Val(Float64)) where T<:Real 
-    ResFun(prob.U, prob.V, prob.f!, Val(T))
-end
-# alloacting (kinda)
-function (m::ResFun)(RT::AbstractMatrix{<:Real}, b::AbstractVector{<:Real}, w::AbstractVector{T}; ll::Logging.LogLevel=Logging.Warn, allocate::Bool=false) where T<:Real 
-    KD, _ = size(RT)
-    if allocate 
-        r = zeros(KD)
-        _res!(r, RT, m.U, m.V, b, m.f!, w; ll=ll)
-        return r
-    end
-    _res!(m.r, RT, m.U, m.V, m.F, m.G, m.g, b, m.f!, w; ll=ll)
-    return m.r
-end
-# inplace
-function (m::ResFun)(r::AbstractVector{<:Real}, RT::AbstractMatrix{<:Real}, b::AbstractVector{<:Real}, w::AbstractVector{T}; ll::Logging.LogLevel=Logging.Warn) where T<:Real 
-    KD, _ = size(RT)
-    _res!(r, RT, m.U, m.V, m.F, m.G, m.g, b, m.f!, w; ll=ll)
+    mul!(G, V, F')
+    @views g .= reshape(G, K*D,1)
     nothing
 end
-# 
-function res(RT::AbstractMatrix{<:Real}, U::AbstractMatrix{<:Real}, V::AbstractMatrix{<:Real}, b::AbstractVector{<:Real}, f!::Function, w::AbstractVector{<:Real}; ll::Logging.LogLevel=Logging.Warn)
-    @warn "This allocates storage, please utilize the ResFun struct/method"
-    _r = ResFun(U::AbstractMatrix{<:Real}, V::AbstractMatrix{<:Real}, f!::Function)
-    return _r(RT, b, w; ll=ll)
-end
-## Jacobian of the residual 
-function _∇res!(∇res::AbstractMatrix{<:Real}, RT::AbstractMatrix{<:Real}, U::AbstractMatrix{<:Real}, V::AbstractMatrix{<:Real}, JwF::AbstractArray{<:Real, 3}, _JG::AbstractArray{<:Real, 3}, JG::AbstractArray{<:Real, 3}, jacG::AbstractMatrix{<:Real}, jacwf!::Function, w::AbstractVector{<:Real}; ll::Logging.LogLevel=Logging.Warn) 
-    # with_logger(ConsoleLogger(stderr, ll)) do 
-        # @info "++++ Jac Res Eval ++++"
-        K, M = size(V)
-        D, _ = size(U)
-        J = length(w)
-        # @info " Evaluating jacobian of F"
-        # dt = @elapsed a = @allocations begin
-            @inbounds for m in 1:M
-                jacwf!(view(JwF,:,:,m), w, view(U,:,m))
-            end
-        # end
-        # @info "  $dt s, $a allocations"
-        # @info " Computing ∇G = V ∘ ∇F"
-        # dt = @elapsed a = @allocations begin 
-            # @tullio _JG[d,j,k] = V[k,m] * JwF[d,j,m] 
-            @inbounds for d = 1:D 
-                mul!(view(_JG,d,:,:), view(JwF,d,:,:), V') 
-            end
-        # end
-        # @info "  $dt s, $a allocations"
-        # @info " Permutedims for ∇G"
-        # dt = @elapsed a = @allocations begin 
-            permutedims!(JG, _JG,(3,1,2))
-        # end
-        # @info "  $dt s, $a allocations"
-        # @info " Reshape ∇G"
-        # dt = @elapsed a = @allocations begin 
-            jacG = reshape(JG, K*D, J)
-        # end
-        # @info "  $dt s, $a allocations"
-        # @info " RT \\ ∇G"
-        # dt = @elapsed a = @allocations begin 
-            ldiv!(∇res, LowerTriangular(RT), jacG)
-        # end
-        # @info "  $dt s, $a allocations"
-        nothing
-    # end
-end
-# struct
-struct ∇resFun
-    jac::AbstractMatrix{<:Real}
-    U::AbstractMatrix{<:Real}
-    V::AbstractMatrix{<:Real}
-    JwF::AbstractArray{<:Real,3}
-    _JG::AbstractArray{<:Real, 3}
-    JG::AbstractArray{<:Real, 3}
-    jacG::AbstractMatrix{<:Real} 
-    jacwf!::Function
-end
-# constructors
-function ∇resFun(U::AbstractMatrix, V::AbstractMatrix, jacwf!::Function, J::Int, ::Val{T}=Val(Float64)) where T<:Real
-    D, M = size(U)
-    K, _ = size(V)
-    jac = zeros(K*D,J)
-    JwF = zeros(T,D,J,M)
-    _JG = zeros(T,D,J,K)
-    JG = zeros(T,K,D,J)
-    jacG = zeros(T,K*D, J)
-    ∇resFun(jac, U, V, JwF, _JG, JG, jacG, jacwf!)
-end
-function ∇resFun(prob::AbstractWENDyProblem, params::Union{WENDyParameters, Nothing}=nothing, ::Val{T}=Val(Float64)) where T<:Real 
-    ∇resFun(prob.U, prob.V, prob.jacwf!, prob.J, Val(T))
-end
-# allocating
-function (m::∇resFun)(RT::AbstractMatrix{<:Real}, w::AbstractVector{<:Real}; ll::Logging.LogLevel=Logging.Warn, allocate::Bool=false)
-    if allocate 
-        J = length(w)
-        KD, _ = size(RT)
-        jac = zeros(KD,J)
-        _∇res!(jac, RT, m.U, m.V, m.JwF, m._JG, m.JG, m.jacG, m.jacwf!, w; ll=ll)
-        return jac
-    end
-    _∇res!(m.jac, RT, m.U, m.V, m.JwF, m._JG, m.JG, m.jacG, m.jacwf!, w; ll=ll)
-    return m.jac
-end 
-# in place
-function (m::∇resFun)(jac::AbstractMatrix{<:Real}, RT::AbstractMatrix{<:Real}, w::AbstractVector{<:Real}; ll::Logging.LogLevel=Logging.Warn)scale
-    _∇res!(jac, RT, m.U, m.V, m.JwF, m._JG, m.JG, m.jacG, m.jacwf!, w; ll=ll)
+# r(w) = G(w) - b₀
+function _r!(
+    r::AbstractVector,w::AbstractVector, # output/input
+    U::AbstractMatrix, V::AbstractMatrix, b₀::AbstractVector, # data
+    f!::Function, # function
+    F::AbstractMatrix{<:Real}, G::AbstractMatrix{<:Real}; # buffers
+    ll::Logging.LogLevel=Logging.Warn #kwargs
+) 
+    _g!(r, w, U, V, f!, F, G,; ll=ll)
+    @views r .-= b₀
     nothing
-end 
-# 
-function ∇res(RT::AbstractMatrix{<:Real}, U::AbstractMatrix{<:Real}, V::AbstractMatrix{<:Real}, jacwf!::Function, w::AbstractVector{<:Real}, ::Val{T}=Val(Float64); ll::Logging.LogLevel=Logging.Warn) where T<:Real
-    _∇res = ∇resFun(U, V, jacwf!, length(w), Val(T))
-    _∇res(RT, w; ll=ll)
 end
-## Maholinobis distance 
-# struct
-struct MFun
-    b0::AbstractVector{<:Real}
-    _RT::RTFun
-    _res::ResFun
+# Weighted residual (Rᵀ)⁻¹(G(w)) - b, where b = (Rᵀ)⁻¹b₀
+function _Rᵀr!(r::AbstractVector, w::AbstractVector, # output/input
+     U::AbstractMatrix, V::AbstractMatrix, Rᵀ::AbstractMatrix,b::AbstractVector, # Data
+     f!::Function, # functions
+     F::AbstractMatrix{<:Real}, G::AbstractMatrix{<:Real}, g::AbstractVector; # buffeers   
+     ll::Logging.LogLevel=Logging.Warn #kwargs
+) 
+    _g!(g,w, U, V, f!, F, G; ll=ll)
+    ldiv!(r, LowerTriangular(Rᵀ), g)
+    @views r .-= b
+    nothing
 end
-# constructors
-function MFun(U::AbstractMatrix, V::AbstractMatrix, Vp::AbstractMatrix, b0::AbstractVector, sig::AbstractVector, diagReg::Real, f!::Function, jacuf!::Function)
-    _RT = RTFun(U, V, Vp, sig, jacuf!,diagReg)
-    _res = ResFun(U, V, f!)
-    MFun(b0, _RT, _res)
-end
-function MFun(prob::AbstractWENDyProblem, params::WENDyParameters)
-    _RT = RTFun(prob, params)
-    _res = ResFun(prob, params)
-    MFun(prob.b0, _RT, _res)
-end
-# method
-function (m::MFun)(w::AbstractVector{W};ll::Logging.LogLevel=Logging.Warn) where W<:Real
-    # with_logger(ConsoleLogger(stderr, ll)) do 
-    #     @info "++++ Maholinobis Distance Eval ++++"
-    #     @info "Get RT"
-        # dt = @elapsed a = @allocations begin
-            RT = m._RT(w)
-        # end
-        # @info "  $dt s, $a allocations"
-        # @info "Get b"
-        # dt = @elapsed a = @allocations begin
-            b = RT \ m.b0
-        # end
-        # @info "  $dt s, $a allocations"
-        # @info "Get weighted residual"
-        # dt = @elapsed a = @allocations begin
-            r = m._res(RT,b,w)
-        # end
-        # @info "  $dt s, $a allocations"
-        return 1/2*norm(r)^2
+# ∇r = ∇G
+function _∇r!(
+    ∇r::AbstractMatrix{<:Real}, w::AbstractVector{<:Real}, # output/input
+    U::AbstractMatrix{<:Real}, V::AbstractMatrix{<:Real}, 
+    jacwf!::Function, # functions
+    JwF::AbstractArray{<:Real, 3}, __∇r::AbstractArray{<:Real, 3}, _∇r::AbstractArray{<:Real, 3}; # buffers
+    ll::Logging.LogLevel=Logging.Warn # kwargs
+) 
+    K, M = size(V)
+    D, _ = size(U)
+    J = length(w)
+    @inbounds for m in 1:M
+        jacwf!(view(JwF,:,:,m), w, view(U,:,m))
+    end
+    # TODO maybe make the dimensions slightly different _JG[k,d,j] to minimize permutedims
+    @tullio __∇r[d,j,k] = V[k,m] * JwF[d,j,m] 
+    # @inbounds for d = 1:D 
+    #     mul!(view(_JG,d,:,:), V, view(JwF,d,:,:)') 
     # end
+    permutedims!(_∇r, __∇r,(3,1,2))
+    @views ∇r .= reshape(_∇r, K*D, J)
+    nothing
 end
-## Gradient of Maholinobis distance
-# raw function 
+# (Rᵀ)⁻¹∇r = (Rᵀ)⁻¹∇G
+function _Rᵀ⁻¹∇r!(
+    Rᵀ⁻¹∇r!::AbstractMatrix{<:Real}, w::AbstractVector{<:Real}, # output/input
+    U::AbstractMatrix{<:Real}, V::AbstractMatrix{<:Real}, Rᵀ::AbstractMatrix{<:Real}, # data
+    jacwf!::Function, # functions
+    JwF::AbstractArray{<:Real, 3}, __∇r::AbstractArray{<:Real, 3}, _∇r::AbstractArray{<:Real, 3}, ∇r::AbstractMatrix{<:Real}; # buffers
+    ll::Logging.LogLevel=Logging.Warn # kwargs
+) 
+    _∇r!(
+        ∇r,w,
+        U,V,
+        jacwf!,
+        JwF,__∇r,_∇r;
+        ll=ll
+    )
+    ldiv!(Rᵀ⁻¹∇r!, LowerTriangular(Rᵀ), ∇r)
+    nothing
+end
+# m(w) - Maholinobis distance
+function _m(S::AbstractMatrix, r::AbstractVector, S⁻¹r::AbstractVector)
+    F = cholesky(S)
+    ldiv!(S⁻¹r, F, r)
+    1/2*dot(r, S⁻¹r)
+end
+function _m(Rᵀ⁻¹r::AbstractVector)
+    1/2*dot(Rᵀ⁻¹r, Rᵀ⁻¹r)
+end
+# ∇m(w) - Gradient of Maholinobis distance
 function _∇m!(
-    ∇m::AbstractVector{<:Real},
-    U::AbstractMatrix{<:Real}, 
-    V::AbstractMatrix{<:Real}, 
-    Vp::AbstractMatrix{<:Real}, 
-    b0::AbstractVector{<:Real}, 
-    sig::AbstractVector{<:Real}, 
-    diagReg::AbstractFloat, 
-    _r::ResFun, 
-    _RT::RTFun, 
-    _∇r::∇resFun, 
+    ∇m::AbstractVector{<:Real},w::AbstractVector{<:Real},
+    U::AbstractMatrix{<:Real}, V::AbstractMatrix{<:Real}, L::AbstractMatrix{<:Real}, S::AbstractMatrix{<:Real}, ∇r::AbstractMatrix{<:Real}, sig::AbstractVector{<:Real}, r::AbstractVector{<:Real},
     jacwjacuf!::Function, 
-    JwJuF::AbstractArray{<:Real,4},
-    _Lbuf0::AbstractArray{<:Real,5},
-    _Lbuf1::AbstractArray{<:Real,5},
-    ∇Sw_buff::AbstractArray{<:Real,3},
-    ∇Sw::AbstractArray{<:Real,3}, 
-    b::AbstractVector{<:Real},
-    r::AbstractVector{<:Real},
-    rr::AbstractVector{<:Real},
-    w::AbstractVector{<:Real};
-    ll::Logging.LogLevel=Logging.Warn)
-    # with_logger(ConsoleLogger(stderr, ll)) do 
-        # @info "++++ ∇w[Maholinobis Dist] ++++"
-        D, M = size(U)
-        K, _ = size(V)
-        # @info " Compute R"
-        # dt = @elapsed a = @allocations begin 
-            R = _RT(w; transpose=false)
-        # end
-        # @info "  $dt s, $a allocations"
-        # @info " Compute ∇w[∇uF] "
-        # dt = @elapsed a = @allocations begin 
-            @inbounds for m in 1:M
-                jacwjacuf!(view(JwJuF,:,:,:,m), w, view(U,:,m))
-            end
-        # end
-        # @info "  $dt s, $a allocations"
-        # @info " Compute Lbuff0 "
-        # dt = @elapsed a = @allocations begin
-            @tullio _Lbuf0[k,d2,d1,j,m] = V[k,m] * JwJuF[d2,d1,j,m] * sig[d1] # increases allocations by 20
-            # @avx for m in 1:M, j in 1:J, d1 in 1:D, d2 in 1:D, k in 1:K
-            #     _Lbuf0[k,d2,d1,j,m] = V[k,m] * JwJuF[d2,d1,j,m] * sig[d1]
-            # end #increases runtime by .022 (2x slow down)
-        # end
-        # @info "  $dt s, $a allocations"
-        # @info " Permutedims Lw "
-        # dt = @elapsed a = @allocations begin 
-            permutedims!(_Lbuf1, _Lbuf0, (1,2,5,3,4))
-        # end
-        # @info "  $dt s, $a allocations"
-        # @info " Reshape Lw"
-        # dt = @elapsed a = @allocations begin 
-            ∇L = reshape(_Lbuf1,K*D,M*D,J)
-        # end
-        # @info "  $dt s, $a allocations"
-        # @info " Compute ∇Sw(prt1)"
-        # dt = @elapsed a = @allocations begin 
-            # @tullio ∇Sw_buff[k1,k2,j] = ∇L[k1,m,j] * _RT._L.L[k2,m] # more than double the time and alloactions...
-            @inbounds for j = 1:J 
-                mul!(view(∇Sw_buff,:,:,j), view(∇L,:,:,j), _RT._L.L')
-            end
-        # end 
-        # @info "  $dt s, $a allocations"
-        # @info " Compute ∇Sw(prt2)"
-        # dt = @elapsed a = @allocations begin 
-            @tullio ∇Sw[kd1,kd2,j] = ∇Sw_buff[kd1,kd2,j] + ∇Sw_buff[kd2,kd1,j]
-        # end
-        # @info "  $dt s, $a allocations"
-        # @info " Compute Residual"
-        # dt = @elapsed a = @allocations begin 
-            ldiv!(b, LowerTriangular(R'), b0)
-            _r(r, R', b, w)
-        # end
-        # @info "  $dt s, $a allocations"
-        # @info " Applying R^{-1}"
-        # dt = @elapsed a = @allocations begin 
-            ldiv!(rr, UpperTriangular(R), r)
-        # end
-        # @info "  $dt s, $a allocations"
-        # @info " Compute first part of ∇m"
-        # dt = @elapsed a = @allocations begin
-            @inbounds for j in 1:J 
-                ∇m[j] = -1/2*dot(rr, view(∇Sw,:,:,j), rr)
-            end 
-        # end
-        # @info "  $dt s, $a allocations"
-        # @info " Compute second part of ∇m"
-        # dt = @elapsed a = @allocations begin 
-            mul!(∇m, _∇r(R', w)', r, 1, 1)
-        # end
-        # @info "  $dt s, $a allocations"
-        nothing
-    # end
-end
-
-struct ∇mFun
-    U::AbstractMatrix{<:Real}
-    V::AbstractMatrix{<:Real}
-    Vp::AbstractMatrix{<:Real}
-    b0::AbstractVector{<:Real}
-    sig::AbstractVector{<:Real}
-    diagReg::Real
-    _r::ResFun
-    _RT::RTFun
-    _∇r::∇resFun
-    jacwjacuf!::Function
-    JwJuF::AbstractArray{<:Real,4} 
-    _Lbuf0::AbstractArray{<:Real,5} 
-    _Lbuf1::AbstractArray{<:Real,5} 
-    ∇Sw_buff::AbstractArray{<:Real,3} 
-    ∇Sw::AbstractArray{<:Real,3} 
-    b::AbstractVector{<:Real} 
-    r::AbstractVector{<:Real} 
-    rr::AbstractVector{<:Real} 
-    ∇m::AbstractVector{<:Real}
-end
-# constructor
-function ∇mFun(U::AbstractMatrix, V::AbstractMatrix, Vp::AbstractMatrix, b0::AbstractVector, sig::AbstractVector, diagReg::Real, _r::ResFun, _RT::RTFun, _∇r::∇resFun, jacwjacuf!::Function, J::Int, ::Val{T}=Val(Float64)) where T
-    D,M  = size(U)
+    S⁻¹r::AbstractVector{<:Real}, JwJuF::AbstractArray{<:Real,4}, __∇L::AbstractArray{<:Real,5}, _∇L::AbstractArray{<:Real,5}, ∇L::AbstractArray{<:Real,3}, ∂ⱼLLᵀ::AbstractMatrix{<:Real}, ∇S::AbstractArray{<:Real,3};
+    ll::Logging.LogLevel=Logging.Warn
+)
+    D, M = size(U)
     K, _ = size(V)
-    JwJuF = zeros(T,D,D,J,M)
-    _Lbuf0 = zeros(T,K,D,D,J,M)
-    _Lbuf1 = zeros(T,K,D,M,D,J)
-    ∇Sw_buff = zeros(T,K*D,K*D,J)
-    ∇Sw = zeros(T,K*D,K*D,J)
-    b = zeros(T,K*D)
-    r = zeros(T,K*D)
-    rr = zeros(T,K*D)
-    ∇m = zeros(T,J)
-    ∇mFun(U,V,Vp,b0,sig,diagReg,_r,_RT,_∇r,jacwjacuf!,JwJuF,_Lbuf0,_Lbuf1,∇Sw_buff,∇Sw,b,r,rr,∇m)
-end
-function ∇mFun(prob::AbstractWENDyProblem, params::WENDyParameters, ::Val{T}=Val(Float64)) where T
-    _r = ResFun(prob, params, Val(T))
-    _RT = RTFun(prob, params, Val(T))
-    _∇r = ∇resFun(prob, params, Val(T))
-    ∇mFun(prob.U,prob.V,prob.Vp,prob.b0,prob.sig,params.diagReg,_r,_RT,_∇r,prob.jacwjacuf!, prob.J, Val(T))
-end
-# method
-# inplace
-function (m::∇mFun)(∇m::AbstractVector{<:Real}, w::AbstractVector{W}; ll::Logging.LogLevel=Logging.Warn) where W<:Real
-    _∇m!(∇m,m.U,m.V,m.Vp,m.b0,m.sig,m.diagReg,
-        m._r,m._RT,m._∇r,m.jacwjacuf!,
-        m.JwJuF,m._Lbuf0,m._Lbuf1,m.∇Sw_buff,m.∇Sw,m.b,m.r,m.rr,
-        w; ll=ll
-    )
+    J = length(w)
+    # TODO: perhaps do this inplace? 
+    F = cholesky(S) 
+    # precompute the S⁻¹r 
+    ldiv!(S⁻¹r, F, r)
+    # compute ∇L
+    @inbounds for m in 1:M 
+        @views jacwjacuf!(JwJuF[:,:,:,m], w, U[:,m])
+    end
+    @tullio __∇L[k,d2,d1,j,m] = JwJuF[d2,d1,j,m] * V[k,m] * sig[d1] 
+    permutedims!(_∇L,__∇L,(1,2,5,3,4))
+    @views ∇L .= reshape(_∇L,K*D,M*D,J)
+    # compute ∇S
+    @inbounds for j = 1:J 
+        @views mul!(∂ⱼLLᵀ, ∇L[:,:,j], L')
+        @views ∇S[:,:,j] .= ∂ⱼLLᵀ + (∂ⱼLLᵀ)'
+    end
+    # compute ∇m
+    @inbounds for j in 1:J 
+        @views prt0 = 2*dot(∇r[:,j], S⁻¹r)         # 2∂ⱼrᵀS⁻¹r
+        @views prt1 = - dot(S⁻¹r, ∇S[:,:,j], S⁻¹r) # rᵀ∂ⱼS⁻¹r = -(S⁻¹r)ᵀ∂ⱼSS⁻¹r
+        ∇m[j] = 1/2 * (prt0 + prt1)
+    end 
     nothing
 end
-# allocating
-function (m::∇mFun)(w::AbstractVector{W}; ll::Logging.LogLevel=Logging.Warn, allocate::Bool=false) where W<:Real
-    if allocate
-        ∇m = zeros(length(w))
-        _∇m!(∇m,m.U,m.V,m.Vp,m.b0,m.sig,m.diagReg,
-            m._r,m._RT,m._∇r,m.jacwjacuf!,
-            m.JwJuF,m._Lbuf0,m._Lbuf1,m.∇Sw_buff,m.∇Sw,m.b,m.r,m.rr,
-            w; ll=ll
-        )
-        return ∇m
+function _Hm!(
+    H::AbstractMatrix{<:Real}, w::AbstractVector{<:Real},
+    U::AbstractMatrix{<:Real}, V::AbstractMatrix{<:Real}, L::AbstractMatrix{<:Real}, S::AbstractMatrix{<:Real}, ∇r::AbstractMatrix{<:Real}, b₀::AbstractVector{<:Real}, sig::AbstractVector{<:Real},
+    r::AbstractVector{<:Real}, 
+    jacwjacuf!::Function, heswf!::Function, heswjacuf!::Function,  S⁻¹r::AbstractVector{<:Real}, S⁻¹∇r::AbstractMatrix{<:Real}, JwJuF::AbstractArray{<:Real, 4}, __∇L::AbstractArray{<:Real, 5}, _∇L::AbstractArray{<:Real, 5}, ∇L::AbstractArray{<:Real, 3}, ∂ⱼLLᵀ::AbstractMatrix{<:Real}, ∇S::AbstractArray{<:Real, 3}, HwF::AbstractArray{<:Real, 4}, _∇²r::AbstractArray{<:Real, 4}, ∇²r::AbstractArray{<:Real, 3}, HwJuF::AbstractArray{<:Real, 5}, __∇²L::AbstractArray{<:Real, 6}, _∇²L::AbstractArray{<:Real, 6}, ∇²L::AbstractArray{<:Real, 4}, ∂ⱼL∂ᵢLᵀ::AbstractMatrix{<:Real}, ∂ᵢⱼLLᵀ::AbstractMatrix{<:Real}, ∂ᵢⱼS::AbstractMatrix{<:Real}, S⁻¹∂ⱼS::AbstractMatrix{<:Real}, ∂ᵢSS⁻¹∂ⱼS::AbstractMatrix{<:Real}
+)
+    K,D,M,_,J = size(_∇L)
+    # Hm(w) - Hessian of Maholinobis distance 
+    F = cholesky(S)
+    ## Precompute S⁻¹(G(w)-b) and S⁻¹∂ⱼG(w)
+    ldiv!(S⁻¹r, F, r)
+    ldiv!(S⁻¹∇r, F, ∇r)
+    ## Compute ∇L
+    @inbounds for m in 1:M 
+        @views jacwjacuf!(JwJuF[:,:,:,m], w, U[:,m])
     end
-    _∇m!(m.∇m,m.U,m.V,m.Vp,m.b0,m.sig,m.diagReg,
-        m._r,m._RT,m._∇r,m.jacwjacuf!,
-        m.JwJuF,m._Lbuf0,m._Lbuf1,m.∇Sw_buff,m.∇Sw,m.b,m.r,m.rr,
-        w; ll=ll
-    )
-    return m.∇m
-end
-
+    @tullio __∇L[k,d2,d1,j,m] = JwJuF[d2,d1,j,m] * V[k,m] * sig[d1] 
+    permutedims!(_∇L, __∇L, (1,2,5,3,4))
+    ∇L = reshape(_∇L, K*D, M*D,J)
+    ## Compute ∇S 
+    @inbounds for j = 1:J 
+        @views mul!(∂ⱼLLᵀ, ∇L[:,:,j], L')
+        @views ∇S[:,:,j] .= ∂ⱼLLᵀ + (∂ⱼLLᵀ)'
+    end
+    ## compute ∇²r
+    @inbounds for m in 1:M 
+        heswf!(view(HwF,:,:,:,m), w, view(U,:,m))
+    end
+    @tullio _∇²r[k,d,j1,j2] = V[k,m] * HwF[d,j1,j2,m] 
+    ∇²r = reshape(_∇²r,K*D,J,J)
+    ## compute ∇²L
+    @inbounds for m in 1:M 
+        heswjacuf!(view(HwJuF,:,:,:,:,m), w, view(U,:,m))
+    end
+    @tullio __∇²L[k,d2,d1,j1,j2,m] = V[k,m] * HwJuF[d2,d1,j1,j2,m] * sig[d1] 
+    permutedims!(_∇²L,__∇²L, (1,2,6,3,4,5))
+    ∇²L = reshape(_∇²L,K*D,M*D,J,J)
+    ## Compute ∇²m
+    @inbounds for j = 1:J
+        for i = j:J 
+            # Commpute ∂ᵢⱼS   
+            @views mul!(∂ⱼL∂ᵢLᵀ, ∇L[:,:,j], (∇L[:,:,i])')
+            @views mul!(∂ᵢⱼLLᵀ, ∇²L[:,:,i,j], L')
+            @views ∂ᵢⱼS .= ∂ⱼL∂ᵢLᵀ + (∂ⱼL∂ᵢLᵀ)' + ∂ᵢⱼLLᵀ + (∂ᵢⱼLLᵀ)'
+            
+            # compute ∂ᵢSS⁻¹∂ⱼS
+            @views ldiv!(S⁻¹∂ⱼS, F, ∇S[:,:,j])
+            @views mul!(∂ᵢSS⁻¹∂ⱼS, ∇S[:,:,i], S⁻¹∂ⱼS) 
+            
+            # Put everything together
+            @views H[j,i] = 1/2*(
+                2*(
+                    dot(∇²r[:,j,i], S⁻¹r)              # ∂ᵢⱼrᵀS⁻¹r
+                    - dot(S⁻¹∇r[:,j], ∇S[:,:,i], S⁻¹r) # ∂ⱼrᵀ∂ᵢS⁻¹r = -(S⁻¹∂ⱼr)ᵀ∂ᵢS(S⁻¹r)
+                    + dot(∇r[:,j], S⁻¹∇r[:,i])         # ∂ⱼrᵀS⁻¹∂ᵢr
+                )
+                - 2*dot(S⁻¹∇r[:,i], ∇S[:,:,j], S⁻¹r)   # 2∂ᵢrᵀ∂ⱼS⁻¹r = -(S⁻¹∂ᵢr)ᵀ∂ⱼSS⁻¹r
+                - dot(S⁻¹r, ∂ᵢⱼS, S⁻¹r)                # rᵀ∂ᵢⱼS⁻¹r  = -(S⁻¹r)ᵀ∂ᵢⱼSS⁻¹r
+                + 2*dot(S⁻¹r, ∂ᵢSS⁻¹∂ⱼS, S⁻¹r)         #            + 2(S⁻¹r)ᵀ∂ᵢSS⁻¹∂ⱼSS⁻¹r
+            )
+        end
+    end
+    # Only compute the upper triangular part of the hessian
+    # and because it is symmetric, all computations are done
+    H .= Symmetric(H)
+    nothing 
+end 

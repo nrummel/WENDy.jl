@@ -29,8 +29,8 @@ wTrue = Float64[ModelingToolkit.getdefault(p) for p in parameters(mdl)]
 J = length(wTrue)
 @info "Build julia functions from symbolic expressions of ODE..."
 _,f!         = getRHS(mdl)
-_,jacuf! = getJacobian(mdl);
-_,jacwf! = getParameterJacobian(mdl);
+_,jacuf! = getJacu(mdl);
+_,jacwf! = getJacw(mdl);
 Random.seed!(seed)
 @info "Load data from file..."
 data = BSON.load(exampleFile) 
@@ -50,7 +50,7 @@ sig = estimate_std(U)
 V,Vp,Vfull = pruneMeth(tt,U,ϕ,Kmin,Kmax,mtParams);
 K,_ = size(V)
 @info "Build right hand side to NLS..."
-b0 = reshape(-Vp * U', K*D);
+b₀ = reshape(-Vp * U', K*D);
 ##
 @info "Building functions..."
 function RTfun(U::AbstractMatrix, V::AbstractMatrix, Vp::AbstractMatrix, sig::AbstractVector, diagReg::Real, jacuf!::Function, w::AbstractVector)
@@ -126,20 +126,20 @@ end
 @info "Test Allocations with with Float64"
 w_rand = rand(J)
 RT = RTfun(U,V,Vp,sig,diagReg,jacuf!,w_rand)
-b = RT \ b0 
+b = RT \ b₀ 
 res_float64(w, ll) = _res(RT,U,V,b,f!,Val(Float64), w; ll=ll)
 res_float64(w_rand, Logging.Info)
 @btime res_float64($w_rand, $Logging.Warn);
 nothing
 ## Compute the non lin least square solution 
 @info "Defining IRWLS_Nonlinear..."
-function IRWLS_Nonlinear(U, V, Vp, b0, sig, diagReg, J, f!, jacuf!, jacwf!; ll=Logging.Info,maxIt=100, relTol=1e-4)
+function IRWLS_Nonlinear(U, V, Vp, b₀, sig, diagReg, J, f!, jacuf!, jacwf!; ll=Logging.Info,maxIt=100, relTol=1e-4)
     with_logger(ConsoleLogger(stderr,ll)) do 
         @info "Initializing the linearization least squares solution  ..."
         D, M = size(U)
         K, _ = size(V)
         G0 = _jacRes(Matrix{Float64}(I, K*D,K*D), U, V, jacwf!, Val(Float64), zeros(J))
-        w0 = G0 \ b0 
+        w0 = G0 \ b₀ 
         wit = zeros(J,maxIt)
         resit = zeros(J,maxIt)
         wnm1 = w0 
@@ -147,7 +147,7 @@ function IRWLS_Nonlinear(U, V, Vp, b0, sig, diagReg, J, f!, jacuf!, jacwf!; ll=L
     
         for n = 1:maxIt 
             RT = RTfun(U,V,Vp,sig,diagReg,jacuf!,wnm1)
-            b = RT \ b0 
+            b = RT \ b₀ 
             res_AffExpr(w::AbstractVector) = _res(RT,U,V,b,f!,Val(AffExpr), w)
             jacRes_AffExpr(w::AbstractVector) = _jacRes(RT,U,V,jacwf!,Val(AffExpr),w;showFlag=true)
             w_star = _jacRes(RT, U, V, jacwf!, Val(Float64), zeros(J)) \ b 
@@ -191,7 +191,7 @@ end
 ##
 @info "IRWLS (Nonlinear): "
 @info "   Runtime info: "
-@time what, wit, resit = IRWLS_Nonlinear(U, V, Vp, b0, sig, diagReg, J, f!, jacuf!, jacwf!; ll=Logging.Warn)
+@time what, wit, resit = IRWLS_Nonlinear(U, V, Vp, b₀, sig, diagReg, J, f!, jacuf!, jacwf!; ll=Logging.Warn)
 relErr = norm(wit[:,end] - wTrue) / norm(wTrue)
 @info "   coeff rel err = $relErr"
 @info "   iterations    = $(size(wit,2)-1)"

@@ -35,8 +35,8 @@ wTrue = Float64[ModelingToolkit.getdefault(p) for p in parameters(mdl)]
 J = length(wTrue)
 @info "Build julia functions from symbolic expressions of ODE..."
 _,f!         = getRHS(mdl)
-_,jacuf! = getJacobian(mdl);
-_,jacwf! = getParameterJacobian(mdl);
+_,jacuf! = getJacu(mdl);
+_,jacwf! = getJacw(mdl);
 Random.seed!(seed)
 @info "Load data from file..."
 data = BSON.load(exampleFile) 
@@ -56,7 +56,7 @@ sig = estimate_std(U)
 V,Vp,Vfull = pruneMeth(tt,U,ϕ,Kmin,Kmax,mtParams);
 K,_ = size(V)
 @info "Build right hand side to NLS..."
-b0 = reshape(-Vp * U', K*D);
+b₀ = reshape(-Vp * U', K*D);
 # Get the cholesky decomposition of our current approximation of the covariance
 function RTfun(U::AbstractMatrix, V::AbstractMatrix, Vp::AbstractMatrix, sig::AbstractVector, diagReg::Real, jacuf!::Function, w::AbstractVector)
     # Preallocate for L 
@@ -158,7 +158,7 @@ f(w::AbstractVector{W}; ll::Logging.LogLevel=Logging.Warn) where W = f(RT,U,V,b,
 @info "Test Allocations with with Float64"
 w_rand = wTrue + norm(wTrue)* randn(J)
 RT = RTfun(U,V,Vp,sig,diagReg,jacuf!,w_rand)
-b = RT \ b0 
+b = RT \ b₀ 
 # because this problem is linear in w the jacobian is constant, 
 # and we could solve this problem with backslash because 
 # it is really a linear least squares problem
@@ -193,20 +193,20 @@ relerr = abs(f(w_star)- f_hat) / f(w_star)
 @info "Relative coeff error = $relerr"
 ## Compute the non lin least square solution 
 @info "Defining IRWLS_Nonlinear..."
-function IRWLS_Nonlinear(U, V, Vp, b0, sig, diagReg, J, f!, jacuf!, jacwf!; ll=Logging.Info,maxIt=100, relTol=1e-10)
+function IRWLS_Nonlinear(U, V, Vp, b₀, sig, diagReg, J, f!, jacuf!, jacwf!; ll=Logging.Info,maxIt=100, relTol=1e-10)
     with_logger(ConsoleLogger(stderr,ll)) do 
         @info "Initializing the linearization least squares solution  ..."
         D, M = size(U)
         K, _ = size(V)
         G0 = ∇res(Matrix{Float64}(I, K*D,K*D), U, V, jacwf!, w_rand)
-        w0 = G0 \ b0 
+        w0 = G0 \ b₀ 
         wit = zeros(J,maxIt)
         resit = zeros(J,maxIt)
         wnm1 = w0 
         wn = similar(w0)
         for n = 1:maxIt 
             RT = RTfun(U,V,Vp,sig,diagReg,jacuf!,wnm1)
-            b = RT \ b0 
+            b = RT \ b₀ 
             G = ∇res(RT,U,V,jacwf!,zeros(J))
             w_star = G \ b 
             fn(w::AbstractVector{W}; ll::Logging.LogLevel=Logging.Warn) where W = f(RT,U,V,b,f!,w;ll=ll)
@@ -241,7 +241,7 @@ end
 ##
 @info "IRWLS (Nonlinear): "
 @info "   Runtime info: "
-@time what, wit, resit = IRWLS_Nonlinear(U, V, Vp, b0, sig, diagReg, J, f!, jacuf!, jacwf!; ll=Logging.Warn)
+@time what, wit, resit = IRWLS_Nonlinear(U, V, Vp, b₀, sig, diagReg, J, f!, jacuf!, jacwf!; ll=Logging.Warn)
 relErr = norm(wit[:,end] - wTrue) / norm(wTrue)
 @info "   coeff rel err = $relErr"
 @info "   iterations    = $(size(wit,2)-1)"

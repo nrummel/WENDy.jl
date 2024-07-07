@@ -27,7 +27,7 @@ KD,MD,J = size(L1_matlab)
 K,M = size(V)
 D = Int(KD/K)
 _, _F!         = getRHS(mdl)
-_, _jacuF! = getJacobian(mdl);
+_, _jacuF! = getJacu(mdl);
 Lgetter = LNonlinear(u, V, Vp, sig, _jacuF!, K, M, D)
 S = zeros(KD,KD)
 R = zeros(KD,KD)
@@ -36,7 +36,7 @@ FF = zeros(D, M);
 ##
 B = zeros(K,D)
 B!(B, Vp, u)
-b0 = reshape(B, KD)
+b₀ = reshape(B, KD)
 G0 = zeros(K*D,J)
 for j in 1:J
     tmp = zeros(K,D)
@@ -47,7 +47,7 @@ for j in 1:J
 end
 ## do one step of IRWLS
 @time begin
-w0 = G0 \ b0
+w0 = G0 \ b₀
 
 L = Lgetter(w)
 mul!(S, L, L')
@@ -56,11 +56,11 @@ mul!(R, S, R0, 1-diagReg,diagReg)
 cholesky!(Symmetric(R))
 
 Giter = UpperTriangular(R)' \ G0
-biter = UpperTriangular(R)' \ b0;
+biter = UpperTriangular(R)' \ b₀;
 end
 nothing
 ##
-@assert norm(b0 - b_0_matlab) / norm(b_0_matlab) < 1e2*eps()
+@assert norm(b₀ - b_0_matlab) / norm(b_0_matlab) < 1e2*eps()
 @assert norm(G0 - G_0_matlab) / norm(G_0_matlab) < 1e2*eps()
 @assert norm(S - Sw_matlab) / norm(Sw_matlab) < 1e2*eps()
 @assert norm(L - Lw_matlab) / norm(Lw_matlab) < 1e2*eps()
