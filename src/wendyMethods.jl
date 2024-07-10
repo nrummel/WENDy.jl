@@ -25,6 +25,7 @@ function Lw(
     K, _ = size(V)
     # preallocate output
     L = zeros(T,K*D,M*D)
+    # precompute L₀ because it does not depend on w
     __L₀ = zeros(T,K,D,D,M)
     _L₀ = zeros(T,K,D,M,D)
     L₀ = zeros(T,K*D,M*D)
@@ -59,6 +60,17 @@ function (m::Lw)(L::AbstractMatrix, w::AbstractVector{<:Real}; ll::Logging.LogLe
     )
     nothing
 end
+# method mutate internal data 
+function (m::Lw)(w::AbstractVector{<:Real}; ll::Logging.LogLevel=Logging.Info) 
+    _L!(
+        m.L,w,
+        m.U,m.V,m.L₀,m.sig,
+        m.jacuf!,
+        m.JuF,m.__L₁,m._L₁;
+        ll=ll
+    )
+    nothing
+end
 ## R(w)
 # struct/method
 struct Rw
@@ -67,35 +79,47 @@ struct Rw
     # data 
     diagReg::Real
     # functions
-    _L::Lw 
+    _L!_::Lw 
     # buffers
-    L::AbstractMatrix{<:Real}
     thisI::AbstractMatrix{<:Real}
     S::AbstractMatrix{<:Real}
     Sreg::AbstractMatrix{<:Real}
 end
 # constructors
-function Rw(diagReg::AbstractFloat, _L::Lw, K::Int, D::Int, ::Val{T}=Val(Float64)) where T<:Real
-    K,D,M,_ = size(_L._L₁)
+function Rw(diagReg::AbstractFloat, _L!_::Lw, K::Int, D::Int, ::Val{T}=Val(Float64)) where T<:Real
+    K,D,_,_ = size(_L!_._L₁)
     # ouput
     R = zeros(T, K*D, K*D)
     # buffers 
-    L = zeros(T, K*D, M*D)
     thisI = Matrix{T}(I, K*D, K*D)
     S = zeros(T, K*D, K*D)
     Sreg = zeros(T, K*D, K*D)
-    Rw(R, diagReg, _L, L, thisI, S, Sreg)
+    Rw(R, diagReg, _L!_, thisI, S, Sreg)
 end
 function Rw(prob::AbstractWENDyProblem, params::WENDyParameters, ::Val{T}=Val(Float64)) where T<:Real
-    _L = Lw(prob, params)
-    Rw(params.diagReg, _L, prob.K, prob.D, Val(T))
+    _L!_ = Lw(prob, params)
+    Rw(params.diagReg, _L!_, prob.K, prob.D, Val(T))
 end
 # method inplace 
 function (m::Rw)(R::AbstractMatrix{<:Real}, w::AbstractVector{W};ll::Logging.LogLevel=Logging.Warn, transpose::Bool=true, doChol::Bool=true) where W<:Real
-    m._L(m.L, w;ll=ll) 
+    m._L!_(w; ll=ll) 
     _R!(
         R,w,
-        m.L, m.diagReg,
+        m._L!_.L, m.diagReg,
+        m.thisI,m.Sreg,m.S;
+        doChol=doChol, ll=ll
+    )
+    if transpose 
+        @views R .= R'
+    end
+    nothing
+end
+# method mutate internal data 
+function (m::Rw)(w::AbstractVector{W}; ll::Logging.LogLevel=Logging.Warn, transpose::Bool=true, doChol::Bool=true) where W<:Real
+    m._L!_(w;ll=ll) 
+    _R!(
+        m.R, w,
+        m._L!_.L, m.diagReg,
         m.thisI,m.Sreg,m.S;
         doChol=doChol, ll=ll
     )
@@ -124,7 +148,7 @@ function rw(U::AbstractMatrix{<:Real}, V::AbstractMatrix{<:Real}, f!::Function, 
     D, M = size(U)
     K, _ = size(V)
     # ouput
-    r = zeros(K*D)
+    r = zeros(T,K*D)
     # buffers
     F = zeros(T, D, M)
     G = zeros(T, K, D)
@@ -147,6 +171,27 @@ function (m::rw)(r::AbstractVector{<:Real}, b::AbstractVector{<:Real}, w::Abstra
     else 
         _Rᵀr!(
             r, w, 
+            m.U, m.V, Rᵀ, b, 
+            m.f!, 
+            m.F, m.G, m.g; 
+            ll=ll 
+        )
+    end
+    nothing
+end
+# method mutate internal data 
+function (m::rw)(b::AbstractVector{<:Real}, w::AbstractVector{T}; ll::Logging.LogLevel=Logging.Warn, Rᵀ::Union{Nothing,AbstractMatrix{<:Real}}=nothing) where T<:Real 
+    if isnothing(Rᵀ)
+        _r!(
+            m.r,w, 
+            m.U, m.V, b, # assumes that b = b₀ in this case
+            m.f!, 
+            m.F, m.G; 
+            ll=ll
+        )
+    else 
+        _Rᵀr!(
+            m.r, w, 
             m.U, m.V, Rᵀ, b, 
             m.f!, 
             m.F, m.G, m.g; 
@@ -206,58 +251,34 @@ function (m::∇rw)(Rᵀ⁻¹∇r::AbstractMatrix{<:Real}, w::AbstractVector{<:R
     )
     nothing
 end 
-# method allocating
-function (m::∇rw)(w::AbstractVector{<:Real}; ll::Logging.LogLevel=Logging.Warn, Rᵀ::Union{Nothing,AbstractMatrix{<:Real}}=nothing, allocate::Bool=false)
-   if allocate
-        if isnothing(Rᵀ)
-            Rᵀ⁻¹∇r = similar(m.Rᵀ⁻¹∇r)
-            _∇r!(
-                Rᵀ⁻¹∇r,w,
-                m.U,m.V,
-                m.jacwf!,
-                m.JwF,m.__∇r,m._∇r;
-                ll=ll
-            )
-            return Rᵀ⁻¹∇r
-        end
-        ∇r = similar(m.∇r)
-        _Rᵀ⁻¹∇r!(
-            ∇r,w,
-            m.U,m.V,m.Rᵀ,
-            m.jacwf!,
-            m.JwF,m.__∇r,m._∇r,m.∇r;
-            ll=ll
-        )
-        return ∇r
-    end
-
+# method mutate internal data 
+function (m::∇rw)(w::AbstractVector{<:Real}; ll::Logging.LogLevel=Logging.Warn, Rᵀ::Union{Nothing,AbstractMatrix{<:Real}}=nothing)
     if isnothing(Rᵀ)
         _∇r!(
-            m.Rᵀ⁻¹∇r,w,
+            m.∇r,w, 
             m.U,m.V,
             m.jacwf!,
             m.JwF,m.__∇r,m._∇r;
             ll=ll
         )
-        return m.Rᵀ⁻¹∇r
-    end 
-
+        return nothing
+    end
     _Rᵀ⁻¹∇r!(
-        m.∇r,w,
+        m.Rᵀ⁻¹∇r,w,
         m.U,m.V,Rᵀ,
         m.jacwf!,
         m.JwF,m.__∇r,m._∇r,m.∇r;
         ll=ll
     )
-   return m.∇r
+    nothing
 end 
 ## Maholinobis distance 
 # struct
 struct mw
     b₀::AbstractVector{<:Real}
     # functions
-    _R::Rw
-    _r::rw
+    _R!_::Rw
+    _r!_::rw
     # buffer
     S::AbstractMatrix{<:Real}
     Rᵀ::AbstractMatrix{<:Real}
@@ -268,8 +289,8 @@ end
 # constructor
 function mw(prob::AbstractWENDyProblem, params::WENDyParameters, ::Val{T}=Val(Float64)) where T<:Real
     # functions
-    _R = Rw(prob, params, Val(T))
-    _r = rw(prob, params, Val(T))
+    _R!_ = Rw(prob, params, Val(T))
+    _r!_ = rw(prob, params, Val(T))
     # buffer
     K,D = prob.K,prob.D
     S = zeros(T, K*D, K*D)
@@ -279,28 +300,28 @@ function mw(prob::AbstractWENDyProblem, params::WENDyParameters, ::Val{T}=Val(Fl
     Rᵀ⁻¹r = zeros(T, K*D)
     mw(
         prob.b₀, 
-        _R, _r, 
+        _R!_, _r!_, 
         S, Rᵀ, r, S⁻¹r,Rᵀ⁻¹r
     )
 end
 # method
-function (m::mw)(w::AbstractVector{T}; ll::Logging.LogLevel=Logging.Warn,efficient::Bool=true) where T<:Real
+function (m::mw)(w::AbstractVector{T}; ll::Logging.LogLevel=Logging.Warn,efficient::Bool=false) where T<:Real
     if efficient
         # m(w) = r(w)ᵀS⁻¹r(w) = ((Rᵀ)⁻¹r)ᵀ((Rᵀ)⁻¹r)
-        m._R(
+        m._R!_(
             m.Rᵀ,w;
             ll=ll
         )
         b = similar(m.b₀)
         ldiv!(b, LowerTriangular(m.Rᵀ), m.b₀)
-        m._r(
+        m._r!_(
             m.Rᵀ⁻¹r, b, w; 
             ll=ll, Rᵀ=m.Rᵀ
         )
         return _m(m.Rᵀ⁻¹r)
     end 
-    m._rw(m.r,w;ll=ll)
-    m._Rw(m.S,w;ll=ll, doChol=false)
+    m._r!_(m.r,w;ll=ll)
+    m._R!_(m.S,w;ll=ll, doChol=false)
     return _m(m.S,m.r,m.S⁻¹r)
 end
 ## ∇m(w) - gradient of Maholinobis distance
@@ -313,7 +334,7 @@ struct ∇mw
     b₀::AbstractVector{<:Real} 
     sig::AbstractVector{<:Real} 
     # functions
-    _R_!::Rw
+    _R!_::Rw
     _r!_::rw
     _∇r!_::∇rw
     jacwjacuf!::Function
@@ -353,32 +374,38 @@ end
 # method inplace
 function (m::∇mw)(∇m::AbstractVector{<:Real}, w::AbstractVector{W}; ll::Logging.LogLevel=Logging.Warn) where W<:Real
     # Compute L(w) & S(w)
-    m._R_!(m._R_!.R, w; ll=ll, transpose=false, doChol=false) 
-    # TODO remove the internal storage for r, ∇r
-    #      those are already present in the other methods
+    m._R!_(w; ll=ll, transpose=false, doChol=false) 
     # Compute residal
-    m._r!_(m._r!_.r, m.b₀, w; ll=ll)
+    m._r!_(m.b₀, w; ll=ll)
     # Compute jacobian of residual
-    m._∇r!_(m._∇r!_.∇r, w; ll=ll)
+    m._∇r!_(w; ll=ll)
 
     _∇m!(
         ∇m, w, # ouput, input
-        m.U, m.V, m._R_!._L.L, m._R_!.Sreg, m._∇r!_.∇r, m.sig, m._r!_.r, # data
+        m.U, m.V, m._R!_._L!_.L, m._R!_.Sreg, m._∇r!_.∇r, m.sig, m._r!_.r, # data
         m.jacwjacuf!, # functions
         m.S⁻¹r, m.JwJuF, m.__∇L, m._∇L, m.∇L, m.∂ⱼLLᵀ, m.∇S; # buffers
         ll=ll # kwargs
     )
     nothing
 end
-# method allocating
-function (m::∇mw)(w::AbstractVector{W}; ll::Logging.LogLevel=Logging.Warn, allocate::Bool=false) where W<:Real
-    if allocate
-        ∇m = similar(m.∇m)
-        m(∇m, w; ll=ll)
-        return ∇m
-    end
-    m(∇m, w; ll=ll)
-    return m.∇m
+# method mutate internal data
+function (m::∇mw)(w::AbstractVector{W}; ll::Logging.LogLevel=Logging.Warn) where W<:Real
+    # Compute L(w) & S(w)
+    m._R!_(w; ll=ll, transpose=false, doChol=false) 
+    # Compute residal
+    m._r!_(m.b₀, w; ll=ll)
+    # Compute jacobian of residual
+    m._∇r!_(w; ll=ll)
+
+    _∇m!(
+        m.∇m, w, # ouput, input
+        m.U, m.V, m._R!_._L!_.L, m._R!_.Sreg, m._∇r!_.∇r, m.sig, m._r!_.r, # data
+        m.jacwjacuf!, # functions
+        m.S⁻¹r, m.JwJuF, m.__∇L, m._∇L, m.∇L, m.∂ⱼLLᵀ, m.∇S; # buffers
+        ll=ll # kwargs
+    )
+    nothing
 end
 ##
 ## Hm(w) - Hessian of Maholinobis Distance
@@ -391,7 +418,7 @@ struct Hmw
     b₀::AbstractVector{<:Real}
     sig::AbstractVector{<:Real}
     # functions 
-    :!:Rw
+    _R!_::Rw
     _r!_::rw
     _∇r!_::∇rw
     jacwjacuf!::Function
@@ -459,15 +486,28 @@ end
 # method inplace
 function (m::Hmw)(H::AbstractMatrix{<:Real}, w::AbstractVector{<:Real}; ll::Logging.LogLevel=Logging.Warn)
     # TODO: try letting cholesky factorization back in here
-    m._R!_(m._R!_.R, w; transpose=false, doChol=false) 
-    m._r!_(m._r!_.r, m.b₀, w) 
-    m._∇r!_(m._∇r!_.∇r, w)
+    m._R!_(w; transpose=false, doChol=false) 
+    m._r!_(m.b₀, w) 
+    m._∇r!_(w)
     _Hm!(
         H, w,
-        m.U, m.V, m._R!_._L.L, m._R!_.Sreg, m._∇r!_.∇r, m.b₀, m.sig,
+        m.U, m.V, m._R!_._L!_.L, m._R!_.Sreg, m._∇r!_.∇r, m.b₀, m.sig,
         m._r!_.r, 
         m.jacwjacuf!, m.heswf!, m.heswjacuf!,  
         m.S⁻¹r, m.S⁻¹∇r, m.JwJuF, m.__∇L, m._∇L, m.∇L, m.∂ⱼLLᵀ, m.∇S, m.HwF, m._∇²r, m.∇²r, m.HwJuF, m.__∇²L, m._∇²L, m.∇²L, m.∂ⱼL∂ᵢLᵀ, m.∂ᵢⱼLLᵀ, m.∂ᵢⱼS, m.S⁻¹∂ⱼS, m.∂ᵢSS⁻¹∂ⱼS
     )
 end
-    
+# method mutate internal data
+function (m::Hmw)(w::AbstractVector{<:Real}; ll::Logging.LogLevel=Logging.Warn)
+    # TODO: try letting cholesky factorization back in here
+    m._R!_(w; transpose=false, doChol=false) 
+    m._r!_(m.b₀, w) 
+    m._∇r!_(w)
+    _Hm!(
+        m.H, w,
+        m.U, m.V, m._R!_._L!_.L, m._R!_.Sreg, m._∇r!_.∇r, m.b₀, m.sig,
+        m._r!_.r, 
+        m.jacwjacuf!, m.heswf!, m.heswjacuf!,  
+        m.S⁻¹r, m.S⁻¹∇r, m.JwJuF, m.__∇L, m._∇L, m.∇L, m.∂ⱼLLᵀ, m.∇S, m.HwF, m._∇²r, m.∇²r, m.HwJuF, m.__∇²L, m._∇²L, m.∇²L, m.∂ⱼL∂ᵢLᵀ, m.∂ᵢⱼLLᵀ, m.∂ᵢⱼS, m.S⁻¹∂ⱼS, m.∂ᵢSS⁻¹∂ⱼS
+    )
+end

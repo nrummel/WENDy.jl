@@ -152,7 +152,7 @@ function _Rᵀ⁻¹∇r!(
 end
 # m(w) - Maholinobis distance
 function _m(S::AbstractMatrix, r::AbstractVector, S⁻¹r::AbstractVector)
-    F = cholesky(S)
+    F = svd(S)
     ldiv!(S⁻¹r, F, r)
     1/2*dot(r, S⁻¹r)
 end
@@ -171,7 +171,7 @@ function _∇m!(
     K, _ = size(V)
     J = length(w)
     # TODO: perhaps do this inplace? 
-    F = cholesky(S) 
+    F = svd(S) 
     # precompute the S⁻¹r 
     ldiv!(S⁻¹r, F, r)
     # compute ∇L
@@ -186,6 +186,7 @@ function _∇m!(
         @views mul!(∂ⱼLLᵀ, ∇L[:,:,j], L')
         @views ∇S[:,:,j] .= ∂ⱼLLᵀ + (∂ⱼLLᵀ)'
     end
+
     # compute ∇m
     @inbounds for j in 1:J 
         @views prt0 = 2*dot(∇r[:,j], S⁻¹r)         # 2∂ⱼrᵀS⁻¹r
@@ -202,7 +203,7 @@ function _Hm!(
 )
     K,D,M,_,J = size(_∇L)
     # Hm(w) - Hessian of Maholinobis distance 
-    F = cholesky(S)
+    F = svd(S)
     ## Precompute S⁻¹(G(w)-b) and S⁻¹∂ⱼG(w)
     ldiv!(S⁻¹r, F, r)
     ldiv!(S⁻¹∇r, F, ∇r)
@@ -222,6 +223,7 @@ function _Hm!(
     @inbounds for m in 1:M 
         heswf!(view(HwF,:,:,:,m), w, view(U,:,m))
     end
+    # TODO remove: dummmy check for our particular example
     @tullio _∇²r[k,d,j1,j2] = V[k,m] * HwF[d,j1,j2,m] 
     ∇²r = reshape(_∇²r,K*D,J,J)
     ## compute ∇²L
@@ -233,27 +235,24 @@ function _Hm!(
     ∇²L = reshape(_∇²L,K*D,M*D,J,J)
     ## Compute ∇²m
     @inbounds for j = 1:J
+        # this only depends on j so we do it once
+        @views ldiv!(S⁻¹∂ⱼS, F, ∇S[:,:,j])
         for i = j:J 
             # Commpute ∂ᵢⱼS   
             @views mul!(∂ⱼL∂ᵢLᵀ, ∇L[:,:,j], (∇L[:,:,i])')
             @views mul!(∂ᵢⱼLLᵀ, ∇²L[:,:,i,j], L')
             @views ∂ᵢⱼS .= ∂ⱼL∂ᵢLᵀ + (∂ⱼL∂ᵢLᵀ)' + ∂ᵢⱼLLᵀ + (∂ᵢⱼLLᵀ)'
-            
             # compute ∂ᵢSS⁻¹∂ⱼS
-            @views ldiv!(S⁻¹∂ⱼS, F, ∇S[:,:,j])
             @views mul!(∂ᵢSS⁻¹∂ⱼS, ∇S[:,:,i], S⁻¹∂ⱼS) 
-            
+            # make the building blocks
+            @views prt0 = dot(∇²r[:,j,i], S⁻¹r)                # ∂ᵢⱼrᵀS⁻¹r
+            @views prt1 = - dot(S⁻¹∇r[:,j], ∇S[:,:,i], S⁻¹r)   # ∂ⱼrᵀ∂ᵢS⁻¹r = -(S⁻¹∂ⱼr)ᵀ∂ᵢS(S⁻¹r)
+            @views prt2 = dot(∇r[:,j], S⁻¹∇r[:,i])             # ∂ⱼrᵀS⁻¹∂ᵢr
+            @views prt3 = - 2*dot(S⁻¹∇r[:,i], ∇S[:,:,j], S⁻¹r) # 2∂ᵢrᵀ∂ⱼS⁻¹r = -(S⁻¹∂ᵢr)ᵀ∂ⱼSS⁻¹r
+            @views prt4 = - dot(S⁻¹r, ∂ᵢⱼS, S⁻¹r)              # rᵀ∂ᵢⱼS⁻¹r  = -(S⁻¹r)ᵀ∂ᵢⱼSS⁻¹r
+            @views prt5 = 2*dot(S⁻¹r, ∂ᵢSS⁻¹∂ⱼS, S⁻¹r)         #            + 2(S⁻¹r)ᵀ∂ᵢSS⁻¹∂ⱼSS⁻¹r
             # Put everything together
-            @views H[j,i] = 1/2*(
-                2*(
-                    dot(∇²r[:,j,i], S⁻¹r)              # ∂ᵢⱼrᵀS⁻¹r
-                    - dot(S⁻¹∇r[:,j], ∇S[:,:,i], S⁻¹r) # ∂ⱼrᵀ∂ᵢS⁻¹r = -(S⁻¹∂ⱼr)ᵀ∂ᵢS(S⁻¹r)
-                    + dot(∇r[:,j], S⁻¹∇r[:,i])         # ∂ⱼrᵀS⁻¹∂ᵢr
-                )
-                - 2*dot(S⁻¹∇r[:,i], ∇S[:,:,j], S⁻¹r)   # 2∂ᵢrᵀ∂ⱼS⁻¹r = -(S⁻¹∂ᵢr)ᵀ∂ⱼSS⁻¹r
-                - dot(S⁻¹r, ∂ᵢⱼS, S⁻¹r)                # rᵀ∂ᵢⱼS⁻¹r  = -(S⁻¹r)ᵀ∂ᵢⱼSS⁻¹r
-                + 2*dot(S⁻¹r, ∂ᵢSS⁻¹∂ⱼS, S⁻¹r)         #            + 2(S⁻¹r)ᵀ∂ᵢSS⁻¹∂ⱼSS⁻¹r
-            )
+            H[j,i] = 1/2*(2*(prt0+prt1+prt2) + prt3+prt4+prt5)
         end
     end
     # Only compute the upper triangular part of the hessian

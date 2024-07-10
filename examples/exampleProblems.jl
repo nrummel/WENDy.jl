@@ -1,5 +1,61 @@
-include("../src/wendyData.jl")
+using OrdinaryDiffEq, BSON, ModelingToolkit, Logging
+using OrdinaryDiffEq: ODESolution
+using ModelingToolkit: t_nounits as t, D_nounits
+using ModelingToolkit: ODESystem
 using Distributions
+## Exponential growth (mod )
+## See [ModelingToolkit.jl/examples](https://docs.sciml.ai/ModelingToolkit/stable/examples/higher_order/)
+_EXPONENTIAL_T_RNG = (0.0, 2.0)
+@mtkmodel ExponentialGrowth begin
+    @variables begin 
+        u(t) = 2.0
+    end
+    @parameters begin
+        λ = 1.1
+    end
+    @equations begin
+        D_nounits(u) ~ λ^2 * u
+    end
+end
+@mtkbuild EXPONENTIAL_SYSTEM = ExponentialGrowth()
+EXPONENTIAL_FILE = joinpath(@__DIR__, "../data/Exponential.bson")
+EXPONENTIAL = (
+    name="ExponentialGrowth", 
+    ode=EXPONENTIAL_SYSTEM,
+    tRng=_EXPONENTIAL_T_RNG,
+    M=1024,
+    file=EXPONENTIAL_FILE
+);
+## See [ModelingToolkit.jl/examples](https://docs.sciml.ai/ModelingToolkit/stable/examples/higher_order/)
+_LORENZ_T_RNG = (0.0, 100.0)
+@mtkmodel Lorenz begin
+    @variables begin 
+        xₜ(t) = 2.0
+        y(t) = 1.0
+        z(t) = 0.0
+        x(t) = 0.0
+    end
+    @parameters begin
+        σ = 28.0
+        ρ = 10.0
+        β = 8.0 / 3.0
+    end
+    @equations begin
+        D_nounits(xₜ) ~ (-x + y)*σ
+        D_nounits(y) ~ -y + x*(-z + ρ)
+        D_nounits(z) ~ x*y-z*β
+        D_nounits(x) ~ xₜ
+    end
+end
+@mtkbuild LORENZ_SYSTEM = Lorenz()
+LORENZ_FILE = joinpath(@__DIR__, "../data/Lorenz.bson")
+LORENZ = (
+    name="lorenz", 
+    ode=LORENZ_SYSTEM,
+    tRng=_LORENZ_T_RNG,
+    M=1024,
+    file=LORENZ_FILE
+);
 ## See Wendy paper
 _LOGISTIC_T_RNG = (0, 10)
 @mtkmodel LogisticGrowthModel begin
@@ -20,7 +76,8 @@ LOGISTIC_GROWTH = (
     name="logisticGrowth", 
     ode=LOGISTIC_GROWTH_SYSTEM,
     tRng=_LOGISTIC_T_RNG,M=1024,
-    file=LOGISTIC_GROWTH_FILE)
+    file=LOGISTIC_GROWTH_FILE
+)
 ## See Wendy paper
 _HINDMARSH_T_RNG = (0, 10)
 @mtkmodel HindmarshRoseModel begin
@@ -196,4 +253,7 @@ MENDES_EXAMPLES = [
 for S in _MENDES_S_VALS, P in _MENDES_P_VALS][:]
 
 ## 
-EXAMPLES = vcat([LOGISTIC_GROWTH, HINDMARSH_ROSE, LOOP], MENDES_EXAMPLES)
+EXAMPLES = vcat([EXPONENTIAL, LOGISTIC_GROWTH, HINDMARSH_ROSE, LOOP, LORENZ], MENDES_EXAMPLES);
+
+
+

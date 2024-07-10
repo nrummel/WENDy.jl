@@ -53,8 +53,13 @@ end
 function (m::NLS_iter)(wnm1::AbstractVector{<:AbstractFloat};ll::Logging.LogLevel=Logging.Warn, _ll::Logging.LogLevel=Logging.Warn)
     with_logger(ConsoleLogger(stderr,ll)) do 
         @info "  Running local optimization method"
-        RT = m._RT(wnm1)
-        b = RT \ m.b₀ 
+        try 
+            m._RT(m._RT.R, wnm1)
+        catch e 
+            @show wnm1
+            throw(e)
+        end
+        b = m._RT.R \ m.b₀ 
         KD = length(b)
 
         resn!(
@@ -62,14 +67,14 @@ function (m::NLS_iter)(wnm1::AbstractVector{<:AbstractFloat};ll::Logging.LogLeve
             w::AbstractVector, 
             ::Any; 
             ll::Logging.LogLevel=_ll
-        ) = m._res!(r, RT, b, w; ll=ll) 
+        ) = m._res!(r, b, w; ll=ll, Rᵀ=m._RT.R,) 
 
         jacn!(
             jac::AbstractMatrix, 
             w::AbstractVector, 
             ::Any; 
             ll::Logging.LogLevel=_ll
-        ) = m._jac!(jac, RT, w; ll=ll)
+        ) = m._jac!(jac, w; ll=ll, Rᵀ=m._RT.R,)
                 
         prob = NonlinearLeastSquaresProblem(
             NonlinearFunction(
@@ -79,9 +84,9 @@ function (m::NLS_iter)(wnm1::AbstractVector{<:AbstractFloat};ll::Logging.LogLeve
             ),
             wnm1
         )
-        dt = @elapsed a = @allocations sol = solve(
+        dt = @elapsed a = @allocations sol = NonlinearSolve.solve(
             prob,
-            LevenbergMarquardt();
+            NonlinearSolve.TrustRegion();
             reltol=m.reltol,
             maxiters=m.maxiters
         )
@@ -102,7 +107,7 @@ function (m::NLS_iter)(wnm1::AbstractVector{<:AbstractFloat};ll::Logging.LogLeve
 end
 
 ##
-function IRWLS(prob::AbstractWENDyProblem, p::WENDyParameters, iter::IRWLS_Iter, w0::AbstractVector{<:AbstractFloat}; ll::Logging.LogLevel=Logging.Warn, iterll::Logging.LogLevel=Logging.Warn, maxIt::Int=100, relTol::AbstractFloat=1e-10, trueIter::Union{IRWLS_Iter, Nothing}=nothing)
+function IRWLS(prob::AbstractWENDyProblem, p::WENDyParameters, iter::IRWLS_Iter, w0::AbstractVector{<:AbstractFloat}; ll::Logging.LogLevel=Logging.Warn, iterll::Logging.LogLevel=Logging.Warn, maxIt::Int=100, relTol::AbstractFloat=1e-8, trueIter::Union{IRWLS_Iter, Nothing}=nothing)
     with_logger(ConsoleLogger(stderr,ll)) do 
         @info "Initializing the linearization least squares solution  ..."
         wit = zeros(J,maxIt)

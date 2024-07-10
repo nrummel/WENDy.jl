@@ -1,10 +1,4 @@
-@info " Loading wendySymbolics"
-include("wendySymbolics.jl")
-@info " Loading wendyNoise"
-include("wendyNoise.jl")
-@info " Loading wendyTestFunctions"
-include("wendyTestFunctions.jl")
-using Random, Logging, MAT, NaNMath
+using Random, Logging, MAT
 ## Defaults values for params
 !(@isdefined  DEFAULT_TIME_SUBSAMPLE_RATE )&& const DEFAULT_TIME_SUBSAMPLE_RATE = Ref{Int}(2)
 !(@isdefined  DEFAULT_SEED )&& const DEFAULT_SEED = Ref{Int}(Int(1))
@@ -52,7 +46,7 @@ struct WENDyProblem <: AbstractWENDyProblem
     M::Int
     K::Int
     numRad::Int
-    sigTrue::AbstractFloat
+    sigTrue::AbstractVector{AbstractFloat}
     wTrue::AbstractVector{<:AbstractFloat}
     b₀::AbstractVector{<:AbstractFloat}
     sig::AbstractVector{<:AbstractFloat}
@@ -69,47 +63,44 @@ struct WENDyProblem <: AbstractWENDyProblem
     heswjacuf!::Function
 end 
 
-function _jacuf!(out, w, u)
-@inbounds begin
-        out[1] = (+)((*)((*)(2, w[3]), u[1]), (*)((*)(3, w[2]), (^)(u[1], 2)))
-        out[2] = (*)((*)(2, w[6]), u[1])
-        out[3] = w[8]
-        out[4] = w[1]
-        out[5] = w[7]
-        out[6] = 0
-        out[7] = w[4]
-        out[8] = 0
-        out[9] = w[10]
-        #= /Users/user/.julia/packages/SymbolicUtils/dtCid/src/code.jl:420 =#
-        nothing
-    end
-end
 function WENDyProblem(ex::NamedTuple,params::WENDyParameters;ll::Logging.LogLevel=Logging.Warn)
     with_logger(ConsoleLogger(stderr, ll)) do
-        wTrue = Float64[ModelingToolkit.getdefault(p) for p in parameters(ex.ode)]
+        wTrue = if :params in keys(ex) 
+            Float64.(ex.params)
+        else 
+            Float64[ModelingToolkit.getdefault(p) for p in parameters(ex.ode)]
+        end
         J = length(wTrue)
         @info "Build julia functions from symbolic expressions of ODE..."
-        _,f!     = getRHS(ex.ode)
-        jacuf! = _jacuf!
-        # _,jacuf! = getJacu(ex.ode);
-        _,jacwf! = getJacw(ex.ode);
-        _,jacwjacuf! = getJacwJacu(ex.ode);
-        _,heswf! = getHesw(ex.ode);
-        _,heswjacuf! = getHeswJacu(ex.ode);
-
+        noise_dist = :noise_dist in keys(ex) ? ex.noise_dist : Normal
+        _,f!     = getRHS(ex.ode, Val(noise_dist))
+        _,jacuf! = getJacu(ex.ode, Val(noise_dist));
+        _,jacwf! = getJacw(ex.ode, Val(noise_dist));
+        _,jacwjacuf! = getJacwJacu(ex.ode, Val(noise_dist));
+        _,heswf! = getHesw(ex.ode, Val(noise_dist));
+        _,heswjacuf! = getHeswJacu(ex.ode, Val(noise_dist));
+        
         Random.seed!(params.seed)
         @info "Load data from file..."
         tt_full, U_full = getData(ex)
+        if noise_dist == LogNormal && any(U_full .<= 0)
+            @info " Removing data that is zero so that logrithms are well defined"
+            ix = findall( all(U_full[:,m] .> 0) for m in 1:size(U_full,2))
+            tt_full = tt_full[ix]
+            U_full = U_full[:,ix]
+        end
         numRad = length(params.mtParams)
         @info "Subsample data and add noise..."
         tt = tt_full[1:params.timeSubsampleRate:end]
         U = U_full[:,1:params.timeSubsampleRate:end]
-        U, noise, noise_ratio_obs, sigTrue = :noise_dist in keys(ex) ? generateNoise(U, params.noiseRatio, Val(ex.noise_dist)) : generateNoise(U, params.noiseRatio)
         D, M = size(U)
+        U, noise, noise_ratio_obs, sigTrue = generateNoise(U, params.noiseRatio, Val(noise_dist)) 
         @info "============================="
         @info "Start of Algo..."
         @info "Estimate the noise in each dimension..."
-        sig = estimate_std(U)
+        sig = estimate_std(U, Val(noise_dist))
+        noiseEstRelErr = norm(sigTrue - sig) / norm(sigTrue)
+        @info "  Relative Error in noise estimate $noiseEstRelErr"
         @info "Build test function matrices..."
         V, Vp, Vfull = params.pruneMeth(tt,U,params.ϕ,params.Kmin,params.Kmax,params.mtParams);
         K,_ = size(V)
