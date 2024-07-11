@@ -1,24 +1,32 @@
-using ImageFiltering: imfilter, Inner # equivalent to conv
-using Distributions 
-##
-function generateNoise(U_exact::AbstractMatrix{<:Real}, noiseRatio::Real, ::Val{DT}=Val(Normal)) where DT
+## Don't add noise if it is an empirical data set
+generateNoise(data::EmpricalWENDyData, params::WENDyParameters) = (
+    data.U_full, 
+    NaN .* ones(size(data.U_full)), 
+    nothing, 
+    NaN .* ones(size(data.U_full,1))
+)
+## Add data according to the noise distribution and noise ratio
+function generateNoise(data::SimulatedWENDyData{T}, params::WENDyParameters) where T
+    !isnothing(params.seed) && Random.seed!(params.seed)
+    noiseRatio = params.noiseRatio
+    U_exact = data.U_full
     @assert noiseRatio > 0 "Noise ratio must be possitive"
     U = similar(U_exact)
     noise = similar(U_exact)
     σ = zeros(size(U,1))
-    if DT == Normal  # additive
+    if T == Normal  # additive
         mean_signals = sqrt.(mean(U_exact .^2, dims=2))
         for (d,signal) in enumerate(mean_signals)
             σ[d] = noiseRatio*signal
-            dist = DT(0, σ[d])
+            dist = T(0, σ[d])
             noise[d,:] = rand(dist,size(U_exact,2))
             U[d,:] = U_exact[d,:] + noise[d,:]
         end
-    elseif DT == LogNormal # multiplicative
+    elseif T == LogNormal # multiplicative
         mean_signals = sqrt.(mean(log.(U_exact) .^2, dims=2))
         for (d,signal) in enumerate(mean_signals)
             σ[d] = noiseRatio*signal
-            dist = DT(0,σ[d]) # lognormal with logmean of 0, and 
+            dist = T(0,σ[d]) # lognormal with logmean of 0, and 
             noise[d,:] = rand(dist,size(U_exact,2))
             U[d,:] = U_exact[d,:].*(1 .+ noise[d,:])
         end

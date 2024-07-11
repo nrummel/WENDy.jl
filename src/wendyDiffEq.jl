@@ -1,8 +1,3 @@
-using OrdinaryDiffEq, BSON, ModelingToolkit, Logging
-using OrdinaryDiffEq: ODESolution
-using ModelingToolkit: t_nounits as t, D_nounits
-using ModelingToolkit: ODESystem
-
 function _solve_ode(p::ODEProblem, t_rng::Tuple, M::Int;
 alg=Rosenbrock23(), reltol::Real=1e-8, abstol::Real=1e-8)
     t_step = (t_rng[end]-t_rng[1]) / (M-1)
@@ -30,12 +25,14 @@ function _solve_ode(ex::NamedTuple, t_rng::Tuple, M::Int; w::Union{AbstractVecto
     p = ODEProblem(ode, init_cond, t_rng, params)
     return _solve_ode(p, t_rng, M; alg=alg, reltol=reltol, abstol=abstol)
 end
-function forwardSolve(prob::AbstractWENDyProblem, ex::NamedTuple, w::AbstractVector{<:Real}; kwargs...)
+
+function forwardSolve(prob::WENDyProblem, ex::NamedTuple, w::AbstractVector{<:Real}; kwargs...)
     sol = _solve_ode(ex.ode, (prob.tt[1], prob.tt[end]), prob.M; w=w,
     kwargs...)
     return reduce(hcat, sol.u)
 end
-function forwardSolveRelErr(prob::AbstractWENDyProblem, ex::NamedTuple, w::AbstractVector{<:Real}; kwargs...)
+## compute forward solve relative error
+function forwardSolveRelErr(prob::WENDyProblem, ex::NamedTuple, w::AbstractVector{<:Real}; kwargs...)
     sol = _solve_ode(ex, (prob.tt[1], prob.tt[end]), prob.M; w=w,
     kwargs...)
     Uhat = reduce(hcat, sol.u)

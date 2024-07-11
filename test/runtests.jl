@@ -111,13 +111,13 @@ function testBuildV(;dataFile::String=joinpath(@__DIR__,"../data/buildV.mat"), l
         Vp_matlab     = data["Vp"]
         V_full_matlab = data["Vfull"];
         ## Defaults
-        mtParams  = 2 .^(0:3)
+        testFuctionRadii  = 2 .^(0:3)
         radMeth    = MtminRadMethod()
         pruneMeth  = SingularValuePruningMethod(UniformDiscritizationMethod())
         ϕ          = ExponentialTestFun()
         M, D     = size(xobs)
         Kmin      = 10
-        numRad = length(mtParams);
+        testFuctionRadii = length(testFuctionRadii);
         ## Compute mt_min/max
         mt_min, mt_max = getMtMinMax(tobs, xobs, ϕ, M, K, Kmin)
         if mt_max != mt_max_matlab 
@@ -135,14 +135,14 @@ function testBuildV(;dataFile::String=joinpath(@__DIR__,"../data/buildV.mat"), l
             return false
         end 
         ## Test discritization
-        K = _getK(Kmax, D, numRad, length(tobs))
+        K = _getK(Kmax, D, testFuctionRadii, length(tobs))
         V_full = reduce(vcat,pruneMeth.discMethod(m,tobs,ϕ,0, K) for m in mt)
         if norm(V_full - V_full_matlab) / norm(V_full_matlab) >= 1e2*eps() 
             @info "The full V mat is bad"
             return false 
         end
         ##
-        V,Vp = pruneMeth(tobs,xobs,ϕ,Kmin,Kmax,mtParams);
+        V,Vp = pruneMeth(tobs,xobs,ϕ,Kmin,Kmax,testFuctionRadii);
         if norm(V - V_matlab) / norm(V_matlab) >= 1e2*eps() 
             @info "The V mat is bad"
             return false 
@@ -246,7 +246,7 @@ function test_VVp_Hindmarsh(;dataFile::String=joinpath(@__DIR__, "../data/Lw_hin
         V_matlab = data["V"]
         Vp_matlab = data["Vp"]
         ##
-        V,Vp,Vfull = pruneMeth(tobs,uobs,ϕ,Kmin,Kmax,mtParams);
+        V,Vp,Vfull = pruneMeth(tobs,uobs,ϕ,Kmin,Kmax,testFuctionRadii);
 
         return n(orm(V - diagm(sign.(diag(V * V_matlab'))) * V_matlab ) / norm(V_matlab) < 1e2*eps() 
             && norm(Vp - diagm(sign.(diag(Vp * Vp_matlab'))) * Vp_matlab ) / norm(Vp_matlab) < 1e2*eps())
