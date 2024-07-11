@@ -19,5 +19,9 @@ _FTZ_PARAM_RNG = NaN              # Not mentioned in paper
     end
 end
 @mtkbuild FITZHUG_NAGUMO_SYSTEM = FitzHugNagumo()
-FITZHUG_NAGUMO_FILE = joinpath(@__DIR__, "../data/FitzHug_Nagumo.bson")
-FITZHUG_NAGUMO = (name="fitzHugNagumo", ode=FITZHUG_NAGUMO_SYSTEM, tRng=_FITZ_T_RNG,M=1024, file=FITZHUG_NAGUMO_FILE)
+FITZHUG_NAGUMO = SimulatedWENDyData(
+    "fitzHugNagumo",
+    FITZHUG_NAGUMO_SYSTEM,
+    _FITZ_T_RNG,
+    1024,
+);

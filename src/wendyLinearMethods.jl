@@ -43,7 +43,7 @@ function LinearCovarianceFactor(prob::LinearWENDyProblem, params::Union{Nothing,
     )
 end
 # method inplace 
-function (m::LinearCovarianceFactor)(L::AbstractMatrix, w::AbstractVector{<:Real}; ll::Logging.LogLevel=Logging.Info) 
+function (m::LinearCovarianceFactor)(L::AbstractMatrix, w::AbstractVector{<:Real}; ll::LogLevel=Info) 
     _L!(
         L,w,
         m.L₁,m.L₀;
@@ -52,7 +52,7 @@ function (m::LinearCovarianceFactor)(L::AbstractMatrix, w::AbstractVector{<:Real
     nothing
 end
 # method mutate internal data 
-function (m::LinearCovarianceFactor)(w::AbstractVector{<:Real}; ll::Logging.LogLevel=Logging.Info) 
+function (m::LinearCovarianceFactor)(w::AbstractVector{<:Real}; ll::LogLevel=Info) 
     _L!(
         m.L,w,
         m.L₁,m.L₀;
@@ -65,7 +65,7 @@ struct LinearGradientCovarianceFactor<:GradientCovarianceFactor
     # output
     ∇L::AbstractMatrix{<:Real}
 end 
-function LinearGradientCovarianceFactor(prob, params, ::Val{T}=Val(Float64))
+function LinearGradientCovarianceFactor(prob, params, ::Val{T}=Val(Float64)) where T<:Real
     K,M,D,J = prob.K, prob.M, prob.D, prob.J
     jacuf! = prob.jacuf!
     L₁ = zeros(T, K*D, K*M,J)
@@ -102,7 +102,7 @@ function LinearResidual(prob::WENDyProblem, params::Union{WENDyParameters, Nothi
     LinearResidual(r,prob.G,g)
 end
 # method inplace 
-function (m::LinearResidual)(r::AbstractVector{<:Real}, b::AbstractVector{<:Real}, w::AbstractVector{T}; ll::Logging.LogLevel=Logging.Warn, Rᵀ::Union{Nothing,AbstractMatrix{<:Real}}=nothing) where T<:Real 
+function (m::LinearResidual)(r::AbstractVector{<:Real}, b::AbstractVector{<:Real}, w::AbstractVector{T}; ll::LogLevel=Warn, Rᵀ::Union{Nothing,AbstractMatrix{<:Real}}=nothing) where T<:Real 
     if isnothing(Rᵀ)
         _r!(
             r, w, 
@@ -120,7 +120,7 @@ function (m::LinearResidual)(r::AbstractVector{<:Real}, b::AbstractVector{<:Real
     nothing
 end
 # method mutate internal data 
-function (m::LinearResidual)(b::AbstractVector{<:Real}, w::AbstractVector{T}; ll::Logging.LogLevel=Logging.Warn, Rᵀ::Union{Nothing,AbstractMatrix{<:Real}}=nothing) where T<:Real 
+function (m::LinearResidual)(b::AbstractVector{<:Real}, w::AbstractVector{T}; ll::LogLevel=Warn, Rᵀ::Union{Nothing,AbstractMatrix{<:Real}}=nothing) where T<:Real 
     if isnothing(Rᵀ)
         _r!(
             m.r, w, 
@@ -147,7 +147,7 @@ function LinearGradientResidual(prob::LinearWENDyProblem, params::Union{WENDyPar
     LinearGradientResidual(similar(prob.G), prob.G, similar(prob.b₀))
 end
 # method inplace 
-function (m::LinearGradientResidual)(Rᵀ⁻¹∇r::AbstractMatrix{<:Real}, w::AbstractVector{<:Real}; ll::Logging.LogLevel=Logging.Warn, Rᵀ::Union{Nothing,AbstractMatrix{<:Real}}=nothing)
+function (m::LinearGradientResidual)(Rᵀ⁻¹∇r::AbstractMatrix{<:Real}, w::AbstractVector{<:Real}; ll::LogLevel=Warn, Rᵀ::Union{Nothing,AbstractMatrix{<:Real}}=nothing)
     mul!(m.g, m.G, w)
     if isnothing(Rᵀ)
         @views Rᵀ⁻¹∇r .= m.g
@@ -156,7 +156,7 @@ function (m::LinearGradientResidual)(Rᵀ⁻¹∇r::AbstractMatrix{<:Real}, w::A
     nothing
 end 
 # method mutate internal data 
-function (m::LinearGradientResidual)(w::AbstractVector{<:Real}; ll::Logging.LogLevel=Logging.Warn, Rᵀ::Union{Nothing,AbstractMatrix{<:Real}}=nothing)
+function (m::LinearGradientResidual)(w::AbstractVector{<:Real}; ll::LogLevel=Warn, Rᵀ::Union{Nothing,AbstractMatrix{<:Real}}=nothing)
     mul!(m.g, m.G, w)
     if isnothing(Rᵀ)
         @views m.Rᵀ⁻¹∇r .= m.g
@@ -213,7 +213,7 @@ function LinearHesianMahalanobisDistance(prob::WENDyProblem, params::WENDyParame
     )
 end
 # method inplace
-function (m::LinearHesianMahalanobisDistance)(H::AbstractMatrix{<:Real}, w::AbstractVector{<:Real}; ll::Logging.LogLevel=Logging.Warn)
+function (m::LinearHesianMahalanobisDistance)(H::AbstractMatrix{<:Real}, w::AbstractVector{<:Real}; ll::LogLevel=Warn)
     # TODO: try letting cholesky factorization back in here
     m.R!(w; transpose=false, doChol=false) 
     m.r!(m.b₀, w) 
@@ -227,7 +227,7 @@ function (m::LinearHesianMahalanobisDistance)(H::AbstractMatrix{<:Real}, w::Abst
     )
 end
 # method mutate internal data
-function (m::LinearHesianMahalanobisDistance)(w::AbstractVector{<:Real}; ll::Logging.LogLevel=Logging.Warn)
+function (m::LinearHesianMahalanobisDistance)(w::AbstractVector{<:Real}; ll::LogLevel=Warn)
     # TODO: try letting cholesky factorization back in here
     m.R!(w; transpose=false, doChol=false) 
     m.r!(m.b₀, w) 

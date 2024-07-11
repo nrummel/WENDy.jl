@@ -28,10 +28,9 @@ _GOODWIN_LPARAM_RNG = NaN                     # Not mentioned in paper
 end
 @mtkbuild GOODWIN_SYSTEM = GoodwinModel()
 GOODWIN_FILE = joinpath(@__DIR__, "../data/goodwin.bson")
-GOODWIN = (
-    name="Goodwin", 
-    ode=GOODWIN_SYSTEM, 
-    tRng=_GOODWIN_T_RNG,
-    M=1024, 
-    file=GOODWIN_FILE
-)
+GOODWIN = SimulatedWENDyData(
+    "Goodwin", 
+    GOODWIN_SYSTEM, 
+    _GOODWIN_T_RNG,
+    1024, 
+);

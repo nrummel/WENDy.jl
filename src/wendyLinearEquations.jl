@@ -1,7 +1,7 @@
 ## Equations that work if the ode rhs is linear in w
 # L₁ - this is the gradient/jacobian of L(w) when L is linear 
 function _L₁!(
-    L₁::AbstractVector{<:Real,3}, 
+    L₁::AbstractArray{<:Real,3}, 
     jacuf!::Function, 
     JuF::AbstractArray{<:Real, 3},
     _∂Lⱼ::AbstractArray{<:Real, 4},
@@ -20,19 +20,19 @@ function _L₁!(
     end
     nothing
 end
-# L(w)
+## L(w)
 function _L!(
     L::AbstractMatrix{<:Real},w::AbstractVector{<:Real}, # output/input
     L₁::AbstractArray{<:Real}, L₀::AbstractMatrix{<:Real}; # data
-    ll::Logging.LogLevel=Logging.Warn # kwargs
+    ll::LogLevel=Warn # kwargs
 ) 
     @tullio L[k,m] = L₁[k,m,j]*w[j] + L₀
     nothing
 end
-# G(w)
+## G(w)
 function _g!(g::AbstractVector, w::AbstractVector, # output/input
     G::AbstractMatrix{<:Real}, # data
-    ll::Logging.LogLevel=Logging.Warn #kwargs
+    ll::LogLevel=Warn #kwargs
 )
     mul!(g, G, w)
     nothing
@@ -41,7 +41,7 @@ end
 function _r!(
     r::AbstractVector, w::AbstractVector, # output/input
     G::AbstractMatrix, b₀::AbstractVector; # data
-    ll::Logging.LogLevel=Logging.Warn #kwargs
+    ll::LogLevel=Warn #kwargs
 ) 
     _g!(r, w, G; ll=ll)
     @views r .-= b₀
@@ -51,7 +51,7 @@ end
 function _Rᵀr!(r::AbstractVector, w::AbstractVector, # output/input
      G::AbstractMatrix{<:Real}, Rᵀ::AbstractMatrix, b::AbstractVector, # Data
      g::AbstractVector; # buffeers   
-     ll::Logging.LogLevel=Logging.Warn #kwargs
+     ll::LogLevel=Warn #kwargs
 ) 
     _g!(g, w, G; ll=ll)
     ldiv!(r, LowerTriangular(Rᵀ), g)
@@ -65,7 +65,7 @@ function _Hm!(
     r::AbstractVector{<:Real}, 
     S⁻¹r::AbstractVector{<:Real}, S⁻¹∇r::AbstractMatrix{<:Real}, 
     ∂ⱼLLᵀ::AbstractMatrix{<:Real}, ∇S::AbstractArray{<:Real, 3}, 
-    ∂ⱼL∂ᵢLᵀ::AbstractMatrix{<:Real}, ∂ᵢⱼS::AbstracMatrix{<:Real}, S⁻¹∂ⱼS::AbstractMatrix{<:Real}, ∂ᵢSS⁻¹∂ⱼS::AbstractMatrix{<:Real}
+    ∂ⱼL∂ᵢLᵀ::AbstractMatrix{<:Real}, ∂ᵢⱼS::AbstractMatrix{<:Real}, S⁻¹∂ⱼS::AbstractMatrix{<:Real}, ∂ᵢSS⁻¹∂ⱼS::AbstractMatrix{<:Real}
 )
     K,D,M,_,J = size(_∇L)
     # Hm(w) - Hessian of Maholinobis distance 

@@ -15,7 +15,7 @@ nothing
 ##
 ex = HINDMARSH_ROSE
 params = WENDyParameters(;noiseRatio=0.05)
-wendyProb = _MATLAB_WENDyProblem(ex, params;ll=Logging.Info)
+wendyProb = _MATLAB_WENDyProblem(ex, params;ll=Info)
 wTrue = wendyProb.wTrue
 J = length(wTrue)
 w0 = wendyProb._matdata["w0"][:]
@@ -102,7 +102,7 @@ relErr < eps()*1e2 ? (@info "wits in spec (relerr = $relErr) with matlab") : (@w
 iter = NLS_iter(wendyProb, params; maxiters=10)
 dt = @elapsed a = @allocations what, wit, resit = IRWLS(
     wendyProb, params, iter, w0;
-    # ll=Logging.Info, iterll=Logging.Info, trueIter=iterLin
+    # ll=Info, iterll=Info, trueIter=iterLin
 )
 @info """   
     iterations  = $(size(wit,2)-1)

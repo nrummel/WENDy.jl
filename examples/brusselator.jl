@@ -1,7 +1,7 @@
 ## Following from https://docs.sciml.ai/ModelingToolkit/stable/examples/sparse_jacobians/
 BRUSSELATOR_N = 5
 xyd_brusselator = range(0, stop = 1, length = BRUSSELATOR_N)
-BRUSSELATOR_PARAMS = (3.4, 1.0, 10.0)
+BRUSSELATOR_PARAMS = [3.4, 1.0, 10.0]
 BRUSSELATOR_T_RNG = (0.0, 11.5)
 BRUSSELATOR_FILE = joinpath(@__DIR__, "../data/brusselator.bson")
 
@@ -46,12 +46,12 @@ BRUSSELATOR_ODE = ODEProblem(
     BRUSSELATOR_PARAMS
 )
 @mtkbuild BRUSSELATOR_SYS = modelingtoolkitize(BRUSSELATOR_ODE)
-BRUSSELATOR = (
-    name="Brusselator", 
-    ode=BRUSSELATOR_SYS,
-    tRng=BRUSSELATOR_T_RNG,
-    M=1024,
-    file=BRUSSELATOR_FILE,
-    init_cond=BRUSSELATOR_INIT_COND[:],
-    params=BRUSSELATOR_PARAMS
+BRUSSELATOR = SimulatedWENDyData(
+    "Brusselator", 
+    BRUSSELATOR_SYS,
+    BRUSSELATOR_T_RNG,
+    1024;
+    initCond=BRUSSELATOR_INIT_COND[:],
+    trueParameters=BRUSSELATOR_PARAMS,
+    linearInParameters=Val(true)
 );

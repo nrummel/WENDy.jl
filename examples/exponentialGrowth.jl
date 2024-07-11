@@ -13,11 +13,10 @@ _EXPONENTIAL_T_RNG = (0.0, 2.0)
     end
 end
 @mtkbuild EXPONENTIAL_SYSTEM = ExponentialGrowth()
-EXPONENTIAL_FILE = joinpath(@__DIR__, "../data/Exponential.bson")
-EXPONENTIAL = (
-    name="ExponentialGrowth", 
-    ode=EXPONENTIAL_SYSTEM,
-    tRng=_EXPONENTIAL_T_RNG,
-    M=1024,
-    file=EXPONENTIAL_FILE
+EXPONENTIAL = SimulatedWENDyData(
+    "ExponentialGrowth", 
+    EXPONENTIAL_SYSTEM,
+    _EXPONENTIAL_T_RNG,
+    1024;
+    linearInParameters=Val(true)
 );

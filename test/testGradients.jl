@@ -7,7 +7,7 @@ p = rand()
 f(x) = dot(q, x) + p
 g(x) = q 
 p,_ = gradientCheck(f, g, w0; 
-ll=Logging.Info, scaling=1e-8,makePlot=true)
+ll=Info, scaling=1e-8,makePlot=true)
 p
 ## check the weighted residual
 _RT = Rw(wendyProb, params)
@@ -19,18 +19,18 @@ v = rand(length(b))
 f(w) = dot(_r(RT0,b,w), v)
 grad(w) = _∇r(RT0,w)' * v
 p,_ = gradientCheck(f, grad, w0; 
-ll=Logging.Info, scaling=1e-8,makePlot=true)
+ll=Info, scaling=1e-8,makePlot=true)
 p
 ## 
 ∇m(w) = _∇m(w)
 p,_ = gradientCheck(m, ∇m, w0; 
-ll=Logging.Info, scaling=1e-8,makePlot=true)
+ll=Info, scaling=1e-8,makePlot=true)
 PlotlyJS.relayout!(p, title="Maholinobis Distance")
 p
 ## 
 ∇m(w) = FiniteDiff.finite_difference_gradient(_m, w)
 p,_ = gradientCheck(m, ∇m, w0; 
-ll=Logging.Info, scaling=1e-8,makePlot=true)
+ll=Info, scaling=1e-8,makePlot=true)
 PlotlyJS.relayout!(p, title="Maholinobis Distance (using FiniteDiff)")
 p
 ## Check hessian
@@ -76,7 +76,7 @@ function g(w)
     H0
 end
 p,_ = gradientCheck(f, g, w0; 
-ll=Logging.Info, scaling=1e-8,makePlot=true)
+ll=Info, scaling=1e-8,makePlot=true)
 PlotlyJS.relayout!(p, title="Maholinobis Distance Hessian")
 p
 ##
@@ -89,6 +89,6 @@ function g(w)
     return H*e1
 end
 p,_ = gradientCheck(f, g, w0; 
-ll=Logging.Info, scaling=1e-8,makePlot=true)
+ll=Info, scaling=1e-8,makePlot=true)
 PlotlyJS.relayout!(p, title="Maholinobis Distance Hessian(finite Differences)")
 p

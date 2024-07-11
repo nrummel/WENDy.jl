@@ -21,13 +21,11 @@
     end
 end
 @mtkbuild ROBERTSON_SYSTEM = Robertson()
-_ROBERTSON_T_RNG = (0, 1e2)
-ROBERTSON_FILE = joinpath(@__DIR__, "../data/Robertson.bson")
-ROBERTSON = (
-    name="Robertson", 
-    ode=ROBERTSON_SYSTEM,
-    tRng=_ROBERTSON_T_RNG,
-    M=1025,
-    file=ROBERTSON_FILE, 
-    noise_dist=LogNormal
+_ROBERTSON_T_RNG = (0.0, 1e2)
+ROBERTSON = SimulatedWENDyData(
+    "Robertson", 
+    ROBERTSON_SYSTEM,
+    _ROBERTSON_T_RNG,
+    1025; # add one extra for the init cond being 0
+    noiseDist=Val(LogNormal)
 );

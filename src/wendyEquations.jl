@@ -16,7 +16,7 @@ function _R!(
     R::AbstractMatrix{<:Real}, w::AbstractVector{<:Real}, # output/input
     L::AbstractMatrix{<:Real}, diagReg::AbstractFloat, # data
     thisI::AbstractMatrix{<:Real}, Sreg::AbstractMatrix{<:Real}, S::AbstractMatrix{<:Real}; # buffers
-    doChol::Bool=true, ll::Logging.LogLevel=Logging.Warn #kwargs
+    doChol::Bool=true, ll::LogLevel=Warn #kwargs
 ) 
     mul!(S, L, L')
     @views Sreg .= thisI
@@ -43,7 +43,7 @@ function _∇m!(
     ∇m::AbstractVector{<:Real},w::AbstractVector{<:Real},
     ∇L::AbstractArray{<:Real,3}, L::AbstractMatrix{<:Real}, S::AbstractMatrix{<:Real}, ∇r::AbstractMatrix{<:Real}, r::AbstractVector{<:Real},
     S⁻¹r::AbstractVector{<:Real}, ∂ⱼLLᵀ::AbstractMatrix{<:Real}, ∇S::AbstractArray{<:Real,3};
-    ll::Logging.LogLevel=Logging.Warn
+    ll::LogLevel=Warn
 )
     D, M = size(U)
     K, _ = size(V)

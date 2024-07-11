@@ -6,7 +6,7 @@ generateNoise(data::EmpricalWENDyData, params::WENDyParameters) = (
     NaN .* ones(size(data.U_full,1))
 )
 ## Add data according to the noise distribution and noise ratio
-function generateNoise(data::SimulatedWENDyData{T}, params::WENDyParameters) where T
+function generateNoise(data::SimulatedWENDyData{T, DistType}, params::WENDyParameters) where {T,DistType<:Distribution}
     !isnothing(params.seed) && Random.seed!(params.seed)
     noiseRatio = params.noiseRatio
     U_exact = data.U_full
@@ -14,19 +14,21 @@ function generateNoise(data::SimulatedWENDyData{T}, params::WENDyParameters) whe
     U = similar(U_exact)
     noise = similar(U_exact)
     σ = zeros(size(U,1))
-    if T == Normal  # additive
+    if DistType == Normal  # additive
+        #TODO: Check with dan here
         mean_signals = sqrt.(mean(U_exact .^2, dims=2))
         for (d,signal) in enumerate(mean_signals)
-            σ[d] = noiseRatio*signal
-            dist = T(0, σ[d])
+            σ[d] = noiseRatio*sqrt(signal) # TODO: HERE
+            dist = DistType(0, σ[d])
             noise[d,:] = rand(dist,size(U_exact,2))
             U[d,:] = U_exact[d,:] + noise[d,:]
         end
-    elseif T == LogNormal # multiplicative
-        mean_signals = sqrt.(mean(log.(U_exact) .^2, dims=2))
-        for (d,signal) in enumerate(mean_signals)
-            σ[d] = noiseRatio*signal
-            dist = T(0,σ[d]) # lognormal with logmean of 0, and 
+    elseif DistType == LogNormal # multiplicative
+        #TODO check with dan
+        # mean_signals = sqrt.(mean(log.(U_exact) .^2, dims=2))
+        σ .= noiseRatio
+        for (d,signal) in enumerate(mean_signals)   
+            dist = DistType(0,σ[d]) # lognormal with logmean of 0, and 
             noise[d,:] = rand(dist,size(U_exact,2))
             U[d,:] = U_exact[d,:].*(1 .+ noise[d,:])
         end
@@ -38,10 +40,10 @@ function generateNoise(data::SimulatedWENDyData{T}, params::WENDyParameters) whe
     return U,noise,noise_ratio_obs,σ
 end
 ## estimate the standard deviation of noise by filtering then computing rmse
-function estimate_std(_uobs::AbstractMatrix{<:Real}, ::Val{T}; k::Int=6) where T<:Distribution
-    uobs = if T == LogNormal
+function estimate_std(_uobs::AbstractMatrix{<:Real}, ::Val{DistType}; k::Int=6) where DistType<:Distribution
+    uobs = if DistType == LogNormal
        log.(_uobs)
-    elseif T == Normal
+    elseif DistType == Normal
         _uobs
     else 
         throw(ArgumentError("Only Implemented for  Normal and LogNormal"),)
@@ -57,48 +59,38 @@ function estimate_std(_uobs::AbstractMatrix{<:Real}, ::Val{T}; k::Int=6) where T
     end
     return std
 end
-
+"""
+Compute coefficients for finite difference approximation for the
+derivative of order k at xbar based on grid values at points in x.
+This function returns a row vector c of dimension 1 by n, where n=length(x),
+containing coefficients to approximate u^{(k)}(xbar), 
+the k'th derivative of u evaluated at xbar,  based on n values
+of u at x(1), x(2), ... x(n).  
+If U is a column vector containing u(x) at these n points, then 
+c*U will give the approximation to u^{(k)}(xbar).
+Note for k=0 this can be used to evaluate the interpolating polynomial 
+itself.
+Requires length(x) > k.  
+Usually the elements x(i) are monotonically increasing
+and x(1) <= xbar <= x(n), but neither condition is required.
+The x values need not be equally spaced but must be distinct.  
+This program should give the same results as fdcoeffV.m, but for large
+values of n is much more stable numerically.
+Based on the program "weights" in 
+B. Fornberg, "Calculation of weights in finite difference formulas",
+SIAM Review 40 (1998), pp. 685-691.
+Note: Forberg's algorithm can be used to simultaneously compute the
+coefficients for derivatives of order 0, 1, ..., m where m <= n-1.
+This gives a coefficient matrix C(1:n,1:m) whose k'th column gives
+the coefficients for the k'th derivative.
+In this version we set m=k and only compute the coefficients for
+derivatives of order up to order k, and then return only the k'th column
+of the resulting C matrix (converted to a row vector).  
+This routine is then compatible with fdcoeffV.   
+It can be easily modified to return the whole array if desired.
+From  http://www.amath.washington.edu/~rjl/fdmbook/  (2007)
+"""
 function fdcoeffF(k,xbar,x)
-    # Compute coefficients for finite difference approximation for the
-    # derivative of order k at xbar based on grid values at points in x.
-    #
-    # This function returns a row vector c of dimension 1 by n, where n=length(x),
-    # containing coefficients to approximate u^{(k)}(xbar), 
-    # the k'th derivative of u evaluated at xbar,  based on n values
-    # of u at x(1), x(2), ... x(n).  
-    #
-    # If U is a column vector containing u(x) at these n points, then 
-    # c*U will give the approximation to u^{(k)}(xbar).
-    #
-    # Note for k=0 this can be used to evaluate the interpolating polynomial 
-    # itself.
-    #
-    # Requires length(x) > k.  
-    # Usually the elements x(i) are monotonically increasing
-    # and x(1) <= xbar <= x(n), but neither condition is required.
-    # The x values need not be equally spaced but must be distinct.  
-    #
-    # This program should give the same results as fdcoeffV.m, but for large
-    # values of n is much more stable numerically.
-    #
-    # Based on the program "weights" in 
-    #   B. Fornberg, "Calculation of weights in finite difference formulas",
-    #   SIAM Review 40 (1998), pp. 685-691.
-    #
-    # Note: Forberg's algorithm can be used to simultaneously compute the
-    # coefficients for derivatives of order 0, 1, ..., m where m <= n-1.
-    # This gives a coefficient matrix C(1:n,1:m) whose k'th column gives
-    # the coefficients for the k'th derivative.
-    #
-    # In this version we set m=k and only compute the coefficients for
-    # derivatives of order up to order k, and then return only the k'th column
-    # of the resulting C matrix (converted to a row vector).  
-    # This routine is then compatible with fdcoeffV.   
-    # It can be easily modified to return the whole array if desired.
-    #
-    # From  http://www.amath.washington.edu/~rjl/fdmbook/  (2007)
-    
-    
     n = length(x)
     if k >= n
        @error "*** length(x) must be larger than k"

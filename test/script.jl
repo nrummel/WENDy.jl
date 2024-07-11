@@ -1,14 +1,17 @@
 using Revise
-push!(LOAD_PATH, joinpath(@__DIR__, "../src"))
-using WENDy
+# push!(LOAD_PATH, joinpath(@__DIR__, "../src"))
+# using WENDy
+includet(joinpath(@__DIR__, "../src/WENDy.jl"))
+includet(joinpath(@__DIR__, "../examples/exampleProblems.jl"))
 ##
-for ex in WENDy.EXAMPLES 
+ex = LOGISTIC_GROWTH
 params = WENDyParameters(;
     noiseRatio=0.01, 
     seed=Int(1), 
-    timeSubsampleRate=1
+    timeSubsampleRate=2
 )
-wendyProb = WENDyProblem(ex, params; ll=Logging.Info)
+wendyProb = WENDyProblem(ex, params; ll=Info)
+##
 wTrue = wendyProb.wTrue
 J = length(wTrue)
 μ = .1
@@ -64,9 +67,9 @@ end
     wendyProb, params, iter, w0; 
     relTol=1e-8,
     maxIt=1000
-    # ll=Logging.Info, 
+    # ll=Info, 
     # trueIter=iterLin, 
-    # iterll=Logging.Info
+    # iterll=Info
 )
 relErr = norm(wirwls - wTrue) / norm(wTrue)
 fsRelErr = try

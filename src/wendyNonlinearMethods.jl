@@ -43,7 +43,7 @@ function NonlinearCovarianceFactor(prob::WENDyProblem, params::Union{WENDyParame
     )
 end
 # method inplace 
-function (m::NonlinearCovarianceFactor)(L::AbstractMatrix, w::AbstractVector{<:Real}; ll::Logging.LogLevel=Logging.Info) 
+function (m::NonlinearCovarianceFactor)(L::AbstractMatrix, w::AbstractVector{<:Real}; ll::LogLevel=Info) 
     _L!(
         L,w,
         m.U,m.V,m.L₀,m.sig,
@@ -54,7 +54,7 @@ function (m::NonlinearCovarianceFactor)(L::AbstractMatrix, w::AbstractVector{<:R
     nothing
 end
 # method mutate internal data 
-function (m::NonlinearCovarianceFactor)(w::AbstractVector{<:Real}; ll::Logging.LogLevel=Logging.Info) 
+function (m::NonlinearCovarianceFactor)(w::AbstractVector{<:Real}; ll::LogLevel=Info) 
     _L!(
         m.L,w,
         m.U,m.V,m.L₀,m.sig,
@@ -95,7 +95,7 @@ function NonlinearResidual(prob::WENDyProblem, params::Union{WENDyParameters, No
     NonlinearResidual(prob.U, prob.V, prob.f!, Val(T))
 end
 # method inplace 
-function (m::NonlinearResidual)(r::AbstractVector{<:Real}, b::AbstractVector{<:Real}, w::AbstractVector{T}; ll::Logging.LogLevel=Logging.Warn, Rᵀ::Union{Nothing,AbstractMatrix{<:Real}}=nothing) where T<:Real 
+function (m::NonlinearResidual)(r::AbstractVector{<:Real}, b::AbstractVector{<:Real}, w::AbstractVector{T}; ll::LogLevel=Warn, Rᵀ::Union{Nothing,AbstractMatrix{<:Real}}=nothing) where T<:Real 
     if isnothing(Rᵀ)
         _r!(
             r,w, 
@@ -116,7 +116,7 @@ function (m::NonlinearResidual)(r::AbstractVector{<:Real}, b::AbstractVector{<:R
     nothing
 end
 # method mutate internal data 
-function (m::NonlinearResidual)(b::AbstractVector{<:Real}, w::AbstractVector{T}; ll::Logging.LogLevel=Logging.Warn, Rᵀ::Union{Nothing,AbstractMatrix{<:Real}}=nothing) where T<:Real 
+function (m::NonlinearResidual)(b::AbstractVector{<:Real}, w::AbstractVector{T}; ll::LogLevel=Warn, Rᵀ::Union{Nothing,AbstractMatrix{<:Real}}=nothing) where T<:Real 
     if isnothing(Rᵀ)
         _r!(
             m.r,w, 
@@ -167,7 +167,7 @@ function NonlinearGradientResidual(prob::WENDyProblem, params::Union{WENDyParame
     NonlinearGradientResidual(prob.U, prob.V, prob.jacwf!, prob.J, Val(T))
 end
 # method inplace 
-function (m::NonlinearGradientResidual)(Rᵀ⁻¹∇r::AbstractMatrix{<:Real}, w::AbstractVector{<:Real}; ll::Logging.LogLevel=Logging.Warn, Rᵀ::Union{Nothing,AbstractMatrix{<:Real}}=nothing)
+function (m::NonlinearGradientResidual)(Rᵀ⁻¹∇r::AbstractMatrix{<:Real}, w::AbstractVector{<:Real}; ll::LogLevel=Warn, Rᵀ::Union{Nothing,AbstractMatrix{<:Real}}=nothing)
     if isnothing(Rᵀ)
         _∇r!(
             Rᵀ⁻¹∇r,w, # in this context Rᵀ⁻¹∇r === ∇r
@@ -188,7 +188,7 @@ function (m::NonlinearGradientResidual)(Rᵀ⁻¹∇r::AbstractMatrix{<:Real}, w
     nothing
 end 
 # method mutate internal data 
-function (m::NonlinearGradientResidual)(w::AbstractVector{<:Real}; ll::Logging.LogLevel=Logging.Warn, Rᵀ::Union{Nothing,AbstractMatrix{<:Real}}=nothing)
+function (m::NonlinearGradientResidual)(w::AbstractVector{<:Real}; ll::LogLevel=Warn, Rᵀ::Union{Nothing,AbstractMatrix{<:Real}}=nothing)
     if isnothing(Rᵀ)
         _∇r!(
             m.∇r,w, 
@@ -278,7 +278,7 @@ function HesianMahalanobisDistance(prob::WENDyProblem, params::WENDyParameters, 
     )
 end
 # method inplace
-function (m::HesianMahalanobisDistance)(H::AbstractMatrix{<:Real}, w::AbstractVector{<:Real}; ll::Logging.LogLevel=Logging.Warn)
+function (m::HesianMahalanobisDistance)(H::AbstractMatrix{<:Real}, w::AbstractVector{<:Real}; ll::LogLevel=Warn)
     # TODO: try letting cholesky factorization back in here
     m.R!(w; transpose=false, doChol=false) 
     m.r!(m.b₀, w) 
@@ -293,7 +293,7 @@ function (m::HesianMahalanobisDistance)(H::AbstractMatrix{<:Real}, w::AbstractVe
     )
 end
 # method mutate internal data
-function (m::HesianMahalanobisDistance)(w::AbstractVector{<:Real}; ll::Logging.LogLevel=Logging.Warn)
+function (m::HesianMahalanobisDistance)(w::AbstractVector{<:Real}; ll::LogLevel=Warn)
     # TODO: try letting cholesky factorization back in here
     m.R!(w; transpose=false, doChol=false) 
     m.r!(m.b₀, w) 

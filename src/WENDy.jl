@@ -1,4 +1,4 @@
-module WENDy
+# module WENDy
 
 ## external dependencies
 # optimization algorithms
@@ -13,7 +13,7 @@ using ModelingToolkit: t_nounits as t, D_nounits
 using ModelingToolkit: ODESystem
 using Symbolics: @variables
 # Other Necessities
-using BSON
+using BSON, MAT
 using Distributions: Normal, LogNormal, Distribution
 using ImageFiltering: imfilter, Inner # Convolution in Julia
 using FFTW: fft, ifft
@@ -21,15 +21,22 @@ using Tullio: @tullio
 using LoopVectorization
 # stdlib
 using LinearAlgebra, Statistics, Random, Logging 
-
+using Logging: Info, Warn, LogLevel
 __precompile__(false)
 
-include("wendyEquations.jl")
-include("wendyMethods.jl")
-include("wendyNoise.jl")
-include("wendySymbolics.jl")
-include("wendyProblems.jl")
-include("exampleProblems.jl")
+includet("wendyTestFunctions.jl")
+includet("wendyData.jl")
+includet("wendyNoise.jl")
+includet("wendySymbolics.jl")
+includet("wendyProblems.jl")
+includet("wendyDiffEq.jl")
+includet("wendyEquations.jl")
+includet("wendyLinearEquations.jl")
+includet("wendyNonlinearEquations.jl")
+includet("wendyMethods.jl")
+includet("wendyLinearMethods.jl")
+includet("wendyNonlinearMethods.jl")
+includet("wendyOptim.jl")
 
-export Wend
-end # module
+# export #TODO: figure out this
+# end # module

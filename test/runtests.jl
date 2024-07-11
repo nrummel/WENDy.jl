@@ -20,7 +20,7 @@ function plotTestData(lg, hind, fitz, loop, mendes)
     end
 end
 ##
-function testCreateTestData(;ll::Logging.LogLevel=Logging.Warn, plotFlag=false) 
+function testCreateTestData(;ll::LogLevel=Warn, plotFlag=false) 
     lg, hind, fitz, loop, mendes = create_test_data(;ll=ll);
     if plotFlag
         plotTestData(lg, hind, fitz, loop, mendes)
@@ -30,7 +30,7 @@ end
 ##
 function testEstimateNoise(;
     dataFile::String=joinpath(@__DIR__,"../data/estimateNoiseTestProblem.mat"),
-    ll::Logging.LogLevel=Logging.Warn 
+    ll::LogLevel=Warn 
 )
     with_logger(ConsoleLogger(stderr, ll)) do
         @info "Testing Estimation of Noise"
@@ -59,7 +59,7 @@ function plotTestFunction(x,C_matlab, C)
     xlabel!("time")
 end
 ##
-function testTestFunctionDiscritization(;dataFile::String=joinpath(@__DIR__,"../data/testFunDisc.mat"),ll::Logging.LogLevel=Logging.Warn,plotFlag::Bool=false)
+function testTestFunctionDiscritization(;dataFile::String=joinpath(@__DIR__,"../data/testFunDisc.mat"),ll::LogLevel=Warn,plotFlag::Bool=false)
     with_logger(ConsoleLogger(stderr, ll)) do
         data     = matread(dataFile)
         C_matlab = data["C"]
@@ -75,7 +75,7 @@ function testTestFunctionDiscritization(;dataFile::String=joinpath(@__DIR__,"../
 end
 ##
 function testRadSelect(;dataFile::String=joinpath(@__DIR__,"../data/rad_select_test.mat"),
-    ll::Logging.LogLevel=Logging.Warn
+    ll::LogLevel=Warn
 )
     with_logger(ConsoleLogger(stderr, ll)) do
         data = MAT.matread(dataFile)
@@ -96,7 +96,7 @@ function testRadSelect(;dataFile::String=joinpath(@__DIR__,"../data/rad_select_t
     end
 end
 ##
-function testBuildV(;dataFile::String=joinpath(@__DIR__,"../data/buildV.mat"), ll::Logging.LogLevel=Logging.Warn)
+function testBuildV(;dataFile::String=joinpath(@__DIR__,"../data/buildV.mat"), ll::LogLevel=Warn)
     with_logger(ConsoleLogger(stderr, ll)) do
         data = matread(dataFile)
         Kmin     = Int(data["Kmin"])
@@ -161,7 +161,7 @@ function L_matlab!(L, w, L0, L1)
     nothing
 end
 
-function test_L_to_matlab(;dataFile::String=joinpath(@__DIR__, "../data/Lw_hindmarsh_test.mat"), ll::Logging.LogLevel=Logging.Warn)
+function test_L_to_matlab(;dataFile::String=joinpath(@__DIR__, "../data/Lw_hindmarsh_test.mat"), ll::LogLevel=Warn)
     with_logger(ConoleLogger(stderr, ll)) do
         ## Load example
         mdl = HINDMARSH_ROSE_MODEL
@@ -199,7 +199,7 @@ function test_L_to_matlab(;dataFile::String=joinpath(@__DIR__, "../data/Lw_hindm
     end
 end
 
-function test_residual(;dataFile::String=joinpath(@__DIR__, "../data/Lw_hindmarsh_test.mat"), ll::Logging.LogLevel=Logging.Warn)
+function test_residual(;dataFile::String=joinpath(@__DIR__, "../data/Lw_hindmarsh_test.mat"), ll::LogLevel=Warn)
     with_logger(ConsoleLogger(stderr, ll)) do
         mdl = HINDMARSH_ROSE_MODEL
         data = matread(joinpath(@__DIR__, "../data/Lw_hindmarsh_test.mat"))
@@ -235,7 +235,7 @@ function test_residual(;dataFile::String=joinpath(@__DIR__, "../data/Lw_hindmars
             )
     end
 end
-function test_VVp_Hindmarsh(;dataFile::String=joinpath(@__DIR__, "../data/Lw_hindmarsh_test.mat", ll::Logging.LogLevel=Logging.Warn))
+function test_VVp_Hindmarsh(;dataFile::String=joinpath(@__DIR__, "../data/Lw_hindmarsh_test.mat", ll::LogLevel=Warn))
     with_logger(ConsoleLogger(stderr, ll)) do
         mdl = HINDMARSH_ROSE_MODEL
         data = matread()

@@ -40,7 +40,7 @@ function coeff(p::Num, sym::Num)
     coeff(value(p), value(sym))
 end
 
-function coeff(p::Symbolic, sym::Symbolic; ll::Logging.LogLevel=Logging.Warn)
+function coeff(p::Symbolic, sym::Symbolic; ll::LogLevel=Warn)
     with_logger(ConsoleLogger(stderr, ll)) do 
         @info "main call"
         if issym(p) || isterm(p)

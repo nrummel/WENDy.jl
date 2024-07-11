@@ -44,7 +44,7 @@ function Covariance(prob::WENDyProblem, params::WENDyParameters, ::Val{T}=Val(Fl
     Covariance(params.diagReg, L!, prob.K, prob.D, Val(T))
 end
 # method inplace 
-function (m::Covariance)(R::AbstractMatrix{<:Real}, w::AbstractVector{W};ll::Logging.LogLevel=Logging.Warn, transpose::Bool=true, doChol::Bool=true) where W<:Real
+function (m::Covariance)(R::AbstractMatrix{<:Real}, w::AbstractVector{W};ll::LogLevel=Warn, transpose::Bool=true, doChol::Bool=true) where W<:Real
     m.L!(w; ll=ll) 
     _R!(
         R,w,
@@ -58,7 +58,7 @@ function (m::Covariance)(R::AbstractMatrix{<:Real}, w::AbstractVector{W};ll::Log
     nothing
 end
 # method mutate internal data 
-function (m::Covariance)(w::AbstractVector{W}; ll::Logging.LogLevel=Logging.Warn, transpose::Bool=true, doChol::Bool=true) where W<:Real
+function (m::Covariance)(w::AbstractVector{W}; ll::LogLevel=Warn, transpose::Bool=true, doChol::Bool=true) where W<:Real
     m.L!(w;ll=ll) 
     _R!(
         m.R, w,
@@ -119,7 +119,7 @@ function MahalanobisDistance(prob::WENDyProblem, params::WENDyParameters, ::Val{
     )
 end
 # method
-function (m::MahalanobisDistance)(w::AbstractVector{T}; ll::Logging.LogLevel=Logging.Warn, efficient::Bool=false) where T<:Real
+function (m::MahalanobisDistance)(w::AbstractVector{T}; ll::LogLevel=Warn, efficient::Bool=false) where T<:Real
     if efficient
         # Can be unstable because in worst case S(w) ⊁ 0
         # m(w) = r(w)ᵀS⁻¹r(w) = ((Rᵀ)⁻¹r)ᵀ((Rᵀ)⁻¹r)
@@ -187,7 +187,7 @@ function GradientMahalanobisDistance(prob::WENDyProblem, params::WENDyParameters
     )
 end
 # method inplace
-function (m::GradientMahalanobisDistance)(∇m::AbstractVector{<:Real}, w::AbstractVector{W}; ll::Logging.LogLevel=Logging.Warn) where W<:Real
+function (m::GradientMahalanobisDistance)(∇m::AbstractVector{<:Real}, w::AbstractVector{W}; ll::LogLevel=Warn) where W<:Real
     # Compute L(w) & S(w)
     m.R!(w; ll=ll, transpose=false, doChol=false) 
     # Compute residal
@@ -205,7 +205,7 @@ function (m::GradientMahalanobisDistance)(∇m::AbstractVector{<:Real}, w::Abstr
     nothing
 end
 # method mutate internal data
-function (m::GradientMahalanobisDistance)(w::AbstractVector{W}; ll::Logging.LogLevel=Logging.Warn) where W<:Real
+function (m::GradientMahalanobisDistance)(w::AbstractVector{W}; ll::LogLevel=Warn) where W<:Real
     # Compute L(w) & S(w)
     m.R!(w; ll=ll, transpose=false, doChol=false) 
     # Compute residal

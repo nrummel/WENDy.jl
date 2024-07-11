@@ -75,15 +75,14 @@ _MENDES_PARAM_RNG = [1e−12, 1e6]    # everuthing else k, and q
     end
 end
 MENDES_EXAMPLES = [
-    (
-        name="mendes_S=$(S)_P=$P",
-        ode = begin 
+    SimulatedWENDyData(
+        "mendes_S=$(S)_P=$P",
+        begin 
             @mtkbuild ode = MendesModel() # usually could set S, P here but now that they are constants we cannot 
             ode 
         end,
-        tRng=_MENDES_T_RNG,
-        M=1024,
-        file=joinpath(@__DIR__, "../data/Mendes_S=$(S)_P=$P.bson"),
-        noise_dist=LogNormal
+        _MENDES_T_RNG,
+        1024;
+        noiseDist=Val(LogNormal)
     )
-for S in _MENDES_S_VALS, P in _MENDES_P_VALS][:]
+for S in _MENDES_S_VALS, P in _MENDES_P_VALS][:];

@@ -231,8 +231,8 @@ Evaluating this gradient/hessian is computationally expensive, but the following
 - Compute $S^{-1} (G(w)-b)$ and reuse 
 - Compute $\{\partial_j S \}_{j=1}^J$ and reuse
 - Compute $\{\partial_{ji} S \}_{j=1,i=1}^J$ and reuse
-## Test Problems
-Choice of test problems is guided by what was previously done in  the previous paper WENDy, benchmarked problems in Julia, and what was suggested by colleagues and other literature. The main categories that we want to show are 
+## Example ODE's
+Choice of example problems is guided by what was previously done in  the previous paper WENDy, benchmarked problems in Julia, and what was suggested by colleagues and other literature. The main categories that we want to show are 
 - ODE's that are being used right now in domain sciences, and how the algorithm could be plugged into a current workflow to show benefit. 
 - Stress testing the algorithms derivation by having non-linear both in $u$ and in $w$. We need to show how and why this algorithm would fail. This could give us new insights in how to improve the algorithm moving forward, but also could could give guiding advice to end users (domain scientists) so they can take the results with a grain of salt when they apply to different systems.
 - Stiff ODE's: this should highlight the benefit of not having to forward simulate. Even with fast jacobian tricks like sparsity, coloring, and static data structures. The fact is that needing to forward simulate more than once can be a real down side for an end user. This could be as simple as  making a very large system of ordinary differential equations with very few parameters , meaning $D >> 1$ while $J \in [1,20]$. This makes me think of Systems of PDE that are solved with finite differences (or method of lines). The road blocks here are going to be computing the different necessary differential operators quickly: $\partial_{w_j} F, \partial_{w_ju_k} F, \partial_{w_i w_j} F, \partial_{w_i w_j u_k}$. 
@@ -299,3 +299,5 @@ Choice of test problems is guided by what was previously done in  the previous p
 	- [[deep learning goodfellow.pdf|Deep Learning Book]] - Ian Goodfellow et all
 	- [AutoDiff SciML book](https://book.sciml.ai/notes/08-Forward-Mode_Automatic_Differentiation_(AD)_via_High_Dimensional_Algebras/) - Chris Rackauckas 
 
+## Outstanding questions
+### LogNormal noise

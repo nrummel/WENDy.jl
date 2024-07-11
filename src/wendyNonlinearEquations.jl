@@ -4,7 +4,7 @@ function _L!(
     U::AbstractMatrix{<:Real}, V::AbstractMatrix{<:Real}, L₀::AbstractMatrix{<:Real}, sig::AbstractVector{<:Real}, # data
     jacuf!::Function, # functions
     JuF::AbstractArray{<:Real, 3}, __L₁::AbstractArray{<:Real, 4}, _L₁::AbstractArray{<:Real, 4}; # buffers
-     ll::Logging.LogLevel=Logging.Warn # kwargs
+     ll::LogLevel=Warn # kwargs
 ) 
     K,D,M,_ = size(_L₁)
     @inbounds for m in 1:M
@@ -34,7 +34,7 @@ function _g!(g::AbstractVector, w::AbstractVector, # output/input
     U::AbstractMatrix, V::AbstractMatrix, # data
     f!::Function, # function
     F::AbstractMatrix{<:Real}, G::AbstractMatrix{<:Real}; # buffers
-    ll::Logging.LogLevel=Logging.Warn #kwargs
+    ll::LogLevel=Warn #kwargs
 )
     K, M = size(V)
     D, _ = size(U)
@@ -51,7 +51,7 @@ function _r!(
     U::AbstractMatrix, V::AbstractMatrix, b₀::AbstractVector, # data
     f!::Function, # function
     F::AbstractMatrix{<:Real}, G::AbstractMatrix{<:Real}; # buffers
-    ll::Logging.LogLevel=Logging.Warn #kwargs
+    ll::LogLevel=Warn #kwargs
 ) 
     _g!(r, w, U, V, f!, F, G,; ll=ll)
     @views r .-= b₀
@@ -62,7 +62,7 @@ function _Rᵀr!(r::AbstractVector, w::AbstractVector, # output/input
      U::AbstractMatrix, V::AbstractMatrix, Rᵀ::AbstractMatrix,b::AbstractVector, # Data
      f!::Function, # functions
      F::AbstractMatrix{<:Real}, G::AbstractMatrix{<:Real}, g::AbstractVector; # buffeers   
-     ll::Logging.LogLevel=Logging.Warn #kwargs
+     ll::LogLevel=Warn #kwargs
 ) 
     _g!(g,w, U, V, f!, F, G; ll=ll)
     ldiv!(r, LowerTriangular(Rᵀ), g)
@@ -75,7 +75,7 @@ function _∇r!(
     U::AbstractMatrix{<:Real}, V::AbstractMatrix{<:Real}, 
     jacwf!::Function, # functions
     JwF::AbstractArray{<:Real, 3}, __∇r::AbstractArray{<:Real, 3}, _∇r::AbstractArray{<:Real, 3}; # buffers
-    ll::Logging.LogLevel=Logging.Warn # kwargs
+    ll::LogLevel=Warn # kwargs
 ) 
     K, M = size(V)
     D, _ = size(U)
@@ -98,7 +98,7 @@ function _Rᵀ⁻¹∇r!(
     U::AbstractMatrix{<:Real}, V::AbstractMatrix{<:Real}, Rᵀ::AbstractMatrix{<:Real}, # data
     jacwf!::Function, # functions
     JwF::AbstractArray{<:Real, 3}, __∇r::AbstractArray{<:Real, 3}, _∇r::AbstractArray{<:Real, 3}, ∇r::AbstractMatrix{<:Real}; # buffers
-    ll::Logging.LogLevel=Logging.Warn # kwargs
+    ll::LogLevel=Warn # kwargs
 ) 
     _∇r!(
         ∇r,w,

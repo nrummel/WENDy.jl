@@ -3,23 +3,23 @@ abstract type IRWLS_Iter end
 struct Linear_IRWLS_Iter <: IRWLS_Iter
     b₀::AbstractVector{<:AbstractFloat}
     G0::AbstractMatrix{<:AbstractFloat}
-    RT::Function 
+    Rᵀ!::Function 
 end 
-function Linear_IRWLS_Iter(prob::WENDyProblem, params::WENDyParameters;ll::Logging.LogLevel=Logging.Warn)
+function Linear_IRWLS_Iter(prob::WENDyProblem, params::WENDyParameters;ll::LogLevel=Warn)
     D = prob.D
     J = prob.J
     K = prob.K 
     G0 = zeros(K*D, J)
-    _∇r = ∇rw(prob, params)
-    _∇r(G0,zeros(J))
-    _RT = Rw(prob, params)
-    Linear_IRWLS_Iter(prob.b₀, G0, (Rᵀ,w)->_RT(Rᵀ,w))
+    ∇r! = GradientResidual(prob, params)
+    ∇r!(G0, zeros(J))
+    Rᵀ! = Covariance(prob, params)
+    Linear_IRWLS_Iter(prob.b₀, G0, Rᵀ!)
 end
-function (m::Linear_IRWLS_Iter)(wnm1::AbstractVector{<:AbstractFloat};ll::Logging.LogLevel=Logging.Warn)
+function (m::Linear_IRWLS_Iter)(wnm1::AbstractVector{<:AbstractFloat};ll::LogLevel=Warn)
     with_logger(ConsoleLogger(stderr,ll)) do 
         KD = length(m.b₀)
         Rᵀ = zeros(KD,KD)
-        m.RT(Rᵀ, wnm1)
+        m.Rᵀ!(Rᵀ, wnm1)
         dt = @elapsed a = @allocations wn = (Rᵀ \ m.G0) \ (Rᵀ \ m.b₀)
         fHat = 1/2 * norm(Rᵀ \ (m.G0*wn - m.b₀))^2
         @info """ 
@@ -34,45 +34,47 @@ end
 # struct
 struct NLS_iter <: IRWLS_Iter
     b₀::AbstractVector
-    _RT::Rw 
-    _res!::rw
-    _jac!::∇rw
+    Rᵀ!::Covariance 
+    r!::Residual
+    ∇r!::GradientResidual
     reltol::AbstractFloat
+    abstol::AbstractFloat
     maxiters::Int
 end 
 # constructor
-function NLS_iter(prob::WENDyProblem, params::WENDyParameters; reltol::AbstractFloat=1e-8,maxiters::Int=10)
-    _RT = Rw(prob, params)
-    _res = rw(prob, params)
-    _jac = ∇rw(prob, params)
-    NLS_iter(prob.b₀, _RT, _res, _jac, reltol, maxiters)
+function NLS_iter(prob::WENDyProblem, params::WENDyParameters)
+    Rᵀ! = Rw(prob, params)
+    r! = rw(prob, params)
+    ∇r! = ∇rw(prob, params)
+
+    NLS_iter(prob.b₀, Rᵀ!, r!, ∇r!, prob.nlsReltol,prob.nlsAbstol,  nlsMaxiters)
 end
 # method
-function (m::NLS_iter)(wnm1::AbstractVector{<:AbstractFloat};ll::Logging.LogLevel=Logging.Warn, _ll::Logging.LogLevel=Logging.Warn)
+function (m::NLS_iter)(wnm1::AbstractVector{<:AbstractFloat};ll::LogLevel=Warn, _ll::LogLevel=Warn)
     with_logger(ConsoleLogger(stderr,ll)) do 
         @info "  Running local optimization method"
         try 
-            m._RT(m._RT.R, wnm1)
+            m.Rᵀ!(m.Rᵀ!.R, wnm1)
         catch e 
             @show wnm1
             throw(e)
         end
-        b = m._RT.R \ m.b₀ 
+        b = m.Rᵀ!.R \ m.b₀ 
         KD = length(b)
 
         resn!(
             r::AbstractVector,
             w::AbstractVector, 
             ::Any; 
-            ll::Logging.LogLevel=_ll
-        ) = m._res!(r, b, w; ll=ll, Rᵀ=m._RT.R,) 
+            ll::LogLevel=_ll
+        ) = m.r!(r, b, w; ll=ll, Rᵀ=m.Rᵀ!.R,) 
 
         jacn!(
             jac::AbstractMatrix, 
             w::AbstractVector, 
             ::Any; 
-            ll::Logging.LogLevel=_ll
-        ) = m._jac!(jac, w; ll=ll, Rᵀ=m._RT.R,)
+            ll::LogLevel=_ll
+        ) = m.∇r!(jac, w; ll=ll, Rᵀ=m.Rᵀ!.R,)
                 
         prob = NonlinearLeastSquaresProblem(
             NonlinearFunction(
@@ -105,8 +107,9 @@ function (m::NLS_iter)(wnm1::AbstractVector{<:AbstractFloat};ll::Logging.LogLeve
 end
 
 ##
-function IRWLS(prob::WENDyProblem, params::WENDyParameters, w0::AbstractVector{<:AbstractFloat}; ll::Logging.LogLevel=Logging.Warn, iterll::Logging.LogLevel=Logging.Warn, maxIt::Int=100, relTol::AbstractFloat=1e-8, compareIters::Bool=false)
+function IRWLS(prob::WENDyProblem, params::WENDyParameters, w0::AbstractVector{<:AbstractFloat}; ll::LogLevel=Warn, iterll::LogLevel=Warn, compareIters::Bool=false)
     with_logger(ConsoleLogger(stderr,ll)) do 
+        maxIt,reltol,abstol = params.optimMaxiters, params.optimReltol, params.optimAbstol
         @info "Building Iteration "
         iter = NLS_iter(prob, params)
         trueIter =compareIters ? Linear_IRWLS_Iter(prob, params) : nothing
@@ -136,10 +139,23 @@ function IRWLS(prob::WENDyProblem, params::WENDyParameters, w0::AbstractVector{<
                         $dtL s, $aL allocations
                 """
             end
-            if norm(resn) / norm(wnm1) < relTol
+            resNorm = norm(resn)
+            relResNorm = resNorm / norm(wnm1)
+            if relResNorm < reltol
                 resit = resit[:,1:n] 
                 wit = wit[:,1:n] 
-                @info "  Convergence Criterion met!"
+                @info """  
+                  Convergence Criterion met: 
+                    reltol: $relRes < $reltol
+                """
+                return wn, hcat(w0,wit), resit 
+            elseif resNorm < absTol
+                resit = resit[:,1:n] 
+                wit = wit[:,1:n] 
+                @info """  
+                  Convergence Criterion met: 
+                    abstol: $resNorm < $abstol
+                """
                 return wn, hcat(w0,wit), resit 
             end
             wnm1 = wn
@@ -159,7 +175,7 @@ function FSNLS(prob::WENDyProblem, ode::ODESystem, w0::AbstractVector{<:Real}; f
     cost_function = build_loss_objective(
         p, fwdSlvAlg, L2Loss(prob.tt, prob.U),
         Optimization.AutoForwardDiff(),
-        maxiters = 1000, verbose = false
+        maxiters = params.optimMaxiters, verbose = false
     )
     # Calling Optimization Routine
     optprob = Optimization.OptimizationProblem(cost_function, w0;)

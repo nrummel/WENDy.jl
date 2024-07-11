@@ -72,7 +72,7 @@ function g(w)
     return ∇m
 end
 p,_ = gradientCheck(m, g, w0; 
-ll=Logging.Info, scaling=1e-8,makePlot=true)
+ll=Info, scaling=1e-8,makePlot=true)
 PlotlyJS.relayout!(p, title="Gradient Maholinobis Distance")
 display(p);
 ##
@@ -92,7 +92,7 @@ function ggg(w)
     return H*v 
 end 
 p,_ = gradientCheck(f, gg, w0; 
-ll=Logging.Info, scaling=1e-8,makePlot=true)
+ll=Info, scaling=1e-8,makePlot=true)
 PlotlyJS.relayout!(p, title="Hessian Maholinobis Distance")
 display(p);
 ##

@@ -20,11 +20,10 @@ _LORENZ_T_RNG = (0.0, 100.0)
     end
 end
 @mtkbuild LORENZ_SYSTEM = Lorenz()
-LORENZ_FILE = joinpath(@__DIR__, "../data/Lorenz.bson")
-LORENZ = (
-    name="lorenz", 
-    ode=LORENZ_SYSTEM,
-    tRng=_LORENZ_T_RNG,
-    M=1024,
-    file=LORENZ_FILE
+LORENZ = SimulatedWENDyData(
+    "Lorenz", 
+    LORENZ_SYSTEM,
+    _LORENZ_T_RNG,
+    1024;
+    linearInParameters=Val(true)
 );

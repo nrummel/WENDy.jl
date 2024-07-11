@@ -1,5 +1,5 @@
 ## See Wendy paper
-_HINDMARSH_T_RNG = (0, 10)
+_HINDMARSH_T_RNG = (0.0, 10.0)
 @mtkmodel HindmarshRoseModel begin
     @variables begin
         u1(t) = -1.31
@@ -27,4 +27,10 @@ end
 @mtkbuild HINDMARSH_ROSE_SYSTEM = HindmarshRoseModel()
 HINDMARSH_ROSE_FILE = joinpath(@__DIR__, "../data/HindmarshRose.bson")
 MATLAB_HINDMARSH_ROSE_FILE = joinpath(@__DIR__, "../data/Hindmarsh_Rose_MATLAB.mat")
-HINDMARSH_ROSE = (name="hindmarshRose", ode=HINDMARSH_ROSE_SYSTEM, tRng=_HINDMARSH_T_RNG,M=1024,file=HINDMARSH_ROSE_FILE,matlab_file=MATLAB_HINDMARSH_ROSE_FILE)
+HINDMARSH_ROSE = SimulatedWENDyData(
+    "hindmarshRose", 
+    HINDMARSH_ROSE_SYSTEM, 
+    _HINDMARSH_T_RNG,
+    1024;
+    linearInParameters=Val(true)
+);
