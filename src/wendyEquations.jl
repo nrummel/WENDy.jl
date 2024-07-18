@@ -21,12 +21,12 @@ function _R!(
     mul!(S, L, L')
     @views Sreg .= thisI
     mul!(Sreg, S, I, (1-diagReg), diagReg)
+    @views R .= Sreg
     if !doChol 
-        @views R .= Sreg
         return nothing 
     end 
-    cholesky!(Symmetric(Sreg))
-    @views R .= UpperTriangular(Sreg)
+    cholesky!(Symmetric(R))
+    @views R .= UpperTriangular(R)
     nothing
 end
 # m(w) - Maholinobis distance
@@ -45,10 +45,8 @@ function _∇m!(
     S⁻¹r::AbstractVector{<:Real}, ∂ⱼLLᵀ::AbstractMatrix{<:Real}, ∇S::AbstractArray{<:Real,3};
     ll::LogLevel=Warn
 )
-    D, M = size(U)
-    K, _ = size(V)
-    J = length(w)
-    # TODO: perhaps do this inplace? 
+    J = length(∇m)
+    # TODO: perhaps do this inplace?
     F = svd(S) 
     # precompute the S⁻¹r 
     ldiv!(S⁻¹r, F, r)

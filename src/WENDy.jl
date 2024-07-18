@@ -4,11 +4,11 @@
 # optimization algorithms
 using NonlinearSolve # high performance nonlinear solver
 using DiffEqParamEstim, ForwardDiff # forward solve nonlinear lsq comparison
-using Optimization, OptimizationOptimJL # Trust Region Solver
+using Optimization, OptimizationOptimJL, Optim # Trust Region Solver
 using SFN # ARC and SFN solvers
 # For solving and symbolicly representing diff eq 
 using OrdinaryDiffEq, ModelingToolkit, Symbolics
-using OrdinaryDiffEq: ODESolution
+using OrdinaryDiffEq: ODESolution, OrdinaryDiffEqAlgorithm
 using ModelingToolkit: t_nounits as t, D_nounits
 using ModelingToolkit: ODESystem
 using Symbolics: @variables
@@ -22,14 +22,15 @@ using LoopVectorization
 # stdlib
 using LinearAlgebra, Statistics, Random, Logging 
 using Logging: Info, Warn, LogLevel
-__precompile__(false)
-
+# __precompile__(false)
+##
 includet("wendyTestFunctions.jl")
 includet("wendyData.jl")
 includet("wendyNoise.jl")
 includet("wendySymbolics.jl")
 includet("wendyProblems.jl")
 includet("wendyDiffEq.jl")
+##
 includet("wendyEquations.jl")
 includet("wendyLinearEquations.jl")
 includet("wendyNonlinearEquations.jl")

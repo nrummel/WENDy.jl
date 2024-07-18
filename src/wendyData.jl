@@ -1,59 +1,44 @@
-## Defaults values for params
-!(@isdefined DEFAULT_TIME_SUBSAMPLE_RATE )&& const DEFAULT_TIME_SUBSAMPLE_RATE = Ref{Int}(2)
-!(@isdefined DEFAULT_SEED )&& const DEFAULT_SEED = Ref{Int}(Int(1))
-!(@isdefined DEFAULT_K_MAX )&& const DEFAULT_K_MAX = Ref{Int}(Int(5.0e3))
-!(@isdefined DEFAULT_DIAG_REG )&& const DEFAULT_DIAG_REG = Ref{AbstractFloat}(1.0e-10)
-!(@isdefined DEFAULT_NOISE_RATIO )&& const DEFAULT_NOISE_RATIO = Ref{AbstractFloat}(0.01)
-!(@isdefined DEFAULT_TEST_FUN_RADII )&& const DEFAULT_TEST_FUN_RADII = Ref{AbstractVector{<:Int}}( 2 .^(0:3))
-!(@isdefined DEFAULT_TEST_FUNCTION )&& const DEFAULT_TEST_FUNCTION = Ref{TestFunction}(ExponentialTestFun())
-!(@isdefined DEFAULT_PRUNE_METHOD )&& const DEFAULT_PRUNE_METHOD = Ref{TestFunctionPruningMethod}(SingularValuePruningMethod(MtminRadMethod(),UniformDiscritizationMethod()))
-!(@isdefined DEFAULT_FORCE_NONLINEAR )&& const DEFAULT_FORCE_NONLINEAR = Ref{Bool}(false)
-!(@isdefined DEFAULT_NLS_ABSTOL )&& const DEFAULT_NLS_ABSTOL = Ref{Float64}
-(1e-8)
-!(@isdefined DEFAULT_NLS_RELTOL )&& const DEFAULT_NLS_RELTOL = Ref{Float64}(1e-8)
-!(@isdefined DEFAULT_NLS_MAXITERS )&& const DEFAULT_NLS_MAXITERS = Ref{Int}(1000)
-!(@isdefined DEFAULT_OPTIM_ABSTOL )&& const DEFAULT_OPTIM_ABSTOL = Ref{Float64}(1e-8)
-!(@isdefined DEFAULT_OPTIM_RELTOL )&& const DEFAULT_OPTIM_RELTOL = Ref{Float64}(1e-8)
-!(@isdefined DEFAULT_OPTIM_MAXITERS )&& const DEFAULT_OPTIM_MAXITERS = Ref{Int}(1000)
 ##
 struct WENDyParameters
     timeSubsampleRate::Int 
-    seed::Int   
+    seed::Union{Int,Nothing}   
     Kmax::Int   
     diagReg::AbstractFloat    
     noiseRatio::AbstractFloat        
     testFuctionRadii::AbstractVector{<:Real}           
     ϕ::TestFunction                  
     pruneMeth::TestFunctionPruningMethod   
-    forceNonlinear::Bool  
     nlsAbstol::AbstractFloat  
     nlsReltol::AbstractFloat  
     nlsMaxiters::Int
     optimAbstol::AbstractFloat  
     optimReltol::AbstractFloat  
     optimMaxiters::Int
-    function WENDyParameters(;
-        timeSubsampleRate=DEFAULT_TIME_SUBSAMPLE_RATE[],
-        seed=DEFAULT_SEED[],
-        Kmax=DEFAULT_K_MAX[],
-        diagReg=DEFAULT_DIAG_REG[],
-        noiseRatio=DEFAULT_NOISE_RATIO[],
-        testFuctionRadii=DEFAULT_TEST_FUN_RADII[],
-        ϕ=DEFAULT_TEST_FUNCTION[],
-        pruneMeth=DEFAULT_PRUNE_METHOD[],
-        forceNonlinear=DEFAULT_FORCE_NONLINEAR[],
-        nlsAbstol=DEFAULT_NLS_ABSTOL[],
-        nlsReltol=DEFAULT_NLS_RELTOL[],
-        nlsMaxiters=DEFAULT_NLS_MAXITERS[],
-        optimAbstol=DEFAULT_OPTIM_ABSTOL[],
-        optimReltol=DEFAULT_OPTIM_RELTOL[],
-        optimMaxiters=DEFAULT_OPTIM_MAXITERS[],
-    )
-        @assert timeSubsampleRate >= 1
-        @assert length(testFuctionRadii) >0 && all(testFuctionRadii .>= 1)
-        new(timeSubsampleRate,seed,Kmax,diagReg,noiseRatio,testFuctionRadii,ϕ,pruneMeth,forceNonlinear)
-    end
+    optimTimelimit::AbstractFloat
 end
+## Defaults values for params are set in the kwargs
+function WENDyParameters(;
+    timeSubsampleRate::Int=2,
+    seed::Union{Int,Nothing}=nothing,
+    Kmax::Int=Int(5.0e3),
+    diagReg::AbstractFloat=1.0e-10,
+    noiseRatio::AbstractFloat=0.01,
+    testFuctionRadii::AbstractVector{Int}=Int.(2 .^(0:3)),
+    ϕ::TestFunction=ExponentialTestFun(),
+    pruneMeth::TestFunctionPruningMethod=SingularValuePruningMethod(MtminRadMethod(),UniformDiscritizationMethod()),
+    nlsAbstol::AbstractFloat=1e-8,
+    nlsReltol::AbstractFloat=1e-8,
+    nlsMaxiters::Int=1000,
+    optimAbstol::AbstractFloat=1e-8,
+    optimReltol::AbstractFloat=1e-8,
+    optimMaxiters::Int=200,
+    optimTimelimit::Real=200.0,
+)
+    @assert timeSubsampleRate >= 1
+    @assert length(testFuctionRadii) >0 && all(testFuctionRadii .>= 1)
+    WENDyParameters(timeSubsampleRate,seed,Kmax,diagReg,noiseRatio,testFuctionRadii,ϕ,pruneMeth,nlsAbstol, nlsReltol, nlsMaxiters, optimAbstol, optimReltol, optimMaxiters, float(optimTimelimit))
+end
+
 ##
 abstract type WENDyData{LinearInParameters,DistType<:Distribution} end 
 ## For observed data
@@ -67,39 +52,80 @@ end
 function EmpricalWENDyData(name,ode,tt_full, U_full, ::Val{LinearInParameters}=Val(false), ::Val{DistType}=Val(Normal)) where {LinearInParameters,DistType<:Distribution}
     EmpricalWENDyData{LinearInParameters, DistType}(name, ode, tt_full, U_full)
 end
-
+##
+using Plots
+function _getData(f!::Function, tRng::NTuple{2,<:AbstractFloat}, M::Int, trueParameters::AbstractVector{<:Real}, initCond::AbstractVector{<:Real}, file::String; forceOdeSolve::Bool=false, ll::LogLevel=Warn)
+    with_logger(ConsoleLogger(stdout, ll)) do 
+        if forceOdeSolve || !isfile(file)
+            @info "  Generating data for $file by solving ode"
+            sol = _solve_ode(f!, tRng, M, trueParameters, initCond)
+            # plot(sol,title="Hindmarsh Rose Solution")
+            # Plots.savefig(joinpath("/Users/user/Documents/School/WSINDy/NonLinearWENDyPaper/fig", "hindmarshRose_sol.png"))
+            u = reduce(hcat, sol.u)
+            t = sol.t
+            BSON.@save file t u
+            return t,u, sol
+        end
+        @info "Loading from file"
+        data = BSON.load(file) 
+        tt_full = data[:t] 
+        U_full = data[:u] 
+        return tt_full, U_full
+    end
+end
+##
 struct SimulatedWENDyData{LinearInParameters,DistType}<:WENDyData{LinearInParameters,DistType}
     name::String
     ode::ODESystem
+    odeprob::ODEProblem
+    f!::Function
+    initCond::AbstractVector{<:Real}
     tRng::NTuple{2,<:Real}
+    trueParameters::AbstractVector{<:Real}
+    # defaul values provided
     M::Int
     file::String 
-    trueParameters::AbstractVector{<:Real}
-    initCond::AbstractVector{<:Real}
     tt_full::AbstractVector{<:Real}
-    U_full::AbstractMatrix{<:Real}
+    U_exact::AbstractMatrix{<:Real}
 end
 
 function SimulatedWENDyData( 
     name::String,
     ode::ODESystem,
+    odeprob::ODEProblem,
+    f!::Function,
+    initCond::AbstractVector{<:Real},
     tRng::NTuple{2,<:Real},
-    M::Int;
+    trueParameters::AbstractVector{<:Real};
+    M::Int=1024,
     linearInParameters::Val{LinearInParameters}=Val(false),
     file::Union{String, Nothing}=nothing,
-    trueParameters::Union{AbstractVector{<:Real}, Nothing}=nothing,
-    initCond::Union{AbstractVector{<:Real}, Nothing}=nothing,
-    noiseDist::Val{DistType}=Val(Normal)
+    noiseDist::Val{DistType}=Val(Normal),
+    forceOdeSolve::Bool=false
 ) where {LinearInParameters, DistType<:Distribution}
     isnothing(file) && (file = joinpath(@__DIR__, "../data/$name.bson"))
-    isnothing(trueParameters) && (trueParameters = [ModelingToolkit.getdefault(p) for p in parameters(ode)])
-    isnothing(initCond) && (initCond = [ModelingToolkit.getdefault(p) for p in unknowns(ode)])
-    tt_full, U_full = _getData(ode, tRng, M, trueParameters, initCond, file)
-    if DistType == LogNormal && any(U_full .<= 0)
-        ix = findall( all(U_full[:,m] .> 0) for m in 1:size(U_full,2))
+    tt_full, U_exact = _getData(
+        f!, tRng, M, trueParameters, initCond, file;
+        forceOdeSolve=forceOdeSolve, ll=Info
+    )
+    @assert DistType == Normal || DistType == LogNormal "Only LogNormal and Normal Noise distributions are supported"
+
+    if DistType == LogNormal && any(U_exact .<= 0)
+        ix = findall( all(U_exact[:,m] .> 0) for m in 1:size(U_exact,2))
         @warn " Removing data that is zero so that logrithms are well defined: $(length(tt_full) - length(ix)) data point(s) aree invalid"
         tt_full = tt_full[ix]
-        U_full = U_full[:,ix]
+        U_exact = U_exact[:,ix]
+        initCond = U_exact[:,1]
+        tRng = (tt_full[1], tt_full[end])
     end
-    SimulatedWENDyData{LinearInParameters,DistType}(name, ode, tRng, M,file,trueParameters,initCond,tt_full,U_full)
+
+    SimulatedWENDyData{LinearInParameters,DistType}(
+        name, ode, odeprob, f!, initCond, tRng, trueParameters, M, file, tt_full, U_exact
+    )
+end
+
+function SimulatedWENDyData(data::SimulatedWENDyData{<:Any, DistType}, ::Val{LinearInParameters}) where {DistType<:Distribution, LinearInParameters}
+    SimulatedWENDyData{LinearInParameters,DistType}(
+        data.name, data.ode, data.odeprob, data.f!, data.initCond, data.tRng, data.trueParameters, data.M, data.file, data.tt_full, data.U_exact
+    )
 end

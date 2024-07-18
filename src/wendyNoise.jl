@@ -6,17 +6,22 @@ generateNoise(data::EmpricalWENDyData, params::WENDyParameters) = (
     NaN .* ones(size(data.U_full,1))
 )
 ## Add data according to the noise distribution and noise ratio
-function generateNoise(data::SimulatedWENDyData{T, DistType}, params::WENDyParameters) where {T,DistType<:Distribution}
-    !isnothing(params.seed) && Random.seed!(params.seed)
+function generateNoise(U_exact::AbstractMatrix{<:Real}, params::WENDyParameters, ::Val{DistType}; isotropic::Bool=true) where {DistType<:Distribution}
+    if (!isnothing(params.seed) && params.seed > 0) 
+        Random.seed!(params.seed)
+        @info "Seeeding the noise with value $(params.seed)"
+    else 
+        @info "no seeding"
+    end
     noiseRatio = params.noiseRatio
-    U_exact = data.U_full
     @assert noiseRatio > 0 "Noise ratio must be possitive"
     U = similar(U_exact)
     noise = similar(U_exact)
-    σ = zeros(size(U,1))
+    D = size(U,1)
+    σ = zeros(D)
     if DistType == Normal  # additive
         #TODO: Check with dan here
-        mean_signals = sqrt.(mean(U_exact .^2, dims=2))
+        mean_signals = isotropic ? mean(U_exact .^2) .* ones(size(σ)) : mean(U_exact .^2, dims=2) 
         for (d,signal) in enumerate(mean_signals)
             σ[d] = noiseRatio*sqrt(signal) # TODO: HERE
             dist = DistType(0, σ[d])
@@ -27,10 +32,10 @@ function generateNoise(data::SimulatedWENDyData{T, DistType}, params::WENDyParam
         #TODO check with dan
         # mean_signals = sqrt.(mean(log.(U_exact) .^2, dims=2))
         σ .= noiseRatio
-        for (d,signal) in enumerate(mean_signals)   
+        for d in 1:D
             dist = DistType(0,σ[d]) # lognormal with logmean of 0, and 
             noise[d,:] = rand(dist,size(U_exact,2))
-            U[d,:] = U_exact[d,:].*(1 .+ noise[d,:])
+            U[d,:] = U_exact[d,:].*noise[d,:]
         end
     else 
         throw(ArgumentError("Only Implemented for  Normal and LogNormal"),)
@@ -40,18 +45,11 @@ function generateNoise(data::SimulatedWENDyData{T, DistType}, params::WENDyParam
     return U,noise,noise_ratio_obs,σ
 end
 ## estimate the standard deviation of noise by filtering then computing rmse
-function estimate_std(_uobs::AbstractMatrix{<:Real}, ::Val{DistType}; k::Int=6) where DistType<:Distribution
-    uobs = if DistType == LogNormal
-       log.(_uobs)
-    elseif DistType == Normal
-        _uobs
-    else 
-        throw(ArgumentError("Only Implemented for  Normal and LogNormal"),)
-    end 
-    D,M = size(uobs) 
+function estimate_std(_Y::AbstractMatrix{<:Real}; k::Int=6) 
+    D,M = size(_Y) 
     std = zeros(D)
     for d = 1:D
-        f = uobs[d,:]
+        f = _Y[d,:]
         C = fdcoeffF(k,0,-k-2:k+2)
         filter = C[:,end]
         filter = filter / norm(filter,2)

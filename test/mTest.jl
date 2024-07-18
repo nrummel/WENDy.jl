@@ -12,7 +12,9 @@ catch
     using Revise 
     using Tullio, BSON, FiniteDiff, LoopVectorization, PlotlyJS, Crayons
 end
+@info "Loading minimal code that I wrote"
 includet(joinpath(@__DIR__, "../src/wendyEquations.jl"))
+includet(joinpath(@__DIR__, "../src/wendyNonlinearEquations.jl"))
 includet(joinpath(@__DIR__, "../ForStephen/_wendyEquations.jl")) # wrapper that allocate everything so we can call them as simple as possible
 includet(joinpath(@__DIR__, "../ForStephen/gradientCheck.jl"))
 ## Load data from file
@@ -21,7 +23,7 @@ J = length(wTrue)
 μ = 0.1
 w0 = wTrue + μ * abs.(wTrue) .* randn(J);
 BSON.@load joinpath(@__DIR__, "../ForStephen/ExponentialData.bson") U V Vp b0 sig diagReg
-b₀ = b0 # I didn't know how bson would like the unicode var name...
+b₀ = b0; # I didn't know how bson would like the unicode var name...
 ## Define Functions that only need w with the current data fixed
 m(w::AbstractVector{<:Real}) = m(w, U, V, Vp, b0, sig, diagReg)
 ∇m!(∇m::AbstractVector{<:Real}, w::AbstractVector{<:Real}) = ∇m!(∇m, w, U, V, Vp, b0, sig, diagReg)
@@ -36,8 +38,8 @@ Hm!(H::AbstractMatrix{<:Real}, w::AbstractVector{<:Real}) = Hm!(H, w, U, V, Vp, 
 @time ∇m_fd = FiniteDiff.finite_difference_gradient(m, w0)
 @info "  Analytic Gradient Computation"
 @time ∇m!(∇m0, w0); 
-fucker = zeros(J)
-@time _∇m!_(fucker, w0); 
+# fucker = zeros(J)
+# @time _∇m!_(fucker, w0); 
 relErr = norm(∇m0 - ∇m_fd) / norm(∇m_fd)
 @info "  relErr = $relErr"
 # Define this function before so it can be reused when compile for acccurate timing 

@@ -43,21 +43,21 @@ struct NLS_iter <: IRWLS_Iter
 end 
 # constructor
 function NLS_iter(prob::WENDyProblem, params::WENDyParameters)
-    Rᵀ! = Rw(prob, params)
-    r! = rw(prob, params)
-    ∇r! = ∇rw(prob, params)
+    Rᵀ! = Covariance(prob, params)
+    r! = Residual(prob, params)
+    ∇r! = GradientResidual(prob, params)
 
-    NLS_iter(prob.b₀, Rᵀ!, r!, ∇r!, prob.nlsReltol,prob.nlsAbstol,  nlsMaxiters)
+    NLS_iter(prob.b₀, Rᵀ!, r!, ∇r!, params.nlsReltol,params.nlsAbstol,  params.nlsMaxiters)
 end
 # method
 function (m::NLS_iter)(wnm1::AbstractVector{<:AbstractFloat};ll::LogLevel=Warn, _ll::LogLevel=Warn)
     with_logger(ConsoleLogger(stderr,ll)) do 
         @info "  Running local optimization method"
         try 
-            m.Rᵀ!(m.Rᵀ!.R, wnm1)
-        catch e 
-            @show wnm1
-            throw(e)
+            m.Rᵀ!(wnm1)
+        catch 
+            @warn "The covariance calculation failed most likely because S ⊁ 0 "
+            return NaN .* ones(size(wnm1))
         end
         b = m.Rᵀ!.R \ m.b₀ 
         KD = length(b)
@@ -88,7 +88,8 @@ function (m::NLS_iter)(wnm1::AbstractVector{<:AbstractFloat};ll::LogLevel=Warn, 
             prob,
             NonlinearSolve.TrustRegion();
             reltol=m.reltol,
-            maxiters=m.maxiters
+            maxiters=m.maxiters,
+            verbose=false
         )
         wn = sol.u
         res = zeros(KD)
@@ -107,13 +108,14 @@ function (m::NLS_iter)(wnm1::AbstractVector{<:AbstractFloat};ll::LogLevel=Warn, 
 end
 
 ##
-function IRWLS(prob::WENDyProblem, params::WENDyParameters, w0::AbstractVector{<:AbstractFloat}; ll::LogLevel=Warn, iterll::LogLevel=Warn, compareIters::Bool=false)
+function IRWLS(prob::WENDyProblem{LinearInParameters}, params::WENDyParameters, w0::AbstractVector{<:AbstractFloat}; ll::LogLevel=Warn, iterll::LogLevel=Warn, compareIters::Bool=false, maxIt::Int=1000, return_wits::Bool=false) where LinearInParameters
     with_logger(ConsoleLogger(stderr,ll)) do 
-        maxIt,reltol,abstol = params.optimMaxiters, params.optimReltol, params.optimAbstol
+        reltol,abstol = params.optimReltol, params.optimAbstol
         @info "Building Iteration "
-        iter = NLS_iter(prob, params)
+        iter = LinearInParameters ? Linear_IRWLS_Iter(prob, params) : NLS_iter(prob, params)
         trueIter =compareIters ? Linear_IRWLS_Iter(prob, params) : nothing
         @info "Initializing the linearization least squares solution  ..."
+        J = length(w0)
         wit = zeros(J,maxIt)
         resit = zeros(J,maxIt)
         wnm1 = w0 
@@ -121,9 +123,9 @@ function IRWLS(prob::WENDyProblem, params::WENDyParameters, w0::AbstractVector{<
         for n = 1:maxIt 
             @info "Iteration $n"
             dtNl = @elapsed aNl = @allocations wn = iter(wnm1;ll=iterll)
-            if ! (typeof(wn)<:AbstractVector)
+            if ! (typeof(wn)<:AbstractVector) || any(isnan.(wn))
                 @warn "Optimization method failed"
-                return wn, hcat(w0, wit[:,1:n-1]), resit[:,1:n-1]
+                return return_wits ? (wn, n, hcat(w0, wit[:,1:n-1])) : (wn,n)
             end
             resn = wnm1-wn
             resit[:,n] .= resn
@@ -148,96 +150,151 @@ function IRWLS(prob::WENDyProblem, params::WENDyParameters, w0::AbstractVector{<
                   Convergence Criterion met: 
                     reltol: $relRes < $reltol
                 """
-                return wn, hcat(w0,wit), resit 
-            elseif resNorm < absTol
+                return return_wits ? (wn, n, hcat(w0,wit) ) : (wn,n)
+            elseif resNorm < abstol
                 resit = resit[:,1:n] 
                 wit = wit[:,1:n] 
                 @info """  
                   Convergence Criterion met: 
                     abstol: $resNorm < $abstol
                 """
-                return wn, hcat(w0,wit), resit 
+                return return_wits ? (wn, n, hcat(w0,wit)) : (wn,n)
             end
             wnm1 = wn
         end
         @warn "Maxiteration met for IRWLS"
-        return wn, hcat(w0,wit), resit 
+        return return_wits ? (wn, maxIt, hcat(w0,wit)) : (wn,maxIt)
     end
 end 
 ## Forward Solve Nonlinear Least Squares 
-# we use [DiffEqParamEstim.jl]https://docs.sciml.ai/DiffEqParamEstim/stable
-function FSNLS(prob::WENDyProblem, ode::ODESystem, w0::AbstractVector{<:Real}; fwdSlvAlg=FBDF(), OptAlg=BFGS(), kwargs...)
-    init_cond = prob.U[:,1]
-    t_rng = (prob.tt[1], prob.tt[end])
-    params = [p => w0[j] for (j,p) in enumerate(parameters(ode))]
-    p = ODEProblem(ode, init_cond, t_rng, params)
-
-    cost_function = build_loss_objective(
-        p, fwdSlvAlg, L2Loss(prob.tt, prob.U),
-        Optimization.AutoForwardDiff(),
-        maxiters = params.optimMaxiters, verbose = false
+#
+function FSNLS(l2::Function, ∇l2!::Function,Hl2!::Function, prob::WENDyProblem, params::WENDyParameters, w0::AbstractVector{<:Real}; fwdSlvAlg::OrdinaryDiffEqAlgorithm=Rosenbrock23(), OptAlg=OptimizationOptimJL.NewtonTrustRegion(), ll::LogLevel=Warn, return_wits::Bool=false, kwargs...)
+    maxIt,reltol,abstol,timelimit = params.optimMaxiters, params.optimReltol, params.optimAbstol, params.optimTimelimit
+    res = Optim.optimize(
+        l2, ∇l2!, Hl2!, w0, OptAlg,
+        Optim.Options(
+            x_reltol=reltol, x_abstol=abstol, iterations=maxIt, time_limit=timelimit,
+            store_trace=return_wits,extended_trace=return_wits
+        );
     )
-    # Calling Optimization Routine
-    optprob = Optimization.OptimizationProblem(cost_function, w0;)
-    optsol = solve(optprob, OptAlg; kwargs...)
-    return optsol.u, optsol
+    return return_wits ? (what, iter, reduce(hcat, t.metadata["x"] for t in res.trace)) : (what, iter) 
 end
 ## 
-function trustRegion(m::Function, ∇m!::Function, Hm!::Function, w0::AbstractMatrix{<:Real};reltol::AbstractFloat=1e-8, abstol::AbstractFloat=1e-8, kwargs...)
+# function BFGS(m::Function, ∇m!::Function, w0::AbstractVector{<:Real}, params::WENDyParameters; kwargs...)
+#     maxIt,reltol,abstol,timelimit = params.optimMaxiters, params.optimReltol, params.optimAbstol, params.optimTimelimit
+#     res = Optim.optimize(
+#         m, ∇m!, w0, Optim.BFGS(),
+#         Optim.Options(
+#             x_reltol=reltol, x_abstol=abstol, iterations=maxIt, time_limit=timelimit, kwargs...
+#         )
+#     )
+#     what = res.minimizer
+#     iter = res.iterations
+#     return what, iter, res 
+# end
+## 
+function trustRegion(m::Function, ∇m!::Function, Hm!::Function, w0::AbstractVector{<:Real}, params::WENDyParameters; return_wits::Bool=false, kwargs...)
+    maxIt,reltol,abstol,timelimit = params.optimMaxiters, params.optimReltol, params.optimAbstol, params.optimTimelimit
     res = Optim.optimize(
         m, ∇m!, Hm!, w0, Optim.NewtonTrustRegion(),
         Optim.Options(
-            x_reltol=reltol, x_abstol=abstol, kwargs...
+            x_reltol=reltol, x_abstol=abstol, iterations=maxIt, time_limit=timelimit,
+            store_trace=return_wits,extended_trace=return_wits
         )
     )
     what = res.minimizer
     iter = res.iterations
-    return what, iter 
+    return return_wits ? (what, iter, reduce(hcat, t.metadata["x"] for t in res.trace)) : (what, iter) 
 end
 ## 
-function adaptiveCubicRegularization(m::Function, ∇m!::Function, Hm!::Function, w0::AbstractMatrix{<:Real}; reltol::AbstractFloat=1e-8, abstol::AbstractFloat=1e-8, kwargs...)
+function adaptiveCubicRegularization(m::Function, ∇m!::Function, Hm!::Function, w0::AbstractVector{<:Real}, params::WENDyParameters; return_wits::Bool=false,kwargs...)
+    maxIt,reltol,abstol,timelimit = params.optimMaxiters, params.optimReltol, params.optimAbstol, params.optimTimelimit
     function fg!(grads, w)
-        _∇m!_(grads,w)
-        _m_(w)
+        ∇m!(grads,w)
+        m(w)
     end
-    function _Hm_(w)
-        _Hm!_(_Hm!_.H, w)
-        _Hm!_.H
+    function Hm(w)
+        Hm!(w)
+        Hm!.H
     end
     ##
     opt = SFN.ARCOptimizer(
         length(w0);
-        atol=abstol ,rtol=reltol)
-    @info "Calling ARC"
-    @time stats, warc = minimize!(
-        opt, copy(w0), _m_, fg!, _Hm_;
-        show_trace=true, show_every=10,
+        atol=abstol, rtol=reltol)
+    stats, what, wits = minimize!(
+        opt, copy(w0), m, fg!, Hm;
+        itmax=maxIt, time_limit=timelimit
+        # show_trace=true, show_every=10,
         # extended_trace=true
     )
+
+    return return_wits ? (what, size(wits,2), wits) : (what, size(wits,2))
 end
 ## 
-function saddleFreeNewton(m::Function, ∇m!::Function, Hm!::Function, w0::AbstractMatrix{<:Real}; reltol::AbstractFloat=1e-8, abstol::AbstractFloat=1e-8, kwargs...)
-    # opt = SFNOptimizer(length(w0),Symbol("EigenSolver"), linesearch=true)
-    opt = SFNOptimizer(length(w0),Symbol("GLKSolver"), linesearch=true)
-    stats, what = minimize!(
-        opt, copy(w0), _m_, fg!, _Hm_;
-        show_trace=true, show_every=10, extended_trace=true
+# function saddleFreeNewton(m::Function, ∇m!::Function, Hm!::Function, w0::AbstractVector{<:Real}; reltol::AbstractFloat=1e-8, abstol::AbstractFloat=1e-8, kwargs...)
+#     # opt = SFNOptimizer(length(w0),Symbol("EigenSolver"), linesearch=true)
+#     opt = SFNOptimizer(length(w0),Symbol("GLKSolver"), linesearch=true)
+#     stats, what = minimize!(
+#         opt, copy(w0), _m_, fg!, _Hm_;
+#         show_trace=true, show_every=10, extended_trace=true
+#     )
+#     return what, stat.itererations
+# end
+"Don't use auto diff doesnt play nice "
+function _FSNLS_DiffEqParamEstim(prob::WENDyProblem, params::WENDyParameters, w0::AbstractVector{<:Real}; fwdSlvAlg::OrdinaryDiffEqAlgorithm=Rosenbrock23(), OptAlg=OptimizationOptimJL.NewtonTrustRegion(), kwargs...)
+    maxIt,reltol,abstol = params.optimMaxiters, params.optimReltol, params.optimAbstol
+    tRng = (prob.tt[1], prob.tt[end])
+    odeprob = ODEProblem(prob.data.f!, prob.data.initCond, prob.data.tRng)
+    # TODO: maybe set these tolerances in WENDyParameters
+    cost_function = build_loss_objective(
+        odeprob, fwdSlvAlg, L2Loss(prob.tt, prob.U),
+        Optimization.AutoForwardDiff(),
+        maxiters = maxIt, reltol=1e-12, abstol=1e-12, # these are passed to the ode solver
+        verbose = false, 
     )
-    return what, stat.itererations
+    optprob = Optimization.OptimizationProblem(cost_function, w0;)
+    optsol = solve(
+        optprob, OptAlg; 
+        reltol=reltol, maxiters=maxIt, 
+        # abstol=abstol, # got a warning Abstol not used by trust region here...
+        kwargs...
+    )
+    return optsol.u, optsol.stats.iterations, optsol
 end
-## Code found here https://discourse.julialang.org/t/simple-timeout-of-function/99578/2
-# usage @timeout sec begin code... end NaN 
-macro timeout(seconds, expr, fail)
-    quote
-        tsk = @task $expr
-        schedule(tsk)
-        Timer($seconds) do timer
-            istaskdone(tsk) || Base.throwto(tsk, InterruptException())
-        end
-        try
-            fetch(tsk)
-        catch _
-            $fail
-        end
-    end
-end
+## Wrap solvers so they can all be called with the same inputs
+algos = (
+    irwls=function _irwls(wendyProb, params, w0,m, ∇m!, Hm!,l2,∇l2!,Hl2!;return_wits::Bool=false )
+        what, iters, wits = IRWLS(
+            wendyProb, params, w0; return_wits=return_wits
+        )
+    end,
+    tr=function _tr(wendyProb, params, w0,m, ∇m!, Hm!,l2,∇l2!,Hl2!;return_wits::Bool=false)
+        trustRegion(m,∇m!,Hm!, w0,params; return_wits=return_wits)
+    end,
+    arc=function _arc(wendyProb, params, w0,m, ∇m!, Hm!,l2,∇l2!,Hl2!;return_wits::Bool=false)
+        adaptiveCubicRegularization(
+            m, ∇m!, Hm!, w0, params; 
+            return_wits=return_wits
+        )
+    end,
+    fsnls_tr=function _fsnls_tr(wendyProb, params, w0,m, ∇m!, Hm!,l2,∇l2!,Hl2!;return_wits::Bool=false)
+        FSNLS(
+            l2,∇l2!,Hl2!,
+            wendyProb, params, w0;
+            ll=Warn, OptAlg=Optim.NewtonTrustRegion(), 
+            return_wits=return_wits
+        )
+    end,
+)
+# bfgs=function _bfgs(wendyProb, params, w0,m, ∇m!, Hm!,l2,∇l2!,Hl2! )
+#     w_bfgs, iter_bfgs,_ = BFGS(m,∇m!, w0,params)
+#     w_bfgs, iter_bfgs
+# end,
+# fsnls_bfgs=function _fsnls_bfgs(wendyProb, params, w0,m, ∇m!, Hm!,l2,∇l2!,Hl2!)
+#     w_fsnls, iter_fsnls, res_fsnls  = FSNLS(
+#         l2,∇l2!,Hl2!,
+#         wendyProb, params, w0,
+#         ll=Warn, OptAlg=Optim.LBFGS()
+#     )
+#     w_fsnls, iter_fsnls
+# end,

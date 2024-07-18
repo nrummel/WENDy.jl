@@ -1,117 +1,245 @@
-using Revise
-# push!(LOAD_PATH, joinpath(@__DIR__, "../src"))
-# using WENDy
-includet(joinpath(@__DIR__, "../src/WENDy.jl"))
-includet(joinpath(@__DIR__, "../examples/exampleProblems.jl"))
+include(joinpath(@__DIR__, "../src/WENDy.jl"))
+includet(joinpath(@__DIR__, "../src/wendyMetrics.jl"))
+includet(joinpath(@__DIR__, "../examples/hindmarshRose.jl"))
+includet(joinpath(@__DIR__, "../examples/logisticGrowth.jl"))
+includet(joinpath(@__DIR__, "../examples/goodwin.jl"))
+includet(joinpath(@__DIR__, "../examples/robertson.jl"))
+using FiniteDiff, StaticArrays, Printf
 ##
-ex = LOGISTIC_GROWTH
+# ex = HINDMARSH_ROSE;
+ex = ROBERTSON;
+
 params = WENDyParameters(;
-    noiseRatio=0.01, 
-    seed=Int(1), 
-    timeSubsampleRate=2
+    noiseRatio=0.05, 
+    seed=1, 
+    timeSubsampleRate=1,
+    optimMaxiters=200, 
+    optimTimelimit=200.0
 )
-wendyProb = WENDyProblem(ex, params; ll=Info)
-##
+μ = 1
+wendyProb = WENDyProblem(ex, params; ll=Warn);
 wTrue = wendyProb.wTrue
 J = length(wTrue)
-μ = .1
 w0 = wTrue + μ * abs.(wTrue) .* randn(J);
 ## solve with Maximum Likelihood Estimate
-_m_ = mw(wendyProb, params);
-_∇m!_ = ∇mw(wendyProb, params);
-_Hm!_ = Hmw(wendyProb, params);
+@time "create m funs" begin 
+    m = MahalanobisDistance(wendyProb, params);
+    ∇m! = GradientMahalanobisDistance(wendyProb, params);
+    Hm! = HesianMahalanobisDistance(wendyProb, params);
+end
+##
+g = similar(w0)
+H = zeros(J,J)
+@time "mDist" m(w0)
+@time "gradient" ∇m!(g, w0)
+@time "hessian" Hm!(H, w0)
+##
+@info "Building Forward Solve L2 loss so that compile time does not affect results"
+l2(w::AbstractVector{<:Real}) = _l2(w,wendyProb.U,ex)
+∇l2!(g::AbstractVector{<:Real},w::AbstractVector{<:Real}) = ForwardDiff.gradient!(g, l2, w) 
+Hl2!(H::AbstractMatrix{<:Real},w::AbstractVector{<:Real}) = ForwardDiff.hessian!(H, l2, w) 
+##
+@info "Run once so that compilation time is isolated here"
+@time "l2 loss" l2(w0)
+g_fs = similar(w0)
+H_fs = zeros(J,J)
+@time "gradient of l2" ∇l2!(g_fs,w0)
+@time "hessian of l2" Hl2!(H_fs,w0);
+@assert !all(g_fs .== 0) "Auto diff failed on fs"
+@assert !all(H_fs .== 0) "Auto diff failed on fs"
+##
+results = NamedTuple(
+    name=>NamedTuple([:what=>Ref{Any}(Vector(undef,J)), :wits=>Ref{Any}(Matrix(undef,0,0))])
+for name in keys(algos))
 
-##
-@info "Trust Region Solve with Analytic Hessian "
-@time 
-relErr = norm(wts - wTrue) / norm(wTrue)
-fsRelErr = forwardSolveRelErr(wendyProb, ex, wts)
-@info """  
-    coef relErr =  $(relErr*100)%
-    fs relErr   =  $(fsRelErr*100)%
-    iter        =  $(res.iterations)
-"""
-##
-
-relErr = norm(warc - wTrue) / norm(wTrue)
-fsRelErr = forwardSolveRelErr(wendyProb, ex, warc)
-@info """  
-    coef relErr =  $(relErr*100)%
-    fs relErr   =  $(fsRelErr*100)%
-    iter        =  $(res.iterations)
-"""
-##
-@info "Forward Solve Nonlinear Least Squares"
-try 
-    @time  begin
-    wfsnls, solfsnls = FSNLS(
-        wendyProb, ex.ode, ones(J);
-        OptAlg=NewtonTrustRegion(), 
-        reltol=1e-8, maxiters=1000
-        # show_trace=true, show_every=10
-    )
+for (name, algo) in zip(keys(algos),algos)
+    @info "Running $name"
+    alg_dt = @elapsed begin 
+        (what, iters, wits) = try 
+            algo(
+                wendyProb, params, w0, 
+                m, ∇m!,Hm!, 
+                l2, ∇l2!, Hl2!; 
+                return_wits=true
+            ) 
+        catch
+            (NaN * ones(J), NaN, nothing) 
+        end 
     end
-    relErr = norm(wfsnls - wTrue) / norm(wTrue)
-    fsRelErr = solfsnls.objective
-    @info """  
-        coef relErr =  $(relErr*100)%
-        fs relErr   =  $(fsRelErr*100)%
-        iter        =  $(res.iterations)
+    cl2 = norm(what - wTrue) / norm(wTrue)
+    fsl2 = try
+        forwardSolveRelErr(wendyProb, what)
+    catch 
+        NaN 
+    end
+    mDist = try
+        m(what)
+    catch 
+        NaN 
+    end
+    @info """
+    Results:
+        dt = $alg_dt
+        cl2 = $(@sprintf "%.2g" cl2*100)%
+        fsl2 = $(@sprintf "%.2g" fsl2*100)%
+        mDist = $mDist
+        iters = $iters
     """
-catch e
-    @warn " FSNLS failed"
+    results[name].what[] = what 
+    results[name].wits[] = wits
 end
-## 
-@info "IRWLS"
-@time wirwls, wit, resit = IRWLS(
-    wendyProb, params, iter, w0; 
-    relTol=1e-8,
-    maxIt=1000
-    # ll=Info, 
-    # trueIter=iterLin, 
-    # iterll=Info
-)
-relErr = norm(wirwls - wTrue) / norm(wTrue)
-fsRelErr = try
-    forwardSolveRelErr(wendyProb, ex, wirwls)
-catch 
-    1e6 
-end
-@info """  
-    coef relErr =  $(relErr*100)%
-    fs relErr   =  $(fsRelErr*100)%
-    iter        =  $(res.iterations)
-"""
 
+## 
+# @info "Trust Region Solve with Analytic Hessian"
+# relErr = norm(wts - wTrue) / norm(wTrue)
+# @info """  
+#     coef relErr =  $(relErr*100)%
+#     fs relErr   =  $(fsRelErr*100)%
+#     iter        =  $(iter_ts)
+# """
 # ##
-# @info "SFN with analytic hessian"
-# # opt = SFNOptimizer(length(w0),Symbol("EigenSolver"), linesearch=true)
-# opt = SFNOptimizer(length(w0),Symbol("GLKSolver"), linesearch=true)
-# @time stats,wsfn = minimize!(
-#     opt, copy(w0), _m_, fg!, _Hm_;
-#     show_trace=true, show_every=10, extended_trace=true
-# )
-# relErr = norm(wsfn - wTrue) / norm(wTrue)
-# @info "  relErr =  $(relErr*100)%"
-# @info "  iter   =  $(stats.iterations)"
-# ##
-# @info "Trust Region Solve with Finite Difference Hessian "
-# @time begin
-# resfd = Optim.optimize(
-#     _m_, _∇m!_, Hm_fd!, w0, 
-#     Optim.NewtonTrustRegion(;
-#         initial_delta = 1.0, # matches matlab
-#         delta_hat = 100.0,
-#         eta = 0.1,
-#         rho_lower = 0.25, # matches matlab
-#         rho_upper = 0.75 # matches matlab
-#     ),
-#     Optim.Options(
-#         # show_trace=true, extended_trace=true, store_trace=true, show_every=10, 
-#         x_reltol=1e-8, x_abstol=1e-8
-#     )
-# )
-# end
-# relErr = norm(resfd.minimizer - wTrue) / norm(wTrue)
-# @info "  relErr =  $(relErr*100)%"
-# @info "  iter   =  $(resfd.iterations)"
+# @info "  ARC with Analytic Hessian "
+#     relErr = norm(warc - wTrue) / norm(wTrue)
+#     @info """  
+#         coef relErr =  $(relErr*100)%
+#         fs relErr   =  $(fsRelErr*100)%
+#         iter        =  $(size(wit_arc,2))
+#     """
+##
+D = wendyProb.D
+M = wendyProb.M
+F = zeros(D,M)
+myLF = zeros(D,M)
+LF = zeros(D,M)
+for m in 1:M 
+   @views ROBERTSON_f!(F[:,m], wendyProb.U_exact[:,m],  wTrue, nothing)
+   @views ROBERTSON_logf!(myLF[:,m], wendyProb.U_exact[:,m],  wTrue, nothing)
+   @views wendyProb.f!(LF[:,m], wTrue, wendyProb.U_exact[:,m])
+end
+##
+trs = AbstractTrace[]
+for d in 1:D 
+    # push!(
+    #     trs,
+    #     scatter(
+    #         x = wendyProb.tt,
+    #         y = wendyProb.U_exact[d,:],
+    #         name="u[$d]"
+    #     )
+    # )
+    # push!(
+    #     trs,
+    #     scatter(
+    #         x = wendyProb.tt,
+    #         y = wendyProb.U_exact[d,:],
+    #         name="u[$d]"
+    #     )
+    # )
+    # push!(
+    #     trs,
+    #     scatter(
+    #         x = wendyProb.tt,
+    #         y = F[d,:],
+    #         name="f(u)[$d]"
+    #     )
+    # )
+    # push!(
+    #     trs,
+    #     scatter(
+    #         x = wendyProb.tt,
+    #         y = log.(wendyProb.U_exact[d,:]),
+    #         name="log(u[$d])"
+    #     )
+    # )
+    push!(
+        trs,
+        scatter(
+            x = wendyProb.tt,
+            y = LF[d,:],
+            name="(f(u)/u)[$d]"
+        )
+    )
+    push!(
+        trs,
+        scatter(
+            x = wendyProb.tt,
+            y = myLF[d,:],
+            name="my(f(u)/u)[$d]"
+        )
+    )
+end 
+plotjs(
+    trs,
+    Layout(
+        title="U_exact fo $(ex.name)"
+    )
+)
+##
+algo_name = :tr
+what = results[algo_name].what[]
+what[end] = round(what[end])
+Uhat = forwardSolve(wendyProb, what)
+trs = AbstractTrace[]
+using Plots.Colors
+colors = [
+    colorant"#1f77b4",  # muted blue
+    colorant"#ff7f0e",  # safety orange
+    colorant"#2ca02c",  # cooked asparagus green
+    colorant"#d62728",  # brick red
+    colorant"#9467bd",  # muted purple
+    colorant"#8c564b",  # chestnut brown
+    colorant"#e377c2",  # raspberry yogurt pink
+    colorant"#7f7f7f",  # middle gray
+    colorant"#bcbd22",  # curry yellow-green
+    colorant"#17becf"   # blue-teal
+]
+for d in 1:D 
+    c = protanopic(colors[d],.25)
+    push!(
+        trs,
+        scatter(
+            x = wendyProb.tt,
+            y = wendyProb.U[d,:],
+            mode="markers",
+            maker_opacity=0.7,
+            maker_size=.5,
+            marker_color="#$(hex(c))",
+            name="U[$d]",
+            legendgroup=d
+        )
+    )
+    
+    push!(
+        trs,
+        scatter(
+            x = wendyProb.tt,
+            y = Uhat[d,:],
+            line_color="#$(hex(colors[d]))",
+            line_width=5,
+            name="Ũ[$d]",
+            legendgroup=d
+        )
+    )
+    push!(
+        trs,
+        scatter(
+            x = wendyProb.tt,
+            y = wendyProb.U_exact[d,:],
+            line_color="#$(hex(colors[d+D]))",
+            line_width=5,
+            line_dash="dash",
+            name="U^*[$d]",
+            legendgroup=d
+        )
+    )
+end 
+relErr_data = norm(Uhat - wendyProb.U) / norm(wendyProb.U)
+relErr_exact = norm(Uhat - wendyProb.U_exact) / norm(wendyProb.U_exact)
+plotjs(
+    trs,
+    Layout(
+        yaxis_type="log",
+        title="Comparing Forward sim (With rounding) to data<br>$(ex.name) with Algorithm $algo_name<br>||Û-U||₂ / ||U||₂=$(@sprintf "%.4g" relErr_data)<br>||Û-U^*||₂ / ||U^*||₂=$(@sprintf "%.4g" relErr_exact)",
+        yaxis_domain=[0,.8]
+    )
+)

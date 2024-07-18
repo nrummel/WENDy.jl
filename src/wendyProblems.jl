@@ -1,95 +1,22 @@
 ##
-abstract type WENDyProblem end 
-
-function WENDyProblem(data::WENDyData{LinearInParameters, DistType}, params::WENDyParameters; ll::LogLevel=Warn) where {LinearInParameters, DistType}
-    if LinearInParameters == true && !params.forceNonlinear
-        return LinearWENDyProblem(data, params; ll=ll)
-    end
-    NonlinearWENDyProblem(data, params; ll=ll)
-end
-struct LinearWENDyProblem <: WENDyProblem
+struct WENDyProblem{LinearInParameters, DistType} 
     D::Int
     J::Int
     M::Int
     K::Int
-    testFuctionRadii::AbstractVector{<:Int}
     b₀::AbstractVector{<:AbstractFloat}
     sig::AbstractVector{<:AbstractFloat}
     tt::AbstractVector{<:AbstractFloat}
+    U_exact::AbstractMatrix{<:AbstractFloat} 
     U::AbstractMatrix{<:AbstractFloat} 
+    _Y::AbstractMatrix{<:AbstractFloat} 
     V::AbstractMatrix{<:AbstractFloat}
     Vp::AbstractMatrix{<:AbstractFloat}
     f!::Function 
     jacuf!::Function
-    data::WENDyData
-    # truth information
-    wTrue::AbstractVector{<:AbstractFloat}
-    sigTrue::AbstractVector{<:AbstractFloat}
-    noise::AbstractMatrix{<:AbstractFloat}
-end
-
-function LinearWENDyProblem(data::WENDyData{LinearInParameters,DistType}, params::WENDyParameters; ll::LogLevel=Warn) where {LinearInParameters, DistType}
-    with_logger(ConsoleLogger(stderr, ll)) do
-        @assert LinearInParameters "The ODE must be linear in order to use this method"
-        @info "Build julia functions from symbolic expressions of ODE..."
-        _,f!     = getRHS(data.ode, Val(DistType))
-        _,jacuf! = getJacu(data.ode, Val(DistType));
-        J = length(parameters(data.ode))
-        @show testFuctionRadii = params.testFuctionRadii
-        U, noise, noise_ratio_obs, sigTrue = generateNoise(data, params) 
-        @info "Subsample data and add noise..."
-        tt = data.tt_full[1:params.timeSubsampleRate:end]
-        U = U[:,1:params.timeSubsampleRate:end]
-        @show D, M = size(U)
-        @info "============================="
-        @info "Start of Algo..."
-        @info "Estimate the noise in each dimension..."
-        sig = estimate_std(U, Val(DistType))
-        noiseEstRelErr = norm(sigTrue - sig) / norm(sigTrue)
-        @info "  Relative Error in noise estimate $noiseEstRelErr"
-        @info "Build test function matrices..."
-        @show params.testFuctionRadii
-        @show typeof(params.pruneMeth)
-        V, Vp, Vfull = params.pruneMeth(
-            tt,U,params.ϕ,J,params.Kmax,
-            params.testFuctionRadii
-        );
-        K,_ = size(V)
-        @info "Build right hand side to NLS..."
-        b₀ = reshape(-Vp * U', K*D);
-
-        wTrue = if T == SimulatedWENDyData 
-            data.trueParameters 
-        else
-            NaN*ones(J)
-        end
-
-        return LinearWENDyProblem(
-            D,J,M,K,testFuctionRadii,
-            b₀,sig,tt,U,V,Vp,
-            f!,jacuf!,
-            data,
-            wTrue,sigTrue,noise
-        )
-    end
-end
-
-
-
-struct NonlinearWENDyProblem <: WENDyProblem
-    D::Int
-    J::Int
-    M::Int
-    K::Int
-    testFuctionRadii::AbstractVector{<:Int}
-    b₀::AbstractVector{<:AbstractFloat}
-    sig::AbstractVector{<:AbstractFloat}
-    tt::AbstractVector{<:AbstractFloat}
-    U::AbstractMatrix{<:AbstractFloat} 
-    V::AbstractMatrix{<:AbstractFloat}
-    Vp::AbstractMatrix{<:AbstractFloat}
-    f!::Function 
-    jacuf!::Function
+    # Only valid when the problem is linear 
+    G::AbstractMatrix{<:Real}
+    # Only necessary when the problem is non linear
     jacwf!::Function
     jacwjacuf!::Function
     heswf!::Function
@@ -100,101 +27,127 @@ struct NonlinearWENDyProblem <: WENDyProblem
     wTrue::AbstractVector{<:AbstractFloat}
     noise::AbstractMatrix{<:AbstractFloat}
 end 
-
-function NonlinearWENDyProblem(data::WENDyData, params::WENDyParameters; ll::LogLevel=Warn)
+## convience constructor if we wish to arbitrarily say its lineear or not
+function WENDyProblem(data::SimulatedWENDyData{LinearInParameters, DistType}, params::WENDyParameters, forceLinear::Val{LinearInParameters}; kwargs...) where {LinearInParameters, DistType<:Distribution}
+    if !isnothing(forceLinear)
+        data = SimulatedWENDyData(data, Val(LinearInParameters))
+    end
+    WENDyProblem(data, params; kwargs...)
+end
+## Helper function to unpack data and then simulate noise
+function _unpackData(data::SimulatedWENDyData{LinearInParameters, DistType}, params::WENDyParameters) where {LinearInParameters, DistType<:Distribution}
+    @info "Simulated Data"
+    @info "  Subsample data "
+    tt = data.tt_full[1:params.timeSubsampleRate:end]
+    U_exact = data.U_exact[:,1:params.timeSubsampleRate:end]
+    D, M = size(U_exact)
+    @info "Adding noise from Distribution $DistType"
+    U, noise, noise_ratio_obs, sigTrue = generateNoise(U_exact, params, Val(DistType))
+    return (
+        tt, U, sigTrue, noise, Float64.(data.trueParameters), U_exact
+    )
+end
+## helper function that unpacks data and fill in NaN for truth
+function _unpackData(data::EmpricalWENDyData, params::WENDyParameters)
+    @info "Using EmpricalWENDyData"
+    data.tt_full, data.U_full, NaN*ones(size(data.U_full,1)), NaN*ones(size(data.U_full)), NaN*ones(J), NaN*size(data.U_full)
+end
+## helper function to build G matrix
+function _buildGmat(f!::Function, U::AbstractMatrix, V::AbstractMatrix, J::Int)
+    D, M = size(U)
+    K, _ = size(V)
+    @info " Build G mat for linear problem"
+    eⱼ = zeros(J)
+    F = zeros(D,M)
+    G = zeros(K*D,J)
+    for j in 1:J 
+        eⱼ .= 0
+        eⱼ[j] = 1
+        for m in 1:M 
+            @views f!(F[:,m], eⱼ, U[:,m])
+        end 
+        gⱼ = V * F'
+        @views G[:,j] .= reshape(gⱼ,K*D)
+    end
+    G
+end
+## Helper function to throw error when linear problem tries to call nonlinear functions that dont exist
+function _foo!(::Any, ::Any, ::Any) 
+    @assert false "This function is not implemented of linear problems"
+end
+## linear Wendy problem 
+function WENDyProblem(data::WENDyData{true, DistType}, params::WENDyParameters; ll::LogLevel=Warn, matlab_data::Union{Dict,Nothing}=nothing) where DistType<:Distribution
     with_logger(ConsoleLogger(stderr, ll)) do
-        @info "Build julia functions from symbolic expressions of ODE..."
-        noiseDist = data.noiseDist
-        _,f!     = getRHS(data.ode, Val(noiseDist))
-        _,jacuf! = getJacu(data.ode, Val(noiseDist));
-        _,jacwf! = getJacw(data.ode, Val(noiseDist));
-        _,jacwjacuf! = getJacwJacu(data.ode, Val(noiseDist));
-        _,heswf! = getHesw(data.ode, Val(noiseDist));
-        _,heswjacuf! = getHeswJacu(data.ode, Val(noiseDist));
-        wTrue = data.trueParameters
         J = length(parameters(data.ode))
-        testFuctionRadii = params.testFuctionRadii
-        @info "Subsample data and add noise..."
-        tt = tt_full[1:params.timeSubsampleRate:end]
-        U = U_full[:,1:params.timeSubsampleRate:end]
+        tt, U, sigTrue, noise, wTrue, U_exact = _unpackData(data, params)
         D, M = size(U)
-        U, noise, noise_ratio_obs, sigTrue = generateNoise(U, params.noiseRatio, Val(noiseDist)) 
         @info "============================="
-        @info "Start of Algo..."
-        @info "Estimate the noise in each dimension..."
-        sig = estimate_std(U, Val(noiseDist))
+        @info "Start of Algo"
+        @info " Estimate the noise in each dimension"
+        _Y = DistType == Normal ? U : log.(U)
+        sig = estimate_std(_Y)
         noiseEstRelErr = norm(sigTrue - sig) / norm(sigTrue)
         @info "  Relative Error in noise estimate $noiseEstRelErr"
-        @info "Build test function matrices..."
-        V, Vp, Vfull = params.pruneMeth(tt,U,params.ϕ,J,params.Kmax,params.testFuctionRadii);
-        K,_ = size(V)
-        @info "Build right hand side to NLS..."
-        b₀ = reshape(-Vp * U', K*D);
-
-        return WENDyProblem(D, J, M, K, testFuctionRadii, sigTrue, wTrue, b₀, sig, tt, U, noise, V, Vp, f!, jacuf!, jacwf!,jacwjacuf!,heswf!, heswjacuf!)
+        V,Vp,_ = isnothing(matlab_data) ? params.pruneMeth(tt,_Y,params.ϕ,J,params.Kmax,params.testFuctionRadii) : (matlab_data["V"], matlab_data["Vp"], nothing)
+        K, _ = size(V)
+        @info " Building the LHS to the residual"
+        b₀ = reshape(-Vp * _Y', K*D);
+        @info " Build julia functions from symbolic expressions of ODE"
+        _,f!     = getRHS(data) # the derivatives wrt u are only affected by noise dist
+        _,jacuf! = getJacu(data);
+        G = _buildGmat(f!, U, V, J)
+        return WENDyProblem{true, DistType}(
+            D,J,M,K,
+            b₀,sig,tt,U_exact,U,_Y,V,Vp,
+            f!,jacuf!,
+            G, # Linear Only
+            _foo!,_foo!,_foo!,_foo!, # Nonlinear only
+            data,
+            sigTrue,wTrue,noise
+        )
     end
 end
-## For comparing against the matlab implementation
-struct _MATLAB_WENDyProblem <: WENDyProblem
-    D::Int
-    J::Int
-    M::Int
-    K::Int
-    wTrue::AbstractVector{<:AbstractFloat}
-    b₀::AbstractVector{<:AbstractFloat}
-    sig::AbstractVector{<:AbstractFloat}
-    tt::AbstractVector{<:AbstractFloat}
-    U::AbstractMatrix{<:AbstractFloat} 
-    V::AbstractMatrix{<:AbstractFloat}
-    Vp::AbstractMatrix{<:AbstractFloat}
-    f!::Function 
-    jacuf!::Function
-    jacwf!::Function
-    jacwjacuf!::Function
-    heswf!::Function
-    heswjacuf!::Function
-    data::WENDyData
-    _matdata::Dict
-    function _MATLAB_WENDyProblem(data::WENDyData, ::Any=nothing; ll::LogLevel=Warn)
-        with_logger(ConsoleLogger(stderr, ll)) do
-            @info "Loading from MatFile"
-            _matdata =  matread(data.matlab_file)
-            U = Matrix(data["xobs"]')
-            tt = data["tobs"][:]
-            V = data["V"]
-            Vp = data["Vp"]
-            true_vec = data["true_vec"][:]
-            sig_ests = data["sig_ests"][:]
-            ##
-            wTrue = true_vec[:]
-            J = length(parameters(data.ode))
-            @info "Build julia functions from symbolic expressions of ODE..."
-            _,f!     = getRHS(data.ode)
-            _,jacuf! = getJacu(data.ode);
-            _,jacwf! = getJacw(data.ode);
-            _,jacwjacuf! = getJacwJacu(data.ode);
-            _,heswf! = getHesw(data.ode);
-            _,heswjacuf! = getHeswJacu(data.ode);
-            D, M = size(U)
-            @info "============================="
-            @info "Start of Algo..."
-            @info "Estimate the noise in each dimension..."
-            sig = estimate_std(U)
-            @assert norm(sig -sig_ests) / norm(sig_ests) < 1e2*eps() "Out estimation of noise is wrong"
-            @info "Build test function matrices..."
-            ## TODO: check that our V/Vp is the same up to a rotation
-            # V, Vp, Vfull = params.pruneMeth(tt,U,params.ϕ,J,params.Kmax,params.testFuctionRadii);
-            K,_ = size(V)
-            @info "Build right hand side to NLS..."
-            b₀ = reshape(-Vp * U', K*D);
-
-            return new(D, J, M, K, wTrue, b₀, sig, tt, U, V, Vp, f!, jacuf!, jacwf!, jacwjacuf!,heswf!, heswjacuf!, data,_matdata)
-        end
-    end 
-end 
+## nonlinear Wendy problem 
+function WENDyProblem(data::WENDyData{false, DistType}, params::WENDyParameters; ll::LogLevel=Warn, matlab_data::Union{Dict,Nothing}=nothing) where DistType<:Distribution
+    with_logger(ConsoleLogger(stderr, ll)) do
+        J = length(parameters(data.ode))
+        J = length(parameters(data.ode))
+        tt, U, sigTrue, noise, wTrue, U_exact = _unpackData(data, params)
+        D, M = size(U)
+        @info "============================="
+        @info "Start of Algo"
+        @info " Estimate the noise in each dimension"
+        _Y = DistType == Normal ? U : log.(U)
+        sig = estimate_std(_Y)
+        noiseEstRelErr = norm(sigTrue - sig) / norm(sigTrue)
+        @debug "  Relative Error in noise estimate $noiseEstRelErr"
+        V,Vp,_ = isnothing(matlab_data) ? params.pruneMeth(tt,_Y,params.ϕ,J,params.Kmax,params.testFuctionRadii) : (matlab_data["V"], matlab_data["Vp"], nothing)
+        K, _ = size(V)
+        @info " Building the LHS to the residual"
+        b₀ = reshape(-Vp * _Y', K*D);
+        @info " Build julia functions from symbolic expressions of ODE"
+        _,f!     = getRHS(data) # the derivatives wrt u are only affected by noise dist
+        _,jacuf! = getJacu(data);
+        @info " Computing additional symbolic functions for nonlinear problem"
+        G = NaN.*ones(K*D, J)
+        _,jacwf! = getJacw(data); # the derivatives wrt u are only affected by noise dist
+        _,jacwjacuf! = getJacwJacu(data);
+        _,heswf! = getHesw(data); # the derivatives wrt u are only affected by noise dist
+        _,heswjacuf! = getHeswJacu(data);
+        return WENDyProblem{false, DistType}(
+            D,J,M,K,
+            b₀,sig,tt,U_exact,U,_Y,V,Vp,
+            f!,jacuf!,
+            G,
+            jacwf!,jacwjacuf!,heswf!,heswjacuf!,
+            data,
+            sigTrue,wTrue,noise
+        )
+    end
+end
 ##
 import Plots: plot
-function plot(prob::WENDyProblem)
+function Plots.plot(prob::WENDyProblem)
     D = prob.D 
     plot(
         prob.tt,
@@ -203,6 +156,4 @@ function plot(prob::WENDyProblem)
         title="WENDy Problem"
     )
     xlabel!("time")
-
-
 end

@@ -1,69 +1,81 @@
 using Symbolics: jacobian
 using ModelingToolkit: parameters, build_function, unknowns, ODESystem
-##
-function _getRHS_sym(mdl::ODESystem, ::Val{T}=Val(Normal)) where T<:Distribution
-    return  [T == Normal ? eq.rhs : log(eq.rhs) for eq in equations(mdl)]
+## rhs is f(u) for normal noise
+function _getRHS_sym(data::WENDyData{LinearInParameters, Normal}) where LinearInParameters
+    return  [eq.rhs  for eq in equations(data.ode)]
+end
+## rhs of ode changes to f(u) ./ u for lognormal noise
+function _getRHS_sym(data::WENDyData{LinearInParameters,LogNormal}) where LinearInParameters
+    return  [eq.rhs / u  for (u,eq) in zip(unknowns(data.ode),equations(data.ode))]
 end
 
-function getRHS(mdl::ODESystem, ::Val{T}=Val(Normal)) where T<:Distribution
-    w = parameters(mdl)
-    u = unknowns(mdl)
-    rhs_sym = _getRHS_sym(mdl, Val(T))
+function getRHS(data::WENDyData{LinearInParameters,DistType}) where {LinearInParameters, DistType<:Distribution}
+    w = parameters(data.ode)
+    u = unknowns(data.ode)
+    rhs_sym = _getRHS_sym(data)
     _rhs,_rhs! = build_function(rhs_sym, w,u; expression=false)
     return _rhs,_rhs! 
 end
 
-function _getJacw_sym(mdl::ODESystem, ::Val{T}=Val(Normal)) where T<:Distribution
-    w = parameters(mdl)
-    rhs_sym = _getRHS_sym(mdl, Val(T))
+function _getJacw_sym(data::WENDyData{LinearInParameters,DistType}) where {LinearInParameters, DistType<:Distribution}
+    w = parameters(data.ode)
+    rhs_sym = _getRHS_sym(data)
     return jacobian(rhs_sym, w)
 end
 
-function getJacw(mdl::ODESystem, ::Val{T}=Val(Normal)) where T<:Distribution
-    w = parameters(mdl)
-    u = unknowns(mdl)
-    jac_sym = _getJacw_sym(mdl, Val(T))
+function getJacw(data::WENDyData{LinearInParameters,DistType}) where {LinearInParameters, DistType<:Distribution}
+    w = parameters(data.ode)
+    u = unknowns(data.ode)
+    jac_sym = _getJacw_sym(data)
     jac,jac! = build_function(jac_sym, w,u; expression=false)
     return jac, jac!
 end
-
-function _getJacu_sym(mdl::ODESystem, ::Val{T}=Val(Normal)) where T<:Distribution
-    u = unknowns(mdl)
-    rhs_sym = _getRHS_sym(mdl, Val(T))
+## for normal noise ∇ᵤf 
+function _getJacu_sym(data::WENDyData{LinearInParameters,Normal}) where LinearInParameters
+    u = unknowns(data.ode)
+    rhs_sym = _getRHS_sym(data)
+    return jacobian(rhs_sym, u)
+end
+## for normal noise ∇_yf(u)/u where y = log(u)  
+function _getJacu_sym(data::WENDyData{LinearInParameters,LogNormal}) where LinearInParameters
+    rhs = _getRHS_sym(data)
+    mymap = Dict([u =>exp(u) for u in unknowns(data.ode)])
+    rhs_sym = [simplify(substitute(rhs_d, mymap)) for rhs_d in rhs]
+    u = unknowns(data.ode)
     return jacobian(rhs_sym, u)
 end
 
-function getJacu(mdl::ODESystem, ::Val{T}=Val(Normal)) where T<:Distribution
-    w = parameters(mdl)
-    u = unknowns(mdl)
-    jac_sym = _getJacu_sym(mdl, Val(T))
+function getJacu(data::WENDyData{LinearInParameters,DistType}) where {LinearInParameters, DistType<:Distribution}
+    w = parameters(data.ode)
+    u = unknowns(data.ode)
+    jac_sym = _getJacu_sym(data)
     jac,jac! = build_function(jac_sym, w,u; expression=false)
     return jac, jac!
 end
 
-function getJacwJacu(mdl::ODESystem, ::Val{T}=Val(Normal)) where T<:Distribution
-    w = parameters(mdl)
-    u = unknowns(mdl)
-    jacu_sym = _getJacu_sym(mdl, Val(T))
+function getJacwJacu(data::WENDyData{LinearInParameters,DistType}) where {LinearInParameters, DistType<:Distribution}
+    w = parameters(data.ode)
+    u = unknowns(data.ode)
+    jacu_sym = _getJacu_sym(data)
     jacwjacu_sym = jacobian(jacu_sym, w)
     jac, jac! = build_function(jacwjacu_sym, w,u; expression=false)
     return jac, jac!
 end
 
-function getHeswJacu(mdl::ODESystem, ::Val{T}=Val(Normal)) where T<:Distribution
-    w = parameters(mdl)
-    u = unknowns(mdl)
-    jacu_sym = _getJacu_sym(mdl, Val(T))
+function getHeswJacu(data::WENDyData{LinearInParameters,DistType}) where {LinearInParameters, DistType<:Distribution}
+    w = parameters(data.ode)
+    u = unknowns(data.ode)
+    jacu_sym = _getJacu_sym(data)
     jacwjacu_sym = jacobian(jacu_sym, w)
     heswjacu_sym = jacobian(jacwjacu_sym, w)
     hes, hes! = build_function(heswjacu_sym, w,u; expression=false)
     return hes, hes!
 end
 
-function getHesw(mdl::ODESystem, ::Val{T}=Val(Normal)) where T<:Distribution
-    w = parameters(mdl)
-    u = unknowns(mdl)
-    jacw_sym = _getJacw_sym(mdl, Val(T))
+function getHesw(data::WENDyData{LinearInParameters,DistType}) where {LinearInParameters, DistType<:Distribution}
+    w = parameters(data.ode)
+    u = unknowns(data.ode)
+    jacw_sym = _getJacw_sym(data)
     hesw_sym = jacobian(jacw_sym, w)
     hes, hes! = build_function(hesw_sym, w,u; expression=false)
     return hes, hes!

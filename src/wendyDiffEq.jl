@@ -1,57 +1,55 @@
-function _solve_ode(prob::ODEProblem, t_rng::Tuple, M::Int;
-alg=Rosenbrock23(), reltol::Real=1e-8, abstol::Real=1e-8)
-    t_step = (t_rng[end]-t_rng[1]) / (M-1)
-    return solve(prob, alg, reltol=reltol, abstol = abstol, saveat=t_step)
-end
 ## Function used to odes problems in the format used here
 function _solve_ode(
-    ode::ODESystem, 
-    t_rng::Tuple, 
+    f!::Function, 
+    tRng::Tuple, 
     M::Int, 
     w::AbstractVector{<:Real}, 
     u0::AbstractVector{<:Real}; 
     alg::OrdinaryDiffEq.OrdinaryDiffEqAlgorithm=Rosenbrock23(), 
     reltol::Real=1e-12, 
-    abstol::Real=1e-12
+    abstol::Real=1e-12,
+    kwargs...
 )
-    # Build parameter dictionary from the "true params" 
-    @assert length(w) == length(parameters(ode)) "Parameter vector must be the same length as parameters in ode"
-    params = [p => wj for (p,wj) in zip(parameters(ode), w)]
-    @assert length(u0) == length(unknowns(ode)) "Initial condition vector must be the same length as unknowns in ode"
-    init_cond = [ic=>u0k for (ic,u0k) in zip(unknowns(ode), u0)]
-    p = ODEProblem(ode, init_cond, t_rng, params)
-    return _solve_ode(p, t_rng, M; alg=alg, reltol=reltol, abstol=abstol)
+    odeprob = ODEProblem{true, SciMLBase.FullSpecialize}(f!, u0, tRng, w)
+    t_step = (tRng[end]-tRng[1]) / (M-1)
+    solve(odeprob, alg; 
+        reltol=reltol, abstol = abstol, saveat=t_step,
+        verbose=false, kwargs...
+    )
 end
 ##
-function forwardSolve(prob::WENDyProblem, ex::NamedTuple, w::AbstractVector{<:Real}; kwargs...)
-    sol = _solve_ode(ex.ode, (prob.tt[1], prob.tt[end]), prob.M; w=w,
-    kwargs...)
+function forwardSolve(prob::WENDyProblem, w::AbstractVector{<:Real}; kwargs...)
+    sol = _solve_ode(prob.data.f!, prob.data.tRng, prob.M, w, prob.data.initCond; kwargs...)
     return reduce(hcat, sol.u)
 end
 ## compute forward solve relative error
-function forwardSolveRelErr(prob::WENDyProblem, ex::NamedTuple, w::AbstractVector{<:Real}; kwargs...)
-    sol = _solve_ode(ex, (prob.tt[1], prob.tt[end]), prob.M; w=w,
-    kwargs...)
-    Uhat = reduce(hcat, sol.u)
-    norm(Uhat-prob.U)/norm(prob.U)
+function forwardSolveRelErr(prob::WENDyProblem, w::AbstractVector{<:Real}; kwargs...)
+    Uhat = forwardSolve(prob, w; verbose=false)
+    norm(Uhat-prob.U) / norm(prob.U)
 end
-
-##
-function _getData(ode::ODESystem, tRng::NTuple{2,<:AbstractFloat}, M::Int, trueParameters::AbstractVector{<:Real}, initCond::AbstractVector{<:Real}, file::String; forceOdeSolve::Bool=false, ll::LogLevel=Warn)
-    with_logger(ConsoleLogger(stdout, ll)) do 
-        if forceOdeSolve || !isfile(file)
-            @info "  Generating data by solving ode"
-            sol = _solve_ode(ode, tRng, M, trueParameters, initCond)
-            u = reduce(hcat, sol.u)
-            t = sol.t
-            BSON.@save file t u
-            return t,u, sol
-        end
-        @info "Loading from file"
-        data = BSON.load(file) 
-        tt_full = data[:t] 
-        U_full = data[:u] 
-        return tt_full, U_full
+## 
+function _l2(w::AbstractVector{<:Real}, U::AbstractMatrix, ex::WENDyData)
+    try 
+        odeprob = ODEProblem{true, SciMLBase.FullSpecialize}(
+            ex.f!, 
+            ex.initCond,
+            ex.tRng,
+            w
+        )
+        M = size(U,2)
+        t_step = abs(ex.tRng[end] - ex.tRng[1]) / (M-1)
+        sol = solve(
+            odeprob,
+            Rosenbrock23(); 
+            reltol=1e-12, abstol=1e-12, 
+            saveat=t_step, 
+            # saveat=ex.tRng[1]:t_step:ex.tRng[end], 
+            verbose=true
+        )
+        Uhat = reduce(hcat, sol.u)
+        sum((Uhat[:] - U[:]).^2) 
+    catch
+        NaN
     end
 end
 

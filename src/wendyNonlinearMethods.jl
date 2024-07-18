@@ -4,7 +4,7 @@ struct NonlinearCovarianceFactor<:CovarianceFactor
     # output
     L::AbstractMatrix{<:Real}
     # data
-    U::AbstractMatrix{<:Real} 
+    _Y::AbstractMatrix{<:Real} 
     V::AbstractMatrix{<:Real} 
     L₀::AbstractMatrix{<:Real}
     sig::AbstractVector{<:Real}
@@ -16,9 +16,9 @@ struct NonlinearCovarianceFactor<:CovarianceFactor
     _L₁::AbstractArray{<:Real, 4}
 end 
 # constructor
-function NonlinearCovarianceFactor(prob::WENDyProblem, params::Union{WENDyParameters,Nothing}=nothing, ::Val{T}=Val(Float64)) where T<:Real
-    D, M = size(U)
-    K, _ = size(V)
+function NonlinearCovarianceFactor(prob::WENDyProblem{false}, params::Union{WENDyParameters,Nothing}=nothing, ::Val{T}=Val(Float64)) where T<:Real
+    D, M = size(prob.U)
+    K, _ = size(prob.V)
     # preallocate output
     L = zeros(T,K*D,M*D)
     # precompute L₀ because it does not depend on w
@@ -37,7 +37,7 @@ function NonlinearCovarianceFactor(prob::WENDyProblem, params::Union{WENDyParame
 
     return NonlinearCovarianceFactor(
         L,
-        prob.U, prob.V,L₀,prob.sig, 
+        prob._Y, prob.V,L₀,prob.sig, 
         prob.jacuf!, 
         JuF, __L₁, _L₁
     )
@@ -46,7 +46,7 @@ end
 function (m::NonlinearCovarianceFactor)(L::AbstractMatrix, w::AbstractVector{<:Real}; ll::LogLevel=Info) 
     _L!(
         L,w,
-        m.U,m.V,m.L₀,m.sig,
+        m._Y,m.V,m.L₀,m.sig,
         m.jacuf!,
         m.JuF,m.__L₁,m._L₁;
         ll=ll
@@ -57,12 +57,59 @@ end
 function (m::NonlinearCovarianceFactor)(w::AbstractVector{<:Real}; ll::LogLevel=Info) 
     _L!(
         m.L,w,
-        m.U,m.V,m.L₀,m.sig,
+        m._Y,m.V,m.L₀,m.sig,
         m.jacuf!,
         m.JuF,m.__L₁,m._L₁;
         ll=ll
     )
     nothing
+end
+##
+struct NonlinearGradientCovarianceFactor<:GradientCovarianceFactor 
+    # output
+    ∇L::AbstractArray{<:Real,3}
+    # data 
+    _Y::AbstractMatrix{<:Real}
+    V::AbstractMatrix{<:Real}
+    sig::AbstractVector{<:Real}
+    # functions
+    jacwjacuf!::Function
+    # buffers
+    JwJuF::AbstractArray{<:Real,4}
+    __∇L::AbstractArray{<:Real,5}
+    _∇L::AbstractArray{<:Real,5}
+end 
+function NonlinearGradientCovarianceFactor(prob, params, ::Val{T}=Val(Float64)) where T<:Real
+    K,M,D,J = prob.K, prob.M, prob.D, prob.J
+    ∇L = zeros(T,K*D,M*D,J)
+    JwJuF = zeros(T,D,D,J,M)
+    __∇L = zeros(T,K,D,D,J,M)
+    _∇L = zeros(T,K,D,M,D,J)
+   
+    NonlinearGradientCovarianceFactor(
+        ∇L,
+        prob._Y, prob.V, prob.sig, 
+        prob.jacwjacuf!,
+        JwJuF, __∇L, _∇L
+    )
+end
+# method inplace 
+function (m::NonlinearGradientCovarianceFactor)(∇L::AbstractArray{3, <:Real}, w::AbstractVector{<:Real};ll::LogLevel=Warn)
+    _∇L!(
+        ∇L, w,
+        m._Y,m.V,m.sig,
+        m.jacwjacuf!,
+        m.JwJuF, m.__∇L, m._∇L
+    )
+end
+# method mutating interal storage
+function (m::NonlinearGradientCovarianceFactor)(w::AbstractVector{<:Real};ll::LogLevel=Warn)
+    _∇L!(
+        m.∇L, w,
+        m._Y,m.V,m.sig,
+        m.jacwjacuf!,
+        m.JwJuF, m.__∇L, m._∇L
+    )
 end
 ## r(w) - NonlinearResidual
 # struct
@@ -91,7 +138,7 @@ function NonlinearResidual(U::AbstractMatrix{<:Real}, V::AbstractMatrix{<:Real},
     g = zeros(T, K*D)
     NonlinearResidual(r,U,V,f!,F,G,g)
 end
-function NonlinearResidual(prob::WENDyProblem, params::Union{WENDyParameters, Nothing}=nothing, ::Val{T}=Val(Float64)) where T<:Real 
+function NonlinearResidual(prob::WENDyProblem{false}, params::Union{WENDyParameters, Nothing}=nothing, ::Val{T}=Val(Float64)) where T<:Real 
     NonlinearResidual(prob.U, prob.V, prob.f!, Val(T))
 end
 # method inplace 
@@ -163,7 +210,7 @@ function NonlinearGradientResidual(U::AbstractMatrix, V::AbstractMatrix, jacwf!:
     ∇r = zeros(T,K*D, J)
     NonlinearGradientResidual(Rᵀ⁻¹∇r, U, V, jacwf!, JwF, __∇r, _∇r, ∇r)
 end
-function NonlinearGradientResidual(prob::WENDyProblem, params::Union{WENDyParameters, Nothing}=nothing, ::Val{T}=Val(Float64)) where T<:Real 
+function NonlinearGradientResidual(prob::WENDyProblem{false}, params::Union{WENDyParameters, Nothing}=nothing, ::Val{T}=Val(Float64)) where T<:Real 
     NonlinearGradientResidual(prob.U, prob.V, prob.jacwf!, prob.J, Val(T))
 end
 # method inplace 
@@ -210,11 +257,12 @@ function (m::NonlinearGradientResidual)(w::AbstractVector{<:Real}; ll::LogLevel=
 end 
 ##
 ## Hm(w) - Hessian of Maholinobis Distance
-struct HesianMahalanobisDistance<:Function 
+struct NonlinearHesianMahalanobisDistance<:HesianMahalanobisDistance 
     # output 
     H::AbstractMatrix{<:Real}
     # data 
     U::AbstractMatrix{<:Real}
+    _Y::AbstractMatrix{<:Real}
     V::AbstractMatrix{<:Real}
     b₀::AbstractVector{<:Real}
     sig::AbstractVector{<:Real}
@@ -244,7 +292,7 @@ struct HesianMahalanobisDistance<:Function
     ∂ᵢSS⁻¹∂ⱼS::AbstractMatrix{<:Real}
 end
 
-function HesianMahalanobisDistance(prob::WENDyProblem, params::WENDyParameters, ::Val{T}=Val(Float64)) where T<:Real
+function NonlinearHesianMahalanobisDistance(prob::WENDyProblem{false}, params::WENDyParameters, ::Val{T}=Val(Float64)) where T<:Real
     K,M,D,J = prob.K, prob.M, prob.D, prob.J
     # ouput 
     H = zeros(J,J)
@@ -270,15 +318,15 @@ function HesianMahalanobisDistance(prob::WENDyProblem, params::WENDyParameters, 
     ∂ᵢⱼS = zeros(T, K*D, K*D)
     S⁻¹∂ⱼS = zeros(T, K*D, K*D)
     ∂ᵢSS⁻¹∂ⱼS = zeros(T, K*D, K*D)
-    HesianMahalanobisDistance(
+    NonlinearHesianMahalanobisDistance(
         H,
-        prob.U, prob.V,prob.b₀,prob.sig,
+        prob.U, prob._Y, prob.V, prob.b₀, prob.sig,
         R!, r!, ∇r!, ∇L!, prob.heswf!, prob.heswjacuf!,  
         S⁻¹r, S⁻¹∇r,  ∂ⱼLLᵀ, ∇S, HwF, _∇²r, ∇²r, HwJuF, __∇²L, _∇²L, ∇²L, ∂ⱼL∂ᵢLᵀ, ∂ⱼᵢLLᵀ, ∂ᵢⱼS, S⁻¹∂ⱼS, ∂ᵢSS⁻¹∂ⱼS
     )
 end
-# method inplace
-function (m::HesianMahalanobisDistance)(H::AbstractMatrix{<:Real}, w::AbstractVector{<:Real}; ll::LogLevel=Warn)
+## method inplace
+function (m::NonlinearHesianMahalanobisDistance)(H::AbstractMatrix{<:Real}, w::AbstractVector{<:Real}; ll::LogLevel=Warn)
     # TODO: try letting cholesky factorization back in here
     m.R!(w; transpose=false, doChol=false) 
     m.r!(m.b₀, w) 
@@ -286,21 +334,22 @@ function (m::HesianMahalanobisDistance)(H::AbstractMatrix{<:Real}, w::AbstractVe
     m.∇L!(w)
     _Hm!(
         H, w,
-        m.∇L!.∇L, m.U, m.V, m.R!.L!.L, m.R!.Sreg, m.∇r!.∇r, m.b₀, m.sig,
+        m.∇L!.∇L, m.U, m._Y, m.V, m.R!.L!.L, m.R!.Sreg, m.∇r!.∇r, m.b₀, m.sig,
         m.r!.r, 
         m.heswf!, m.heswjacuf!,  
         m.S⁻¹r, m.S⁻¹∇r, m.∂ⱼLLᵀ, m.∇S, m.HwF, m._∇²r, m.∇²r, m.HwJuF, m.__∇²L, m._∇²L, m.∇²L, m.∂ⱼL∂ᵢLᵀ, m.∂ᵢⱼLLᵀ, m.∂ᵢⱼS, m.S⁻¹∂ⱼS, m.∂ᵢSS⁻¹∂ⱼS
     )
 end
 # method mutate internal data
-function (m::HesianMahalanobisDistance)(w::AbstractVector{<:Real}; ll::LogLevel=Warn)
+function (m::NonlinearHesianMahalanobisDistance)(w::AbstractVector{<:Real}; ll::LogLevel=Warn)
     # TODO: try letting cholesky factorization back in here
     m.R!(w; transpose=false, doChol=false) 
     m.r!(m.b₀, w) 
     m.∇r!(w)
+    m.∇L!(w)
     _Hm!(
         m.H, w,
-        m.∇L!.∇L, m.U, m.V, m.R!.L!.L, m.R!.Sreg, m.∇r!.∇r, m.b₀, m.sig,
+        m.∇L!.∇L, m.U, m._Y, m.V, m.R!.L!.L, m.R!.Sreg, m.∇r!.∇r, m.b₀, m.sig,
         m.r!.r, 
         m.heswf!, m.heswjacuf!,  
         m.S⁻¹r, m.S⁻¹∇r, m.∂ⱼLLᵀ, m.∇S, m.HwF, m._∇²r, m.∇²r, m.HwJuF, m.__∇²L, m._∇²L, m.∇²L, m.∂ⱼL∂ᵢLᵀ, m.∂ᵢⱼLLᵀ, m.∂ᵢⱼS, m.S⁻¹∂ⱼS, m.∂ᵢSS⁻¹∂ⱼS

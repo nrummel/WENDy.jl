@@ -1,3 +1,6 @@
+using FFTW: fft, ifft
+using Symbolics 
+using Symbolics: @variables
 ## Two types of test functions of ϕ
 abstract type TestFunction end 
 struct ExponentialTestFun <: TestFunction end 
@@ -14,7 +17,6 @@ function rad_select(t0::AbstractVector,uobs::AbstractMatrix,
     sub::Real=2.1,q::Real=0.0,s::Real=1.0,m_min::Int=2
 )::Int
     D,M = size(uobs)
-    
     if isnothing(ϕ)
         return m_min
     elseif m_max<=m_min
@@ -95,36 +97,36 @@ function _getMtMinMax(tobs::AbstractVector{<:Real}, uobs::AbstractMatrix{<:Real}
     return mt_min, mt_max 
 end
 
-function (::DirectRadMethod)(tobs::AbstractVector{<:Real},uobs::AbstractVecOrMat{<:Real}, ϕ::TestFunction, testFuctionRadii::AbstractVector{<:Int}, Kmin::Int)
+function (::DirectRadMethod)(tobs::AbstractVector{<:Real},uobs::AbstractVecOrMat{<:Real}, ϕ::TestFunction, mtParams::AbstractVector{<:Int}, Kmin::Int)
     mt_min, mt_max = _getMtMinMax(tobs, uobs, ϕ, Kmin)
     D = size(uobs,1)
-    testFuctionRadii=length(testFuctionRadii)
-    mts = zeros(testFuctionRadii, D)
-    for (m, p) in enumerate(testFuctionRadii), d in 1:D
+    numRad=length(mtParams)
+    mts = zeros(numRad, D)
+    for (m, p) in enumerate(mtParams), d in 1:D
         mts[m,d] = min(mt_max, p)
     end
     mts = Int.(ceil.(1 ./ mean(1 ./ mts, dims=2)))
     return mts[:]
 end 
 
-function (::TimeFracRadMethod)(tobs::AbstractVector{<:Real},uobs::AbstractVecOrMat{<:Real}, ϕ::TestFunction, testFuctionRadii::AbstractVector{<:Int}, Kmin::Int)
+function (::TimeFracRadMethod)(tobs::AbstractVector{<:Real},uobs::AbstractVecOrMat{<:Real}, ϕ::TestFunction, mtParams::AbstractVector{<:Int}, Kmin::Int)
     mt_min, mt_max = _getMtMinMax(tobs, uobs, ϕ, Kmin)
     D = size(uobs,1)
-    testFuctionRadii=length(testFuctionRadii)
-    mt = zeros(testFuctionRadii, D)
-    for (m, p) in enumerate(testFuctionRadii), d in 1:D
+    numRad=length(mtParams)
+    mt = zeros(numRad, D)
+    for (m, p) in enumerate(mtParams), d in 1:D
         mt[m,d] = min(mt_max, floor(length(tobs)*p))
     end
     mt = Int.(ceil.(1 ./ mean(1 ./ mt, dims=2)))
     return mt[:]
 end
 
-function (::MtminRadMethod)(tobs::AbstractVector{<:Real},uobs::AbstractVecOrMat{<:Real},  ϕ::TestFunction, testFuctionRadii::AbstractVector{<:Int}, Kmin::Int)
+function (::MtminRadMethod)(tobs::AbstractVector{<:Real},uobs::AbstractVecOrMat{<:Real},  ϕ::TestFunction, mtParams::AbstractVector{<:Int}, Kmin::Int)
     mt_min, mt_max = _getMtMinMax(tobs, uobs, ϕ, Kmin)
     D = size(uobs,1)
-    testFuctionRadii=length(testFuctionRadii)
-    mt = zeros(testFuctionRadii, D)
-    for (m, p) in enumerate(testFuctionRadii), d in 1:D
+    numRad=length(mtParams)
+    mt = zeros(numRad, D)
+    for (m, p) in enumerate(mtParams), d in 1:D
         mt[m,d] = min(mt_max, p*mt_min)
     end
     mt = Int.(ceil.(1 ./ mean(1 ./ mt, dims=2)))
@@ -229,27 +231,27 @@ struct SingularValuePruningMethod <: TestFunctionPruningMethod
     end
 end
 
-function _getK(Kmax::Int, D::Int, testFuctionRadii::Int, M::Int)
-    return Int(min(floor(Kmax/(D*testFuctionRadii)), M))
+function _getK(Kmax::Int, D::Int, numRad::Int, M::Int)
+    return Int(min(floor(Kmax/(D*numRad)), M))
 end
 
-function (meth::NoPruningMethod)(tobs::AbstractVector{<:Real},uobs::AbstractMatrix{<:Real}, ϕ::TestFunction,Kmin::Int,Kmax::Int,testFuctionRadii::AbstractVector{<:Real})
+function (meth::NoPruningMethod)(tobs::AbstractVector{<:Real},uobs::AbstractMatrix{<:Real}, ϕ::TestFunction,Kmin::Int,Kmax::Int,mtParams::AbstractVector{<:Real})
     M, D = size(uobs)
-    testFuctionRadii = length(testFuctionRadii)
+    numRad = length(mtParams)
     mt = meth.radMeth(tobs, uobs, ϕ, Kmin)
-    K = _getK(Kmax, D, testFuctionRadii, length(t))
+    K = _getK(Kmax, D, numRad, length(t))
     V = cat(discMeth(m,t,ϕ,1,K) for m in mt;dims=1)
     return V[:,:,1], V[:,:,2]
 end
 
-function (meth::SingularValuePruningMethod)(tobs::AbstractVector{<:Real}, uobs::AbstractMatrix{<:Real}, ϕ::TestFunction,Kmin::Int,Kmax::Int,testFuctionRadii::AbstractVector{<:Real})
-    testFuctionRadii = length(testFuctionRadii)
-    if testFuctionRadii == 1
+function (meth::SingularValuePruningMethod)(tobs::AbstractVector{<:Real}, uobs::AbstractMatrix{<:Real}, ϕ::TestFunction,Kmin::Int,Kmax::Int,mtParams::AbstractVector{<:Real})
+    numRad = length(mtParams)
+    if numRad == 1
         return NoPruningMethod(meth.randMeth, meth.discMeth)(mt, tobs, ϕ, K)
     end
     D, M = size(uobs)
-    mt = meth.radMeth(tobs, uobs, ϕ, testFuctionRadii, Kmin)
-    K = _getK(Kmax, D, testFuctionRadii, length(tobs))
+    mt = meth.radMeth(tobs, uobs, ϕ, mtParams, Kmin)
+    K = _getK(Kmax, D, numRad, length(tobs))
     Vfull = reduce(vcat,meth.discMeth(m,tobs,ϕ,0, K) for m in mt)
     M = length(tobs);
     dt = mean(diff(tobs));

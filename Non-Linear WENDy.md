@@ -231,6 +231,9 @@ Evaluating this gradient/hessian is computationally expensive, but the following
 - Compute $S^{-1} (G(w)-b)$ and reuse 
 - Compute $\{\partial_j S \}_{j=1}^J$ and reuse
 - Compute $\{\partial_{ji} S \}_{j=1,i=1}^J$ and reuse
+## Comparable Methods 
+- [Two-Stage-method-(Non-Parametric-Collocation)](https://docs.sciml.ai/DiffEqParamEstim/stable/methods/collocation_loss/) Here is a built in method 
+- Vanilla FSNLS
 ## Example ODE's
 Choice of example problems is guided by what was previously done in  the previous paper WENDy, benchmarked problems in Julia, and what was suggested by colleagues and other literature. The main categories that we want to show are 
 - ODE's that are being used right now in domain sciences, and how the algorithm could be plugged into a current workflow to show benefit. 
@@ -252,10 +255,11 @@ Choice of example problems is guided by what was previously done in  the previou
 	& y_1^{\prime}(t)=\frac{a}{A+y_3(t)^\sigma}-b y_1(t), \\ 
 	& y_2^{\prime}(t)=\alpha y_1(t)-\beta y_2(t), \\ 
 	& y_3^{\prime}(t)=\gamma y_2(t)-\delta y_3(t),\end{aligned}$$
+- Nonlinear Pendulum 
 #### Others 
-- See [[Calver - Parameter Estimation for Systems of Ordinary Diffe.pdf | Calver Thesis]]
+- See [[Calver - Parameter Estimation for Systems of Ordinary Diffe.pdf |Calver Thesis]]
 	- Kermack-McKendrick model - time shifted
-	- Hutchinson’s model - time shifteed
+	- Hutchinson’s model - time shift\ed
 	- Calcium Ion Example - log normal noise but cool
 	- [[Calver - Parameter Estimation for Systems of Ordinary Diffe.pdf#page=37|Barnes Problem]] - possibly too simplistic, but predator prey
 - See [SciML Benchmarks](https://docs.sciml.ai/SciMLBenchmarksOutput): 
@@ -284,7 +288,7 @@ Choice of example problems is guided by what was previously done in  the previou
 ## Resources
 - Parameter Estimation Algorithms 
 	- [SciML Benchmarks](https://docs.sciml.ai/SciMLBenchmarksOutput/stable/) - A good place to start for test problem selection. Give us a path forward to simulate the odes quickly and accurately in Julia, but we also have them broken into categories, and here is a very brief paper we can sight [[Rackauckas and Nie - 2018 - Confederated Modular Differential Equation APIs fo.pdf|SciML Benchmark Paper.]]
-	- [Calver Thesis Ch4](https://tspace.library.utoronto.ca/bitstream/1807/95761/3/Calver_Jonathan_J_201906_PhD_thesis.pdf#page=78) It does look like forward solve least squares is state of the art, but using the adjoint method to approach the optimization plays an important role.  [Calver Thesis Ch2.6](https://tspace.library.utoronto.ca/bitstream/1807/95761/3/Calver_Jonathan_J_201906_PhD_thesis.pdf#page=43) covers possible examples. A common theme is that they look for **time lags** which I don't know if our frame work would allow, but here are a couple relevant equations:
+		- [Calver Thesis Ch4](https://tspace.library.utoronto.ca/bitstream/1807/95761/3/Calver_Jonathan_J_201906_PhD_thesis.pdf#page=78) It does look like forward solve least squares is state of the art, but using the adjoint method to approach the optimization plays an important role.  [Calver Thesis Ch2.6](https://tspace.library.utoronto.ca/bitstream/1807/95761/3/Calver_Jonathan_J_201906_PhD_thesis.pdf#page=43) covers possible examples. A common theme is that they look for **time lags** which I don't know if our frame work would allow, but here are a couple relevant equations:
 	- Shooting Methods (FSNLS) [Calver Disertation Presentation](https://www.cs.toronto.edu/~calver/presentations/caims2019_calver.pdf)
 	- Adjoint methods [[Johnson - Notes on Adjoint Methods for 18.335.pdf|Johnson's Notes]]
 	- Bayesian Collocation Methods [[Campbell - Bayesian Collocation Tempering and Generalized Pro.pdf|Campbell]]
@@ -301,3 +305,30 @@ Choice of example problems is guided by what was previously done in  the previou
 
 ## Outstanding questions
 ### LogNormal noise
+As I understand it the derivation of distribution of the residual, and thus the Likelihood, and thus the optimization routine... relies heavily on not only normality of the noise but also thee noise being additive. For a system with LogNormal (LN) noise,  we could (naively) make the residual have a normal distribution through some algebra
+$$\begin{align*}\\
+	u_m &= \hat{u}_m\epsilon_m, \epsilon_m \sim LN(0,\sigma)\\
+	y_m := \log(u_m) &= \log(\hat{u}_m) + \log(\epsilon_m),  \epsilon_m \sim N(0,\sigma)\\
+	r(w) &=  G(U, w) - b(U) \\
+	&= G\Big(\exp\big(\log(U)\big), w\Big) - b\Big(\exp\big(\log(U)\big)\Big)\\
+	&:= G(Y, w) - b(Y)
+\end{align*}$$
+Now if we do our asymptotic expansion wrt $y$ instead of $u$ everything would be the same. 
+$$\begin{align*}
+	r(w) &\underset{M\rightarrow \infty, w\rightarrow w^*}{\rightarrow} e^\Theta-b^\epsilon \\
+	&= G(y,w) - G(y^*,w) + \langle \dot{\Phi}, \epsilon \rangle \\
+	&= G(y, w) + \langle \dot{\Phi}, \epsilon \rangle \\
+	&- \Big(G(y,w) - \langle \nabla_y G(y,w), \epsilon \rangle + H(y^*,w,\epsilon) \Big) \\
+	&\underset{\epsilon\rightarrow 0}{\rightarrow} \langle \nabla_y G(y,w) + \dot{\Phi}, \epsilon\rangle
+\end{align*}$$
+```ad-warning 
+title: Caution Power Series 
+It is well known since we were children that a power series expansion of exponential/periodic functions are not the best series expansion... Could we do something smarter.
+```
+
+Frechet Derivative
+### Estimated/Computing the Different Parts of Residual
+We want to see what happens as the our optimization methods converge, and analyze why the fail. Our algorithm relies on a few things in order for the distribution of the residual to be estimated well by a normal. 
+- Normality of the noise, $\epsilon \sim N(0, \sigma)$, because we generate the noise, this is a non issue for our tests, but when we have empirical data we should have a way of evaluating this. 
+- The quadrature error to be low (In general this should be ok, but when the number of time points becomes low $M \in [1,100]$ then we could have problems because $|e^\text{int}| \approx |e^\theta - b^\epsilon|$ )
+- If the method is not convergent, or the initialization point $w_0$ is to far away from the true weights then the nonlinear terms in the residual become large $|H(u^*,w,\epsilon)|\geq \big|\langle\nabla_uG(u,w),\epsilon\rangle\big|$ . Then the distribution is not valid. 

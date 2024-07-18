@@ -10,22 +10,25 @@ function _L!(
     @inbounds for m in 1:M
         jacuf!(view(JuF,:,:,m), w, view(U,:,m))
     end
-    @tullio __L₁[k,d2,d1,m] = JuF[d2,d1,m] * V[k,m]* sig[d1] # increases allocation from 4 to 45 
-    permutedims!(_L₁,__L₁,(1,2,4,3))
+    @tullio _L₁[k,d2,m,d1] = JuF[d2,d1,m] * V[k,m]* sig[d1] # increases allocation from 4 to 45 
+    # permutedims!(_L₁,__L₁,(1,2,4,3))
     @views L .= reshape(_L₁,K*D,M*D) + L₀
     nothing
 end
 # ∇L(w)
 function _∇L!(
     ∇L::AbstractArray{<:Real,3}, w::AbstractVector{<:Real},
+    U::AbstractMatrix{<:Real},V::AbstractMatrix{<:Real},sig::AbstractVector{<:Real},
     jacwjacuf!::Function,
     JwJuF::AbstractArray{<:Real,4}, __∇L::AbstractArray{<:Real,5}, _∇L::AbstractArray{<:Real,5})
+    K,D,_,J,M = size(__∇L)
     # compute ∇L
     @inbounds for m in 1:M 
         @views jacwjacuf!(JwJuF[:,:,:,m], w, U[:,m])
     end
-    @tullio __∇L[k,d2,d1,j,m] = JwJuF[d2,d1,j,m] * V[k,m] * sig[d1] 
-    permutedims!(_∇L,__∇L,(1,2,5,3,4))
+    @tullio _∇L[k,d2,m,d1,j] = JwJuF[d2,d1,j,m] * V[k,m] * sig[d1] 
+    # @tullio __∇L[k,d2,d1,j,m] = JwJuF[d2,d1,j,m] * V[k,m] * sig[d1] 
+    # permutedims!(_∇L,__∇L,(1,2,5,3,4))
     @views ∇L .= reshape(_∇L,K*D,M*D,J)
     nothing
 end
@@ -42,7 +45,7 @@ function _g!(g::AbstractVector, w::AbstractVector, # output/input
         f!(view(F,:,m), w, view(U,:,m))
     end
     mul!(G, V, F')
-    @views g .= reshape(G, K*D,1)
+    @views g .= reshape(G, K*D)
     nothing
 end
 # r(w) = G(w) - b₀
@@ -53,7 +56,13 @@ function _r!(
     F::AbstractMatrix{<:Real}, G::AbstractMatrix{<:Real}; # buffers
     ll::LogLevel=Warn #kwargs
 ) 
-    _g!(r, w, U, V, f!, F, G,; ll=ll)
+    _g!(
+        r, w, 
+        U, V, 
+        f!,
+        F, G; 
+        ll=ll
+    )
     @views r .-= b₀
     nothing
 end
@@ -112,8 +121,9 @@ function _Rᵀ⁻¹∇r!(
 end
 function _Hm!(
     H::AbstractMatrix{<:Real}, w::AbstractVector{<:Real},
-    ∇L::AbstractArray{<:Real, 3}, U::AbstractMatrix{<:Real}, V::AbstractMatrix{<:Real}, L::AbstractMatrix{<:Real}, S::AbstractMatrix{<:Real}, ∇r::AbstractMatrix{<:Real}, b₀::AbstractVector{<:Real}, sig::AbstractVector{<:Real},
-    r::AbstractVector{<:Real},  heswf!::Function, heswjacuf!::Function,  S⁻¹r::AbstractVector{<:Real}, 
+    ∇L::AbstractArray{<:Real, 3}, U::AbstractMatrix{<:Real}, _Y::AbstractMatrix{<:Real}, V::AbstractMatrix{<:Real}, L::AbstractMatrix{<:Real}, S::AbstractMatrix{<:Real}, ∇r::AbstractMatrix{<:Real}, b₀::AbstractVector{<:Real}, sig::AbstractVector{<:Real},
+    r::AbstractVector{<:Real},  
+    heswf!::Function, heswjacuf!::Function,  S⁻¹r::AbstractVector{<:Real}, 
     S⁻¹∇r::AbstractMatrix{<:Real}, ∂ⱼLLᵀ::AbstractMatrix{<:Real}, ∇S::AbstractArray{<:Real, 3}, HwF::AbstractArray{<:Real, 4}, _∇²r::AbstractArray{<:Real, 4}, ∇²r::AbstractArray{<:Real, 3}, HwJuF::AbstractArray{<:Real, 5}, __∇²L::AbstractArray{<:Real, 6}, _∇²L::AbstractArray{<:Real, 6}, ∇²L::AbstractArray{<:Real, 4}, ∂ⱼL∂ᵢLᵀ::AbstractMatrix{<:Real}, ∂ᵢⱼLLᵀ::AbstractMatrix{<:Real}, ∂ᵢⱼS::AbstractMatrix{<:Real}, S⁻¹∂ⱼS::AbstractMatrix{<:Real}, ∂ᵢSS⁻¹∂ⱼS::AbstractMatrix{<:Real}
 )
     D,M = size(U)
@@ -122,32 +132,41 @@ function _Hm!(
     # Hm(w) - Hessian of Maholinobis distance 
     F = svd(S)
     ## Precompute S⁻¹(G(w)-b) and S⁻¹∂ⱼG(w)
-    ldiv!(S⁻¹r, F, r)
-    ldiv!(S⁻¹∇r, F, ∇r)
+    begin
+        ldiv!(S⁻¹r, F, r)
+        ldiv!(S⁻¹∇r, F, ∇r)
+    end
     ## Compute ∇S 
+    tmp = similar(∂ⱼLLᵀ)
     @inbounds for j = 1:J 
         @views mul!(∂ⱼLLᵀ, ∇L[:,:,j], L')
-        @views ∇S[:,:,j] .= ∂ⱼLLᵀ + (∂ⱼLLᵀ)'
+        tmp .= ∂ⱼLLᵀ
+        @views ∇S[:,:,j] .= ∂ⱼLLᵀ + (tmp)'
     end
     ## compute ∇²r
-    @inbounds for m in 1:M 
-        heswf!(view(HwF,:,:,:,m), w, view(U,:,m))
+    begin
+        @inbounds for m in 1:M 
+            heswf!(view(HwF,:,:,:,m), w, view(U,:,m))
+        end
+        @tullio _∇²r[k,d,j1,j2] = V[k,m] * HwF[d,j1,j2,m] 
+        ∇²r = reshape(_∇²r,K*D,J,J)
     end
-    # TODO remove: dummmy check for our particular example
-    @tullio _∇²r[k,d,j1,j2] = V[k,m] * HwF[d,j1,j2,m] 
-    ∇²r = reshape(_∇²r,K*D,J,J)
     ## compute ∇²L
-    @inbounds for m in 1:M 
-        heswjacuf!(view(HwJuF,:,:,:,:,m), w, view(U,:,m))
+    begin
+        @inbounds for m in 1:M 
+            heswjacuf!(view(HwJuF,:,:,:,:,m), w, view(_Y,:,m))
+        end
+        # turns out this is slower
+        # @time "outerprod" @tullio __∇²L[k,d2,d1,j1,j2,m] = V[k,m] * HwJuF[d2,d1,j1,j2,m] * sig[d1] 
+        # @time "permutedims" permutedims!(_∇²L,__∇²L, (1,2,6,3,4,5))
+        @tullio _∇²L[k,d2,m,d1,j1,j2] = V[k,m] * HwJuF[d2,d1,j1,j2,m] * sig[d1] 
+        ∇²L = reshape(_∇²L,K*D,M*D,J,J)
     end
-    @tullio __∇²L[k,d2,d1,j1,j2,m] = V[k,m] * HwJuF[d2,d1,j1,j2,m] * sig[d1] 
-    permutedims!(_∇²L,__∇²L, (1,2,6,3,4,5))
-    ∇²L = reshape(_∇²L,K*D,M*D,J,J)
     ## Compute ∇²m
     @inbounds for j = 1:J
         # this only depends on j so we do it once
         @views ldiv!(S⁻¹∂ⱼS, F, ∇S[:,:,j])
-        for i = j:J 
+        for i = j:J  
             # Commpute ∂ᵢⱼS   
             @views mul!(∂ⱼL∂ᵢLᵀ, ∇L[:,:,j], (∇L[:,:,i])')
             @views mul!(∂ᵢⱼLLᵀ, ∇²L[:,:,i,j], L')
