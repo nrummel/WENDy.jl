@@ -2,8 +2,8 @@ using FileIO, Dates, Printf
 using PlotlyJS: savefig, scatter, Layout, AbstractTrace, attr, plot as plotjs
 using Plots: plot
 function breakApartResidual(wendyProb::WENDyProblem{LinearInParameters, DistType}, w::AbstractVector{<:Real}) where {LinearInParameters, DistType<:Distribution}
-    K,M,D = wendyProb.K, wendyProb.M, wendyProb.D
-    tt, U_exact, U, V, Vp, E, b, f! = wendyProb.tt, wendyProb.U_exact, wendyProb.U, wendyProb.V, wendyProb.Vp, wendyProb.noise, wendyProb.b₀,wendyProb.f!
+    K,M,D,J = wendyProb.K, wendyProb.M, wendyProb.D, wendyProb.J
+    tt, U_exact, U, V, Vp, E, b, f!, jacuf! = wendyProb.tt, wendyProb.U_exact, wendyProb.U, wendyProb.V, wendyProb.Vp, wendyProb.noise, wendyProb.b₀,wendyProb.f!, wendyProb.jacuf!
     g_w_U = zeros(K*D)
     g_w_Ustar = zeros(K*D)
     g_wstar_Ustar = zeros(K*D)
@@ -27,33 +27,46 @@ function breakApartResidual(wendyProb::WENDyProblem{LinearInParameters, DistType
         tt, U_exact, V, 
         f!, 
         F,G); 
-    ## 
+    ##
+    JuF = zeros(D,D,M)
+    for m in 1:M 
+        @views jacuf!(
+            JuF[:,:,m],
+            U[:,m], w, tt[m]
+        )
+    end
+    @tullio _L₁[k,d2,m,d1] := JuF[d2,d1,m] * V[k,m] # increases allocation from 4 to 45 
+    ∇g_w_U = reshape(_L₁,K*D,M*D)
+    ##
     r₀ = g_w_Ustar - g_wstar_Ustar
     ##
     b_star = DistType == Normal ? reshape(-Vp * U_exact', K*D) : reshape(-Vp * log.(U_exact)', K*D)
     eⁱⁿᵗ =  g_wstar_Ustar - b_star
     r = g_w_U - b 
-    b_ϵ = DistType == Normal ? reshape(-Vp * E', K*D) : reshape(-Vp * log.(E)', K*D)
+    E = DistType == Normal ? E : log.(E)
+    b_ϵ =  reshape(-Vp * E', K*D)
     eᶿ = g_w_U - g_w_Ustar
     eᶿmbᵋ = g_w_U - g_w_Ustar - b_ϵ
+    hOrdTerms = eᶿmbᵋ - ∇g_w_U * reshape(E, M*D) + b_ϵ
     @assert norm(r - eⁱⁿᵗ - r₀ - eᶿmbᵋ) / norm(r) < 1e2*eps() "Splitting the residual did not work.... Assumptions are wrong"
-    return (eᶿmbᵋ=eᶿmbᵋ, eⁱⁿᵗ=eⁱⁿᵗ, r₀=r₀)
+    return (eᶿmbᵋ=eᶿmbᵋ, eⁱⁿᵗ=eⁱⁿᵗ, r₀=r₀, hOrdTerms=hOrdTerms)
 end
 
-function plotResParts(wits, wendyProb, name)
+function plotResParts(wits, wendyProb, title)
     II = size(wits,2)
-    res = zeros(3, II)
+    res = zeros(4, II)
     for i in 1:II 
         prts = breakApartResidual(wendyProb, wits[:,i])
         res[1,i] = norm(prts.eᶿmbᵋ)
         res[2,i] = norm(prts.eⁱⁿᵗ)
         res[3,i] = norm(prts.r₀)
+        res[4,i] = norm(prts.hOrdTerms)
     end 
     p = plotjs(
         [
             scatter(
                 y=res[1,:],
-                name="eᶿ-bᵋ"
+                name="eᶿmbᵋ"
             ), 
             scatter(
                 y=res[2,:],
@@ -63,12 +76,16 @@ function plotResParts(wits, wendyProb, name)
                 y=res[3,:],
                 name="r₀"
             ),
+            scatter(
+                y=res[4,:],
+                name="O(ϵ²)"
+            ),
         ],
         Layout(
             yaxis_type="log",
             yaxis_title="||⋅||₂",
             xaxis_title="Iteration",
-            title="Parts of residual for $name",
+            title=title,
         )
     )
 end
@@ -238,13 +255,20 @@ end
 function plots_07_17_2024()
     for (file, odeName, displayName) in zip(
         (
-            "/Users/user/Documents/School/WSINDy/WENDy.jl/results/15.07.2024_final/hindmarshRose_15.07.2024.jld2",
-            "/Users/user/Documents/School/WSINDy/WENDy.jl/results/15.07.2024_final/logisticGrowth_15.07.2024.jld2", 
-            "/Users/user/Documents/School/WSINDy/WENDy.jl/results/15.07.2024_final/goodwin_15.07.2024.jld2",
-            "/Users/user/Documents/School/WSINDy/WENDy.jl/results/15.07.2024_final/robertson_18.07.2024.jld2"
+            # "/Users/user/Documents/School/WSINDy/WENDy.jl/results/mostRecent/hindmarshRose_15.07.2024.jld2",
+            # "/Users/user/Documents/School/WSINDy/WENDy.jl/results/mostRecent/logisticGrowth_15.07.2024.jld2", 
+            # "/Users/user/Documents/School/WSINDy/WENDy.jl/results/mostRecent/goodwin_15.07.2024.jld2",
+            "/Users/user/Documents/School/WSINDy/WENDy.jl/results/mostRecent/robertson_19.07.2024.jld2",
+            "/Users/user/Documents/School/WSINDy/WENDy.jl/results/mostRecent/sir_19.07.2024.jld2"
         ),
-        ("hindmarshRose", "logisticGrowth","goodwin", "robertson"),
-        ("Hindmarsh-Rose","LogisticGrowth","Goodwin", "Robertson")
+        (
+            # "hindmarshRose", "logisticGrowth","goodwin", 
+            "robertson", "sir"
+        ),
+        (
+            # "Hindmarsh-Rose","LogisticGrowth","Goodwin", 
+            "Robertson", "SIR"
+        )
     )
         data = load(file)
         for (metric,yaxis_tickvals,yaxis_range,yaxis_type) in zip(
@@ -308,7 +332,7 @@ function plotjs(data::SimulatedWENDyData;
     )
     p
 end 
-function plotSols(examples=[GOODWIN, HINDMARSH_ROSE, LOGISTIC_GROWTH, ROBERTSON])
+function plotSols(examples=[GOODWIN, HINDMARSH_ROSE, LOGISTIC_GROWTH, ROBERTSON, SIR])
     for data in examples
         file = joinpath("/Users/user/Documents/School/WSINDy/NonLinearWENDyPaper/fig", "$(data.name)_sol.png")
         title = "$(data.name) Solution"

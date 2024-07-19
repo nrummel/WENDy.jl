@@ -266,7 +266,7 @@ end
 ## Wrap solvers so they can all be called with the same inputs
 algos = (
     irwls=function _irwls(wendyProb, params, w0,m, ∇m!, Hm!,l2,∇l2!,Hl2!;return_wits::Bool=false )
-        what, iters, wits = IRWLS(
+        IRWLS(
             wendyProb, params, w0; return_wits=return_wits
         )
     end,

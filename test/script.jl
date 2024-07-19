@@ -13,7 +13,7 @@ ex = SIR;
 params = WENDyParameters(;
     noiseRatio=0.05, 
     seed=1, 
-    timeSubsampleRate=1,
+    timeSubsampleRate=4,
     optimMaxiters=200, 
     optimTimelimit=200.0
 )
@@ -55,11 +55,11 @@ for name in keys(algos))
 
 for (name, algo) in zip(keys(algos),algos)
     @info "Running $name"
-    # if name != :fsnls_tr
+    # if name != :tr
     #     continue 
     # end 
     alg_dt = @elapsed begin 
-        (what, iters, wits) = begin 
+        (what, iters, wits) = try 
             algo(
                 wendyProb, params, w0, 
                 m, ∇m!,Hm!, 
@@ -110,19 +110,19 @@ end
 #         iter        =  $(size(wit_arc,2))
 #     """
 ##
-D = wendyProb.D
-M = wendyProb.M
-F = zeros(D,M)
-myLF = zeros(D,M)
-LF = zeros(D,M)
-for m in 1:M 
-   @views ROBERTSON_f!(F[:,m], wendyProb.U_exact[:,m],  wTrue, nothing)
-   @views ROBERTSON_logf!(myLF[:,m], wendyProb.U_exact[:,m],  wTrue, nothing)
-   @views wendyProb.f!(LF[:,m], wTrue, wendyProb.U_exact[:,m])
-end
-##
-trs = AbstractTrace[]
-for d in 1:D 
+# D = wendyProb.D
+# M = wendyProb.M
+# F = zeros(D,M)
+# myLF = zeros(D,M)
+# LF = zeros(D,M)
+# for m in 1:M 
+#    @views ROBERTSON_f!(F[:,m], wendyProb.U_exact[:,m],  wTrue, nothing)
+#    @views ROBERTSON_logf!(myLF[:,m], wendyProb.U_exact[:,m],  wTrue, nothing)
+#    @views wendyProb.f!(LF[:,m], wTrue, wendyProb.U_exact[:,m])
+# end
+# ##
+# trs = AbstractTrace[]
+# for d in 1:D 
     # push!(
     #     trs,
     #     scatter(
@@ -155,33 +155,33 @@ for d in 1:D
     #         name="log(u[$d])"
     #     )
     # )
-    push!(
-        trs,
-        scatter(
-            x = wendyProb.tt,
-            y = LF[d,:],
-            name="(f(u)/u)[$d]"
-        )
-    )
-    push!(
-        trs,
-        scatter(
-            x = wendyProb.tt,
-            y = myLF[d,:],
-            name="my(f(u)/u)[$d]"
-        )
-    )
-end 
-plotjs(
-    trs,
-    Layout(
-        title="U_exact fo $(ex.name)"
-    )
-)
+#     push!(
+#         trs,
+#         scatter(
+#             x = wendyProb.tt,
+#             y = LF[d,:],
+#             name="(f(u)/u)[$d]"
+#         )
+#     )
+#     push!(
+#         trs,
+#         scatter(
+#             x = wendyProb.tt,
+#             y = myLF[d,:],
+#             name="my(f(u)/u)[$d]"
+#         )
+#     )
+# end 
+# plotjs(
+#     trs,
+#     Layout(
+#         title="U_exact fo $(ex.name)"
+#     )
+# )
 ##
-algo_name = :tr
-what = results[algo_name].what[]
-what[end] = round(what[end])
+algo_name = :fsnls_tr
+what = copy(results[algo_name].what[])
+# what[end] = round(what[end])
 Uhat = forwardSolve(wendyProb, what)
 trs = AbstractTrace[]
 using Plots.Colors
@@ -197,6 +197,9 @@ colors = [
     colorant"#bcbd22",  # curry yellow-green
     colorant"#17becf"   # blue-teal
 ]
+D = wendyProb.D
+M = wendyProb.M
+F = zeros(D,M)
 for d in 1:D 
     c = protanopic(colors[d],.25)
     push!(
@@ -218,9 +221,9 @@ for d in 1:D
         scatter(
             x = wendyProb.tt,
             y = Uhat[d,:],
-            line_color="#$(hex(colors[d]))",
+            line_color="#$(hex(colors[d+D]))",
             line_width=5,
-            name="Ũ[$d]",
+            name="Û[$d]",
             legendgroup=d
         )
     )
@@ -229,7 +232,7 @@ for d in 1:D
         scatter(
             x = wendyProb.tt,
             y = wendyProb.U_exact[d,:],
-            line_color="#$(hex(colors[d+D]))",
+            line_color="#$(hex(colors[d]))",
             line_width=5,
             line_dash="dash",
             name="U^*[$d]",
@@ -239,13 +242,38 @@ for d in 1:D
 end 
 relErr_data = norm(Uhat - wendyProb.U) / norm(wendyProb.U)
 relErr_exact = norm(Uhat - wendyProb.U_exact) / norm(wendyProb.U_exact)
-plotjs(
+p1 = plotjs(
     trs,
     Layout(
-        yaxis_type="log",
-        title="Comparing Forward sim (With rounding) to data<br>$(ex.name) with Algorithm $algo_name<br>||Û-U||₂ / ||U||₂=$(@sprintf "%.4g" relErr_data)<br>||Û-U^*||₂ / ||U^*||₂=$(@sprintf "%.4g" relErr_exact)",
+        # yaxis_type="log",
+        title="Comparing Forward Sim to Data<br>$(ex.name) with Algorithm $algo_name<br>||Û-U||₂ / ||U||₂=$(@sprintf "%.4g" relErr_data)<br>||Û-U^*||₂ / ||U^*||₂=$(@sprintf "%.4g" relErr_exact)",
         yaxis_domain=[0,.8]
     )
+)
+##
+savefig( 
+    p1, 
+    joinpath(
+        joinpath(
+            "/Users/user/Documents/School/WSINDy/NonLinearWENDyPaper/fig",
+            "$(ex.name)_solWData.png"
+        )
+    );
+    height=600,
+    width=700
+)
+##
+p2 = plotResParts(results.tr.wits[], wendyProb, "Parts Of Resdidual<br>Trust Region Solver<br>$(ex.name)")
+savefig( 
+    p2, 
+    joinpath(
+        joinpath(
+            "/Users/user/Documents/School/WSINDy/NonLinearWENDyPaper/fig",
+            "$(ex.name)_resPrts.png",
+        )
+    );
+    height=600,
+    width=700
 )
 
 ##

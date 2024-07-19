@@ -15,7 +15,7 @@ function _solve_ode(
     solve(odeprob, alg; 
         reltol=reltol, abstol = abstol, 
         saveat=t_step,
-        verbose=false, kwargs...
+        verbose=true, kwargs...
     )
 end
 ##
