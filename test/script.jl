@@ -4,10 +4,11 @@ includet(joinpath(@__DIR__, "../examples/hindmarshRose.jl"))
 includet(joinpath(@__DIR__, "../examples/logisticGrowth.jl"))
 includet(joinpath(@__DIR__, "../examples/goodwin.jl"))
 includet(joinpath(@__DIR__, "../examples/robertson.jl"))
+includet(joinpath(@__DIR__, "../examples/sir.jl"))
 using FiniteDiff, StaticArrays, Printf
 ##
 # ex = HINDMARSH_ROSE;
-ex = ROBERTSON;
+ex = SIR;
 
 params = WENDyParameters(;
     noiseRatio=0.05, 
@@ -16,7 +17,7 @@ params = WENDyParameters(;
     optimMaxiters=200, 
     optimTimelimit=200.0
 )
-μ = 1
+μ = .1
 wendyProb = WENDyProblem(ex, params; ll=Warn);
 wTrue = wendyProb.wTrue
 J = length(wTrue)
@@ -54,8 +55,11 @@ for name in keys(algos))
 
 for (name, algo) in zip(keys(algos),algos)
     @info "Running $name"
+    # if name != :fsnls_tr
+    #     continue 
+    # end 
     alg_dt = @elapsed begin 
-        (what, iters, wits) = try 
+        (what, iters, wits) = begin 
             algo(
                 wendyProb, params, w0, 
                 m, ∇m!,Hm!, 
@@ -80,9 +84,9 @@ for (name, algo) in zip(keys(algos),algos)
     @info """
     Results:
         dt = $alg_dt
-        cl2 = $(@sprintf "%.2g" cl2*100)%
-        fsl2 = $(@sprintf "%.2g" fsl2*100)%
-        mDist = $mDist
+        cl2 = $(@sprintf "%.4g" cl2*100)%
+        fsl2 = $(@sprintf "%.4g" fsl2*100)%
+        mDist = $(@sprintf "%.4g" mDist)
         iters = $iters
     """
     results[name].what[] = what 

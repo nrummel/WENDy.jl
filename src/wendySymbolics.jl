@@ -13,7 +13,7 @@ function getRHS(data::WENDyData{LinearInParameters,DistType}) where {LinearInPar
     w = parameters(data.ode)
     u = unknowns(data.ode)
     rhs_sym = _getRHS_sym(data)
-    _rhs,_rhs! = build_function(rhs_sym, w,u; expression=false)
+    _rhs,_rhs! = build_function(rhs_sym, u,w,t; expression=false)
     return _rhs,_rhs! 
 end
 
@@ -27,7 +27,7 @@ function getJacw(data::WENDyData{LinearInParameters,DistType}) where {LinearInPa
     w = parameters(data.ode)
     u = unknowns(data.ode)
     jac_sym = _getJacw_sym(data)
-    jac,jac! = build_function(jac_sym, w,u; expression=false)
+    jac,jac! = build_function(jac_sym, u,w,t; expression=false)
     return jac, jac!
 end
 ## for normal noise ∇ᵤf 
@@ -49,7 +49,7 @@ function getJacu(data::WENDyData{LinearInParameters,DistType}) where {LinearInPa
     w = parameters(data.ode)
     u = unknowns(data.ode)
     jac_sym = _getJacu_sym(data)
-    jac,jac! = build_function(jac_sym, w,u; expression=false)
+    jac,jac! = build_function(jac_sym, u,w,t; expression=false)
     return jac, jac!
 end
 
@@ -58,7 +58,7 @@ function getJacwJacu(data::WENDyData{LinearInParameters,DistType}) where {Linear
     u = unknowns(data.ode)
     jacu_sym = _getJacu_sym(data)
     jacwjacu_sym = jacobian(jacu_sym, w)
-    jac, jac! = build_function(jacwjacu_sym, w,u; expression=false)
+    jac, jac! = build_function(jacwjacu_sym, u,w,t; expression=false)
     return jac, jac!
 end
 
@@ -68,7 +68,7 @@ function getHeswJacu(data::WENDyData{LinearInParameters,DistType}) where {Linear
     jacu_sym = _getJacu_sym(data)
     jacwjacu_sym = jacobian(jacu_sym, w)
     heswjacu_sym = jacobian(jacwjacu_sym, w)
-    hes, hes! = build_function(heswjacu_sym, w,u; expression=false)
+    hes, hes! = build_function(heswjacu_sym, u,w,t; expression=false)
     return hes, hes!
 end
 
@@ -77,7 +77,7 @@ function getHesw(data::WENDyData{LinearInParameters,DistType}) where {LinearInPa
     u = unknowns(data.ode)
     jacw_sym = _getJacw_sym(data)
     hesw_sym = jacobian(jacw_sym, w)
-    hes, hes! = build_function(hesw_sym, w,u; expression=false)
+    hes, hes! = build_function(hesw_sym, u,w,t; expression=false)
     return hes, hes!
 end
 

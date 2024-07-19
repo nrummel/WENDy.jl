@@ -2,7 +2,7 @@
 # L₁ - this is the gradient/jacobian of L(w) when L is linear 
 function _L₁!(
     L₁::AbstractArray{<:Real,3}, 
-    U::AbstractMatrix{<:Real}, V::AbstractMatrix{<:Real}, sig::AbstractVector{<:Real}, 
+    tt::AbstractVector{<:Real}, U::AbstractMatrix{<:Real}, V::AbstractMatrix{<:Real}, sig::AbstractVector{<:Real}, 
     jacuf!::Function, 
     JuF::AbstractArray{<:Real, 3}, _∂Lⱼ::AbstractArray{<:Real, 4}, ∂Lⱼ::AbstractArray{<:Real, 4},  eⱼ::AbstractVector{<:Real}
 )
@@ -12,7 +12,7 @@ function _L₁!(
         eⱼ .= 0
         eⱼ[j] = 1
         @inbounds for m in 1:M
-            jacuf!(view(JuF,:,:,m), eⱼ, view(U,:,m))
+            jacuf!(view(JuF,:,:,m), view(U,:,m), eⱼ, tt[m])
         end
         @tullio _∂Lⱼ[k,d2,d1,m] = JuF[d2,d1,m] * V[k,m]* sig[d1] # increases allocation from 4 to 45 
         permutedims!(∂Lⱼ,_∂Lⱼ,(1,2,4,3))

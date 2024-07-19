@@ -3,7 +3,7 @@ using PlotlyJS: savefig, scatter, Layout, AbstractTrace, attr, plot as plotjs
 using Plots: plot
 function breakApartResidual(wendyProb::WENDyProblem{LinearInParameters, DistType}, w::AbstractVector{<:Real}) where {LinearInParameters, DistType<:Distribution}
     K,M,D = wendyProb.K, wendyProb.M, wendyProb.D
-    U_exact, U, V, Vp, E, b, f! = wendyProb.U_exact, wendyProb.U, wendyProb.V, wendyProb.Vp, wendyProb.noise, wendyProb.b₀,wendyProb.f!
+    tt, U_exact, U, V, Vp, E, b, f! = wendyProb.tt, wendyProb.U_exact, wendyProb.U, wendyProb.V, wendyProb.Vp, wendyProb.noise, wendyProb.b₀,wendyProb.f!
     g_w_U = zeros(K*D)
     g_w_Ustar = zeros(K*D)
     g_wstar_Ustar = zeros(K*D)
@@ -12,19 +12,19 @@ function breakApartResidual(wendyProb::WENDyProblem{LinearInParameters, DistType
     ## g_w_U
     _g!(
         g_w_U, w, 
-        U, V, 
+        tt, U, V, 
         f!, 
         F,G); 
     ## g_w_Ustar
     _g!(
         g_w_Ustar, w, 
-        U_exact, V, 
+        tt, U_exact, V, 
         f!, 
         F,G); 
     ##
     _g!(
         g_wstar_Ustar, wTrue, 
-        U_exact, V, 
+        tt, U_exact, V, 
         f!, 
         F,G); 
     ## 
@@ -36,7 +36,6 @@ function breakApartResidual(wendyProb::WENDyProblem{LinearInParameters, DistType
     b_ϵ = DistType == Normal ? reshape(-Vp * E', K*D) : reshape(-Vp * log.(E)', K*D)
     eᶿ = g_w_U - g_w_Ustar
     eᶿmbᵋ = g_w_U - g_w_Ustar - b_ϵ
-    @show norm(r)
     @assert norm(r - eⁱⁿᵗ - r₀ - eᶿmbᵋ) / norm(r) < 1e2*eps() "Splitting the residual did not work.... Assumptions are wrong"
     return (eᶿmbᵋ=eᶿmbᵋ, eⁱⁿᵗ=eⁱⁿᵗ, r₀=r₀)
 end

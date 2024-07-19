@@ -4,6 +4,7 @@ includet(joinpath(@__DIR__, "../examples/hindmarshRose.jl"))
 includet(joinpath(@__DIR__, "../examples/logisticGrowth.jl"))
 includet(joinpath(@__DIR__, "../examples/goodwin.jl"))
 includet(joinpath(@__DIR__, "../examples/robertson.jl"))
+includet(joinpath(@__DIR__, "../examples/sir.jl"))
 using ProgressMeter,Printf,Dates,LoggingExtras,FileIO,JLD2
 ##
 @info "Setting sweep criterion"
@@ -233,4 +234,5 @@ end
 
 # results_hindmarsh = do_it(HINDMARSH_ROSE)
 # results_logistic = do_it(LOGISTIC_GROWTH)
+results_sir = do_it(SIR)
 results_robertson = do_it(ROBERTSON)

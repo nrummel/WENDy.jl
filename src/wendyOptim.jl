@@ -177,6 +177,8 @@ function FSNLS(l2::Function, ∇l2!::Function,Hl2!::Function, prob::WENDyProblem
             store_trace=return_wits,extended_trace=return_wits
         );
     )
+    what = res.minimizer
+    iter = res.iterations
     return return_wits ? (what, iter, reduce(hcat, t.metadata["x"] for t in res.trace)) : (what, iter) 
 end
 ## 

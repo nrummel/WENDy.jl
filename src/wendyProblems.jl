@@ -50,10 +50,10 @@ end
 ## helper function that unpacks data and fill in NaN for truth
 function _unpackData(data::EmpricalWENDyData, params::WENDyParameters)
     @info "Using EmpricalWENDyData"
-    data.tt_full, data.U_full, NaN*ones(size(data.U_full,1)), NaN*ones(size(data.U_full)), NaN*ones(J), NaN*size(data.U_full)
+    data.tt_full, data.U_full, NaN*ones(size(data.U_full,1)), NaN*ones(size(data.U_full)), NaN*ones(J), NaN*ones(size(data.U_full))
 end
 ## helper function to build G matrix
-function _buildGmat(f!::Function, U::AbstractMatrix, V::AbstractMatrix, J::Int)
+function _buildGmat(f!::Function, tt::AbstractVector{<:Real}, U::AbstractMatrix{<:Real}, V::AbstractMatrix{<:Real}, J::Int)
     D, M = size(U)
     K, _ = size(V)
     @info " Build G mat for linear problem"
@@ -64,7 +64,7 @@ function _buildGmat(f!::Function, U::AbstractMatrix, V::AbstractMatrix, J::Int)
         eⱼ .= 0
         eⱼ[j] = 1
         for m in 1:M 
-            @views f!(F[:,m], eⱼ, U[:,m])
+            @views f!(F[:,m], U[:,m],eⱼ,tt[m])
         end 
         gⱼ = V * F'
         @views G[:,j] .= reshape(gⱼ,K*D)
@@ -95,7 +95,7 @@ function WENDyProblem(data::WENDyData{true, DistType}, params::WENDyParameters; 
         @info " Build julia functions from symbolic expressions of ODE"
         _,f!     = getRHS(data) # the derivatives wrt u are only affected by noise dist
         _,jacuf! = getJacu(data);
-        G = _buildGmat(f!, U, V, J)
+        G = _buildGmat(f!, tt, U, V, J)
         return WENDyProblem{true, DistType}(
             D,J,M,K,
             b₀,sig,tt,U_exact,U,_Y,V,Vp,

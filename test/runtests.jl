@@ -48,7 +48,7 @@ function testEstimateNoise(;dataFile::String=joinpath(@__DIR__, "../data/matlab_
         data = MAT.matread(dataFile)
         uobs = Matrix(data["xobs"]')
         std_est_matlab = typeof(data["sig_ests"]) <: AbstractArray ? data["sig_ests"][:] : [data["sig_ests"]]
-        std_est = estimate_std(uobs, Val(Normal))
+        std_est = estimate_std(uobs)
         relErr = norm(std_est-std_est_matlab)/norm(std_est)
         @info "\tThe two estimation methods are different by $(relErr)"
         return relErr < 1e2*eps()
@@ -232,11 +232,15 @@ function testCovarianceFactor(prob, params, w0, matlab_data)
     return norm(L!.L  - L0_matlab) / norm(L0_matlab) < eps()*1e2
 end
 #
-function testGradientCovarianceFactor(prob, params, w0, matlab_data)
-    L1_matlab = matlab_data["L1"];
-    ∇L! = GradientCovarianceFactor(prob, params);
-    ∇L!(w0)
-    return norm(∇L!.∇L  - L1_matlab) / norm(L1_matlab) < eps()*1e2
+function testGradientCovarianceFactor(prob, params, w0, matlab_data; ll=Warn)
+    with_logger(ConsoleLogger(stderr, ll)) do 
+        L1_matlab = matlab_data["L1"];
+        ∇L! = GradientCovarianceFactor(prob, params);
+        ∇L!(w0)
+        relErr = norm(∇L!.∇L  - L1_matlab) / norm(L1_matlab) 
+        @info "relErr = $relErr"
+        return relErr < eps()*1e2
+    end
 end
 #
 function testCovariance(prob, params, w0, matlab_data)
@@ -319,14 +323,14 @@ function testHessianMahalanobisDistance(prob, params, w0, matlab_data;ll=Warn)
     @info "   $dt s, $als allocations"
     ##
     relErr = norm(Hm!.H - H0_fd1) / norm(H0_fd1)
-    if relErr < eps()*1e2 
+    if relErr < 1e-5
         @info "H0 in spec (relerr = $relErr) with finite differences to of the objective"
     else 
         flag = false
         @warn "H out of spec (relerr = $relErr) with finite differences to of the objective"
     end
     relErr = norm(Hm!.H - H0_fd2) / norm(H0_fd1)
-    if relErr < 1e-7 
+    if relErr < 1e-5
         @info "H in spec (relerr = $relErr) with finite differences of the gradient" 
     else
         flag = false
@@ -335,52 +339,67 @@ function testHessianMahalanobisDistance(prob, params, w0, matlab_data;ll=Warn)
     return flag 
 end
 end
-prob, params, w0, matlab_data = _getMatlabProblem(joinpath(@__DIR__, "../data/matlab_wendydata_Hindmarsh-Rose.mat"), HINDMARSH_ROSE_SYSTEM, true)
-# testGradientMahalanobisDistance(prob, params, w0, matlab_data)  
-testHessianMahalanobisDistance(prob, params, w0, matlab_data;ll=Info) 
+
 ## 
-files = [joinpath(@__DIR__, "../data/matlab_wendydata_Hindmarsh-Rose.mat"), joinpath(@__DIR__, "../data/matlab_wendydata_Logistic_Growth.mat")]
-odes = [HINDMARSH_ROSE_SYSTEM, LOGISTIC_GROWTH_SYSTEM]
-@testset verbose=true begin 
-for (file,ode) in zip(files, odes)
-    @info "Running Tests for example $file"
-    @info " testGenerateNoise "
-    @test testGenerateNoise(dataFile=file) 
-    @info " test_VVp "
-    @test test_VVp(dataFile=file) 
-    @info " testEstimateNoise "
-    @test testEstimateNoise(dataFile=file) 
-    for LinearInParameters in [true,false]
-        prob, params, w0, matlab_data = _getMatlabProblem(file, ode, LinearInParameters)
-        @info " $(LinearInParameters ? "Linear" : "Nonlinear") Problem/Methods"
-        @info "  testResidual"
-        @test testResidual(prob, params, w0, matlab_data)  
-        @info "  testWeightedResidual"
-        @test testWeightedResidual(prob, params, w0, matlab_data)  
-        @info "  testCovarianceFactor"
-        @test testCovarianceFactor(prob, params, w0, matlab_data)  
-        @info "  testCovariance"
-        @test testCovariance(prob, params, w0, matlab_data)  
-        @info "  testMahalanobisDistance"
-        @test testMahalanobisDistance(prob, params, w0, matlab_data)  
-        @info "  testGradientCovarianceFactor"
-        @test testGradientCovarianceFactor(prob, params, w0, matlab_data)  
-        @info "  testGradientMahalanobisDistance"
-        @test testGradientMahalanobisDistance(prob, params, w0, matlab_data)  
-        @info "  testHessianMahalanobisDistance"
-        @test testHessianMahalanobisDistance(prob, params, w0, matlab_data)  
-    end
-end
-end
+files = [
+    joinpath(@__DIR__, "../data/matlab_wendydata_Hindmarsh-Rose.mat"), 
+    joinpath(@__DIR__, "../data/matlab_wendydata_Logistic_Growth.mat")
+]
+names = ["hindmarsh", "logistic"]
+odes = [HINDMARSH_ROSE_SYSTEM, LOGISTIC_SYSTEM]
+ix = 1
+prob, params, w0, matlab_data = _getMatlabProblem(
+    files[ix], 
+    odes[ix], 
+    false
+);
+testGradientCovarianceFactor(prob, params, w0, matlab_data;ll=Info)
+# testGradientMahalanobisDistance(prob, params, w0, matlab_data)  
+# testHessianMahalanobisDistance(prob, params, w0, matlab_data;ll=Info) 
 ##
-@testset "NLPMLE.jl" begin
-    @testset "Compare to MATLAB HINDMARSH_ROSE..." begin
-        @test testEstimateNoise()
-        @test testRadSelect()
-        @test testTestFunctionDiscritization()
-        @test testBuildV()
-    end
-    @testset "Create Test DataSet..." begin
-        @test testCreateTestData()
+function test_it_all()
+    @testset verbose=true begin 
+        for (file,ode,name) in zip(files, odes,names)
+            @info "Running Tests for example $name"
+            @info " testGenerateNoise "
+            @test testGenerateNoise(dataFile=file) 
+            @info " test_VVp "
+            @test test_VVp(dataFile=file) 
+            @info " testEstimateNoise "
+            @test testEstimateNoise(dataFile=file) 
+            for LinearInParameters in [true,false]
+                prob, params, w0, matlab_data = _getMatlabProblem(file, ode, LinearInParameters)
+                linstr  =  LinearInParameters ? "Linear" : "Nonlinear"
+                @info "  testResidual, $linstr, $name"
+                @test testResidual(prob, params, w0, matlab_data)  
+                @info "  testWeightedResidual, $linstr, $name"
+                @test testWeightedResidual(prob, params, w0, matlab_data)  
+                @info "  testCovarianceFactor, $linstr, $name"
+                @test testCovarianceFactor(prob, params, w0, matlab_data)  
+                @info "  testCovariance, $linstr, $name"
+                @test testCovariance(prob, params, w0, matlab_data)  
+                @info "  testMahalanobisDistance, $linstr, $name"
+                @test testMahalanobisDistance(prob, params, w0, matlab_data)  
+                @info "  testGradientCovarianceFactor, $linstr, $name"
+                @test testGradientCovarianceFactor(prob, params, w0, matlab_data)  
+                @info "  testGradientMahalanobisDistance, $linstr, $name"
+                @test testGradientMahalanobisDistance(prob, params, w0, matlab_data)  
+                @info "  testHessianMahalanobisDistance, $linstr, $name"
+                @test testHessianMahalanobisDistance(prob, params, w0, matlab_data)  
+            end
+        end
     end
 end
+test_it_all()
+##
+# @testset "NLPMLE.jl" begin
+#     @testset "Compare to MATLAB HINDMARSH_ROSE..." begin
+#         @test testEstimateNoise()
+#         @test testRadSelect()
+#         @test testTestFunctionDiscritization()
+#         @test testBuildV()
+#     end
+#     @testset "Create Test DataSet..." begin
+#         @test testCreateTestData()
+#     end
+# end

@@ -13,7 +13,8 @@ function _solve_ode(
     odeprob = ODEProblem{true, SciMLBase.FullSpecialize}(f!, u0, tRng, w)
     t_step = (tRng[end]-tRng[1]) / (M-1)
     solve(odeprob, alg; 
-        reltol=reltol, abstol = abstol, saveat=t_step,
+        reltol=reltol, abstol = abstol, 
+        saveat=t_step,
         verbose=false, kwargs...
     )
 end
@@ -41,9 +42,9 @@ function _l2(w::AbstractVector{<:Real}, U::AbstractMatrix, ex::WENDyData)
         sol = solve(
             odeprob,
             Rosenbrock23(); 
-            reltol=1e-12, abstol=1e-12, 
-            saveat=t_step, 
-            # saveat=ex.tRng[1]:t_step:ex.tRng[end], 
+            # reltol=1e-12, abstol=1e-12, 
+            # saveat=t_step, 
+            saveat=ex.tRng[1]:t_step:ex.tRng[end], 
             verbose=true
         )
         Uhat = reduce(hcat, sol.u)

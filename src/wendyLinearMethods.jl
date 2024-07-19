@@ -34,7 +34,7 @@ function LinearCovarianceFactor(prob::WENDyProblem{true}, params::Union{Nothing,
     eⱼ = zeros(T,J)
     _L₁!(
         L₁, 
-        prob._Y, prob.V, prob.sig,
+        prob.tt, prob._Y, prob.V, prob.sig,
         prob.jacuf!, 
         JuF, _∂Lⱼ, ∂Lⱼ, eⱼ
     )
@@ -74,7 +74,12 @@ function LinearGradientCovarianceFactor(prob, params, ::Val{T}=Val(Float64)) whe
     _∂Lⱼ = zeros(T,K,D,D,M)
     ∂Lⱼ = zeros(T,K,D,M,D)
     eⱼ = zeros(T,J)
-    _L₁!(L₁, prob._Y, prob.V, prob.sig, prob.jacuf!, JuF, _∂Lⱼ, ∂Lⱼ, eⱼ)
+    _L₁!(
+        L₁, 
+        prob.tt, prob._Y, prob.V, prob.sig, 
+        prob.jacuf!, 
+        JuF, _∂Lⱼ, ∂Lⱼ, eⱼ
+    )
    
     LinearGradientCovarianceFactor(L₁)
 end
