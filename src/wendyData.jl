@@ -59,10 +59,8 @@ function _getData(f!::Function, tRng::NTuple{2,<:AbstractFloat}, M::Int, truePar
         if forceOdeSolve || !isfile(file)
             @info "  Generating data for $file by solving ode"
             sol = _solve_ode(f!, tRng, M, trueParameters, initCond)
-            # plot(sol,title="Hindmarsh Rose Solution")
-            # Plots.savefig(joinpath("/Users/user/Documents/School/WSINDy/NonLinearWENDyPaper/fig", "hindmarshRose_sol.png"))
-            u = reduce(hcat, sol.u)
             t = sol.t
+            u = reduce(hcat, sol.u)
             BSON.@save file t u
             return t,u, sol
         end
@@ -112,7 +110,7 @@ function SimulatedWENDyData(
 
     if DistType == LogNormal && any(U_exact .<= 0)
         ix = findall( all(U_exact[:,m] .> 0) for m in 1:size(U_exact,2))
-        @warn " Removing data that is zero so that logrithms are well defined: $(length(tt_full) - length(ix)) data point(s) aree invalid"
+        @warn " Removing data that is zero so that logrithms are well defined: $(length(tt_full) - length(ix)) data point(s) are invalid"
         tt_full = tt_full[ix]
         U_exact = U_exact[:,ix]
         initCond = U_exact[:,1]

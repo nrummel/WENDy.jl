@@ -74,8 +74,8 @@ function plotResParts(wits, wendyProb, name)
     )
 end
 ##
-function plotSweep(data::Dict, metric::Symbol,exname::String,ex_name::String,yaxis_tickvals, yaxis_range,yaxis_type)
-    @info "Plotting $ex_name $metric"
+function plotSweep(data::Dict, metric::Symbol,odeName::String,displayName::String,yaxis_tickvals, yaxis_range,yaxis_type)
+    @info "Plotting $displayName $metric"
     results = data["results"] # zeros(nr,sub,mu,mc,J)
     optimparams = data["optimparams"]
     noiseRatios = data["noiseRatios"]
@@ -131,8 +131,8 @@ function plotSweep(data::Dict, metric::Symbol,exname::String,ex_name::String,yax
                 ),
                 name="$(algo2Str[name])<br>  Fail rate $(@sprintf "%.3g" (numNaN/length(results[name][metric][:])*100))%",#)<br>numPts = $(Int(1024/sub)), Fails=$numNaN" : "numPts = $(Int(1024/sub)), Fails=$numNaN",
                 legendgroup=name,
-                xaxis="x$ii",
-                yaxis="y$iii",
+                xaxis="x$(4-ii)",
+                yaxis="y$(iii)",
                 showlegend=iii==1 && ii==2
             )
         )
@@ -141,7 +141,7 @@ function plotSweep(data::Dict, metric::Symbol,exname::String,ex_name::String,yax
         trs, 
         Layout(
             title=attr(
-                text="$ex_name<br>Median $(metric2Str[metric])",
+                text="$displayName<br>Median $(metric2Str[metric])",
                 font_size=64,
                 xanchor="center", 
                 x=0.5,
@@ -153,7 +153,7 @@ function plotSweep(data::Dict, metric::Symbol,exname::String,ex_name::String,yax
                 tickvals=noiseRatios,
                 title=attr(
                     font_size=36, 
-                    text="Noise Ratio<br>Number of points $(Int(1024/timeSubsampleRates[1]))", 
+                    text="Noise Ratio<br>Number of points $(Int(1024/timeSubsampleRates[3]))", 
                 ),
                 domain=[0.05,0.3]
             ),
@@ -173,7 +173,7 @@ function plotSweep(data::Dict, metric::Symbol,exname::String,ex_name::String,yax
                 tickvals=noiseRatios,
                 title=attr(
                     font_size=36, 
-                    text="Noise Ratio<br>Number of points $(Int(1024/timeSubsampleRates[3]))"), 
+                    text="Noise Ratio<br>Number of points $(Int(1024/timeSubsampleRates[1]))"), 
                 domain=[0.65,0.9]
             ),
             yaxis1=attr(
@@ -228,7 +228,7 @@ function plotSweep(data::Dict, metric::Symbol,exname::String,ex_name::String,yax
             legendgrouptitle=attr(text="")
         )
     )
-    savefile= joinpath("/Users/user/Documents/School/WSINDy/NonLinearWENDyPaper/fig","$(exname)_$(String(metric))_$(Dates.format(now(),"d.mm.yyyy")).png")
+    savefile= joinpath("/Users/user/Documents/School/WSINDy/NonLinearWENDyPaper/fig","$(odeName)_$(String(metric)).png")
     savefig(
         p, savefile;
         width=3000,
@@ -237,10 +237,15 @@ function plotSweep(data::Dict, metric::Symbol,exname::String,ex_name::String,yax
     p
 end 
 function plots_07_17_2024()
-    for (file, exname, ex_name) in zip(
-        ("/Users/user/Documents/School/WSINDy/WENDy.jl/results/15.07.2024_final/hindmarshRose_15.07.2024.jld2", "/Users/user/Documents/School/WSINDy/WENDy.jl/results/15.07.2024_final/logisticGrowth_15.07.2024.jld2", "/Users/user/Documents/School/WSINDy/WENDy.jl/results/15.07.2024_final/goodwin_15.07.2024.jld2"),
-        ("hindmarshRose", "logisticGrowth","Goodwin"),
-        ("Hindmarsh-Rose","LogisticGrowth","Goodwin")
+    for (file, odeName, displayName) in zip(
+        (
+            "/Users/user/Documents/School/WSINDy/WENDy.jl/results/15.07.2024_final/hindmarshRose_15.07.2024.jld2",
+            "/Users/user/Documents/School/WSINDy/WENDy.jl/results/15.07.2024_final/logisticGrowth_15.07.2024.jld2", 
+            "/Users/user/Documents/School/WSINDy/WENDy.jl/results/15.07.2024_final/goodwin_15.07.2024.jld2",
+            "/Users/user/Documents/School/WSINDy/WENDy.jl/results/15.07.2024_final/robertson_18.07.2024.jld2"
+        ),
+        ("hindmarshRose", "logisticGrowth","goodwin", "robertson"),
+        ("Hindmarsh-Rose","LogisticGrowth","Goodwin", "Robertson")
     )
         data = load(file)
         for (metric,yaxis_tickvals,yaxis_range,yaxis_type) in zip(
@@ -249,19 +254,66 @@ function plots_07_17_2024()
                 [1e-3,1e-2,1e-1,1e0,1e1,1e2,1e3], 
                 [1e-2,1e-1,1e0,1e1], 
                 [1,1e1,1e2,1e3,1e4,1e5,1e6], 
-                [1e-4,1e-3,1e-2,1e-1,1,1e1,1e2], 
-                [1,1e1,1e2,2e2]
+                [1e-4,1e-3,1e-2,1e-1,1,1e1,1e2,1e3], 
+                [1,1e1,1e2,1e3]
             ),
             (
                 [-3,3],
                 [-2,1],
                 [1,6], 
-                [-4,2],
-                [0,2.2]
+                [-4,3],
+                [0,3]
             ),
             ("log","log","log","log","log")
         )
-            plotSweep(data, metric, exname,ex_name,yaxis_tickvals,yaxis_range,yaxis_type)
+            plotSweep(data, metric, odeName,displayName,yaxis_tickvals,yaxis_range,yaxis_type)
         end 
+    end
+end
+## plot the solution to ode using PlotlyJS because it is sexier
+import PlotlyJS: plot as plotjs 
+function plotjs(data::SimulatedWENDyData; 
+    title::String="", file::Union{Nothing, String}=nothing, yaxis_type::String="linear"
+)
+    tt = data.tt_full
+    U = data.U_exact
+    D,M = size(U)
+    ix = yaxis_type == "log" ? findall([all(U[:,m] .> 0) for m in 1:M]) : 1:M
+    trs = AbstractTrace[]
+    for d in 1:D
+        push!(
+            trs,
+            scatter(
+                x=tt[ix], 
+                y=U[d,ix],
+                name="u[$d]"
+            )
+        )
+    end 
+    p = plotjs(
+        trs,
+        Layout(
+            title_text=title, 
+            title_x=0.5,
+            title_xanchor="center",
+            yaxis_type=yaxis_type,
+            showlegend=true, 
+            xaxis_title="time (s)"
+            )
+    )
+    !isnothing(file) && PlotlyJS.savefig(
+        p,
+        file;
+        height=600,
+        width=800
+    )
+    p
+end 
+function plotSols(examples=[GOODWIN, HINDMARSH_ROSE, LOGISTIC_GROWTH, ROBERTSON])
+    for data in examples
+        file = joinpath("/Users/user/Documents/School/WSINDy/NonLinearWENDyPaper/fig", "$(data.name)_sol.png")
+        title = "$(data.name) Solution"
+        yaxis_type = data.name == "robertson" ? "log" : "linear"
+        plotjs(data;title=title, file=file, yaxis_type=yaxis_type)
     end
 end

@@ -55,5 +55,5 @@ ROBERTSON = SimulatedWENDyData(
     ROBERTSON_TRUE_PARAMS;
     linearInParameters=Val(false),
     noiseDist=Val(LogNormal),
-    # forceOdeSolve=true
+    forceOdeSolve=true
 );
