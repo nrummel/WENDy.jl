@@ -1,11 +1,19 @@
 ## Load WENDy
 using Revise
-# push!(
-#     LOAD_PATH, 
-#     joinpath(@__DIR__, "../src")
-# )
-# using WENDy
-includet(joinpath(@__DIR__, "../../src/WENDy.jl"))
+push!(
+    LOAD_PATH, 
+    joinpath(@__DIR__, "../src")
+)
+using WENDy
+# includet(joinpath(@__DIR__, "../../src/WENDy.jl"))
+## external deps 
+using Base: with_logger
+using Logging: LogLevel, Info, Warn, ConsoleLogger
+using LinearAlgebra, Printf, Statistics
+using Distributions: Normal, LogNormal, Distribution
+using OrdinaryDiffEq: ODEProblem
+using ModelingToolkit: modelingtoolkitize, @mtkbuild
+using LaTeXTabulars
 ## load metrics and examples
 includet(joinpath(@__DIR__, "../../metrics/wendyMetrics.jl"))
 includet(joinpath(@__DIR__, "../../examples/odes/hindmarshRose.jl"))
@@ -24,9 +32,9 @@ function init(ex::WENDyData;
 )
     ## Simulate Noise and subsample
     simParams = SimulationParameters(;
-        noiseRatio=0.20, 
-        seed=2, 
-        timeSubsampleRate=4,
+        noiseRatio=noiseRatio, 
+        seed=seed, 
+        timeSubsampleRate=timeSubsampleRate,
         μ=μ
     )
     simulate!(ex, simParams;ll=ll)
@@ -102,9 +110,11 @@ function runAlgos(
             ])
         for algoName in algoNames);
         # Loop through algos and run this example
+        @info "=================================="
+        @info "Starting Optimization Routines"
         for algoName in algoNames
             algo = algos[algoName] 
-            @info "Running $algoName"
+            @info "  Running $algoName"
             alg_dt = @elapsed begin 
                 (what, iters, wits) = _call_algo(
                     algo, wendyProb, w0, 
@@ -124,13 +134,13 @@ function runAlgos(
                 NaN 
             end
             @info """
-            Results:
-                dt         = $alg_dt
-                cl2        = $(@sprintf "%.4g" cl2*100)%
-                mean_fsl2  = $(@sprintf "%.4g" mean_fsl2*100)%
-                final_fsl2 = $(@sprintf "%.4g" final_fsl2*100)%
-                nll        = $(@sprintf "%.4g" _nll)
-                iters      = $iters
+              Results:
+                    dt         = $alg_dt
+                    cl2        = $(@sprintf "%.4g" cl2*100)%
+                    mean_fsl2  = $(@sprintf "%.4g" mean_fsl2*100)%
+                    final_fsl2 = $(@sprintf "%.4g" final_fsl2*100)%
+                    nll        = $(@sprintf "%.4g" _nll)
+                    iters      = $iters
             """
             results[algoName].iters[]      = iters
             results[algoName].dt[]         = alg_dt
@@ -146,10 +156,11 @@ function runAlgos(
 end
 ## 
 algo2Disp = (
+    init="Initial w₀ Solution",
     tr_optim="Trust Region (Optim)",
     arc_sfn="Adaptive Cubic Regularization (SFN)", 
     arc_jso="Adaptive Cubic Regularization (JSO)", 
-    tr_jso="Trust Region(JSO)", 
+    tr_jso="Trust Region (JSO)", 
     fsnls_tr_optim="Forward Solve Nonlinear Least Squares<br>(Trust Region Optim)",
     irwls="Iterative Reweighted Least Squares"
 )

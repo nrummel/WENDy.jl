@@ -1,8 +1,15 @@
-using FileIO, Dates, Printf
+using FileIO, Dates, Printf, ProgressMeter
+using Tullio: @tullio
 using Latexify, ColorSchemes, Colors, LaTeXStrings # for plotting and saving captions to tex
+using PlotlyJS
 using PlotlyJS: savefig, scatter, Layout, AbstractTrace, attr
 import PlotlyJS.plot as plotjs
 Latexify.set_default(fmt = "%.4g")
+try 
+    using WENDy: _g!
+catch 
+    @info "wendy g! not loaded perhaps not modulizing wendy..."
+end
 ##
 PLOTLYJS_COLORS = [
     colorant"#1f77b4",  # muted blue
@@ -16,9 +23,12 @@ PLOTLYJS_COLORS = [
     colorant"#bcbd22",  # curry yellow-green
     colorant"#17becf"   # blue-teal
 ]
-DATA_COLORS = colorschemes[:bam10]
-TRUTH_COLORS = colorschemes[:acton10]
-APPROX_COLORS = colorschemes[:navia10][end-4:end-1]
+# DATA_COLORS = colorschemes[:bam10]
+# TRUTH_COLORS = colorschemes[:acton10]
+# APPROX_COLORS = colorschemes[:navia10][end-4:end-1]
+DATA_COLORS = colorschemes[:seaborn_deep]
+TRUTH_COLORS = colorschemes[:seaborn_bright]
+APPROX_COLORS = colorschemes[:seaborn_bright]
 SOLVER_COLORS = colorschemes[:Dark2_8]
 ##
 function plotjs(prob::WENDyProblem, title::String="", file::Union{Nothing, String}=nothing, yaxis_type::String="linear", showNoiseData::Bool=true)
@@ -173,9 +183,9 @@ function plotResParts(wits, wendyProb, title)
         ],
         Layout(
             yaxis_type="log",
-            yaxis_title="||⋅||₂",
-            xaxis_title="Iteration",
-            title=title,
+            yaxis_title_text="||⋅||₂",
+            xaxis_title_text="Iteration",
+            title_text=title,
             hovermode="x unified"
         )
     )
@@ -390,15 +400,16 @@ function plots_07_17_2024()
         end 
     end
 end
+##
 function plotSols(examples=[GOODWIN, HINDMARSH_ROSE, LOGISTIC_GROWTH, ROBERTSON, SIR])
     for data in examples
         file = joinpath("/Users/user/Documents/School/WSINDy/NonLinearWENDyPaper/fig", "$(data.name)_sol.png")
         title = "$(data.name) Solution"
         yaxis_type = data.name == "robertson" ? "log" : "linear"
-        plotjs(data;title=title, file=file, yaxis_type=yaxis_type)
+        plotjs(data;title_text=title, file=file, yaxis_type=yaxis_type)
     end
 end
-
+##
 function plotDeepDive(wendyProb, what; title="", yaxis_type="log", file=nothing)
     Uhat = forwardSolve(wendyProb, what, 
     reltol=1e-12
@@ -414,7 +425,7 @@ function plotDeepDive(wendyProb, what; title="", yaxis_type="log", file=nothing)
                 x = wendyProb.tt,
                 y = wendyProb.U[d,:],
                 mode="markers",
-                maker_opacity=0.7,
+                maker_opacity=0.8,
                 maker_size=1.5,
                 marker_color=DATA_COLORS[d],
                 name="U[$d]",
@@ -427,8 +438,8 @@ function plotDeepDive(wendyProb, what; title="", yaxis_type="log", file=nothing)
                 x = wendyProb.tt,
                 y = wendyProb.U_exact[d,:],
                 line_color=TRUTH_COLORS[d],
-                line_width=5,
-                line_dash="dashdot",
+                line_width=3,
+                line_dash="dot",
                 name="U*[$d]",
                 legendgroup=d
             )
@@ -440,7 +451,7 @@ function plotDeepDive(wendyProb, what; title="", yaxis_type="log", file=nothing)
                 y = Uhat[d,:],
                 mode="lines",
                 line_color=APPROX_COLORS[d],
-                line_width=5,
+                line_width=3,
                 line_opacity=.4,
                 name="Û[$d]",
                 legendgroup=d
@@ -480,23 +491,37 @@ function plotDeepDive(wendyProb, what; title="", yaxis_type="log", file=nothing)
 
     p
 end 
-
-function plotWits(m::Function, wits_vec::AbstractVector{<:AbstractMatrix}; names::Union{Nothing, AbstractVector{<:AbstractString}}=nothing, title::String="")
+##
+function plotWits(m::Function, wits_vec::AbstractVector{<:AbstractMatrix}; names::Union{Nothing, AbstractVector{<:AbstractString}}=nothing, title::String="", yaxis_type::String="linear")
     !isnothing(names) && @assert length(names) == length(wits_vec)
     trs = AbstractTrace[]
+    costs = Vector(undef, length(wits_vec))
     for (i, wits) in enumerate(wits_vec)
         II = size(wits,2)
-        costs = zeros(II) 
+        costs[i] = zeros(II+1) 
         name = isnothing(names) ? "Solver $i" : names[i]
+        @info name
         @showprogress desc="Computing Costs for $name" for ii in 1:II
-            costs[ii] = m(wits[:,ii]) 
+            costs[i][ii+1] = m(wits[:,ii]) 
         end
+        costs[i] = filter(x->!isnan(x), costs[i])
+    end
+    if yaxis_type == "log"
+        min_cost = minimum(minimum(costs[i][:]) for i in 1:length(costs))
+        if min_cost < 0 
+            for i in 1:length(costs)
+                costs[i][:] .-= min_cost - 1e-12
+            end
+        end
+    end
+    for (i, wits) in enumerate(wits_vec)
+        name = isnothing(names) ? "Solver $i" : names[i]
         push!(
             trs,
             scatter(
-                y=costs,
+                y=costs[i],
                 name=name,
-                mode="markers+lines",
+                mode="lines",
                 marker_color=SOLVER_COLORS[i]
             )
         )
@@ -504,9 +529,10 @@ function plotWits(m::Function, wits_vec::AbstractVector{<:AbstractMatrix}; names
     plotjs(
         trs,
         Layout(
-            title=title, 
-            hovermode="x unified"
-            # yaxis_type="log"
+            title_text=title, 
+            hovermode="x unified",
+            xaxis_type="log",
+            yaxis_type=yaxis_type,
         )
     )
 end

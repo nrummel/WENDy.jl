@@ -199,7 +199,7 @@ function buildCostFunctions(wendyProb::WENDyProblem, params::WENDyParameters; ll
         ##
         @info "Forward Solve L2 loss"
         dt = @elapsed a = @allocations begin
-            l2(w::AbstractVector{<:Real}) = _l2(w,wendyProb.U,ex)
+            l2(w::AbstractVector{<:Real}) = _l2(w,wendyProb.U,wendyProb.data)
             ∇l2!(g::AbstractVector{<:Real},w::AbstractVector{<:Real}) = ForwardDiff.gradient!(g, l2, w) 
             Hl2!(H::AbstractMatrix{<:Real},w::AbstractVector{<:Real}) = ForwardDiff.hessian!(H, l2, w) 
         end

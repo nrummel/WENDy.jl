@@ -123,8 +123,8 @@ function (m::MahalanobisDistance)(w::AbstractVector{T}; ll::LogLevel=Warn, effic
     #     ) # b = (Rᵀ)⁻¹G(w)
     #     return _m(m.Rᵀ⁻¹r) # ((Rᵀ)⁻¹r)^T(Rᵀ)⁻¹r
     # end 
-    K,D = wendyProb.K, wendyProb.D
-    constTerm = K*D/2*log(2*pi)
+    KD,_ = size(m.S) 
+    constTerm = KD/2*log(2*pi)
     m.r!(m.r,m.b₀,w;ll=ll)
     m.R!(m.S,w;ll=ll, doChol=false)
     return _m(m.S, m.r, m.S⁻¹r, constTerm)

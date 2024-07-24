@@ -1,4 +1,4 @@
-# module WENDy
+module WENDy
     # __precompile__(false)
     ## external dependencies
     # optimization algorithms
@@ -24,21 +24,21 @@
     using LinearAlgebra, Statistics, Random, Logging, Printf
     using Logging: Info, Warn, LogLevel
     ##
-    includet("wendyTestFunctions.jl")
-    includet("wendyData.jl")
-    includet("wendyNoise.jl")
-    includet("wendySymbolics.jl")
-    includet("wendyProblems.jl")
-    includet("wendyDiffEq.jl")
+    include("wendyTestFunctions.jl")
+    include("wendyData.jl")
+    include("wendyNoise.jl")
+    include("wendySymbolics.jl")
+    include("wendyProblems.jl")
+    include("wendyDiffEq.jl")
     ## 
-    includet("wendyEquations.jl")
-    includet("wendyLinearEquations.jl")
-    includet("wendyNonlinearEquations.jl")
-    includet("wendyMethods.jl")
-    includet("wendyLinearMethods.jl")
-    includet("wendyNonlinearMethods.jl")
-    includet("wendyOptim.jl")
-#     export WENDyProblem, WENDyParameters, WENDyData, CostFunction, SimulatedWENDyData, EmpricalWENDyData, SimulationParameters
-#     export simulate!, buildCostFunctions
-#     export IRWLS, bfgs_Optim, tr_Optim, arc_SFN, tr_JSO, arc_JSO
-# end # module WENDy
+    include("wendyEquations.jl")
+    include("wendyLinearEquations.jl")
+    include("wendyNonlinearEquations.jl")
+    include("wendyMethods.jl")
+    include("wendyLinearMethods.jl")
+    include("wendyNonlinearMethods.jl")
+    include("wendyOptim.jl")
+    export WENDyProblem, WENDyParameters, WENDyData, CostFunction, SimulatedWENDyData, EmpricalWENDyData, SimulationParameters
+    export simulate!, buildCostFunctions, forwardSolveRelErr, forwardSolve
+    export IRWLS, bfgs_Optim, tr_Optim, arc_SFN, tr_JSO, arc_JSO
+end # module WENDy

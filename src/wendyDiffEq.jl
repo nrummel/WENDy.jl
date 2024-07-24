@@ -28,7 +28,7 @@ end
 function forwardSolveRelErr(prob::WENDyProblem, w::AbstractVector{<:Real}; kwargs...)
     Uhat = forwardSolve(prob, w; kwargs...)
     # norm(Uhat-prob.U_exact) / norm(prob.U_exact)
-    Ustar = wendyProb.U_exact
+    Ustar = prob.U_exact
     _, M = size(Ustar)
     @views avg_rel_err = sum(norm(Uhat[:,m] - Ustar[:,m]) for m in 1:M) / sum(norm(Ustar[:,m]) for m in 1:M)
     @views final_rel_err = norm(Uhat[:,end] - Ustar[:,end]) / norm(Ustar[:,end])

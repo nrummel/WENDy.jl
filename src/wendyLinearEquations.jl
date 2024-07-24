@@ -100,8 +100,13 @@ function _Hm!(
             @views prt2 = - 2*dot(S⁻¹∇r[:,i], ∇S[:,:,j], S⁻¹r) # 2∂ᵢrᵀ∂ⱼS⁻¹r = -(S⁻¹∂ᵢr)ᵀ∂ⱼSS⁻¹r
             @views prt3 = - dot(S⁻¹r, ∂ᵢⱼS, S⁻¹r)              # rᵀ∂ᵢⱼS⁻¹r  = -(S⁻¹r)ᵀ∂ᵢⱼSS⁻¹r
             @views prt4 = 2*dot(S⁻¹r, ∂ᵢSS⁻¹∂ⱼS, S⁻¹r)         #             + 2(S⁻¹r)ᵀ∂ᵢSS⁻¹∂ⱼSS⁻¹r
+            logDetTerm = - tr(F \ ∂ᵢSS⁻¹∂ⱼS) + tr(F \ ∂ᵢⱼS)
             # Put everything together
-            H[j,i] = 1/2*(2*(prt0+prt1) + prt2+prt3+prt4)
+            H[j,i] = 1/2*(
+                2*(prt0+prt1) 
+                + prt2+prt3+prt4
+                + logDetTerm
+            )
         end
     end
     # Only compute the upper triangular part of the hessian
