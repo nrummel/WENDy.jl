@@ -181,7 +181,14 @@ function _Hm!(
             @views prt4 = - dot(S⁻¹r, ∂ᵢⱼS, S⁻¹r)              # rᵀ∂ᵢⱼS⁻¹r  = -(S⁻¹r)ᵀ∂ᵢⱼSS⁻¹r
             @views prt5 = 2*dot(S⁻¹r, ∂ᵢSS⁻¹∂ⱼS, S⁻¹r)         #            + 2(S⁻¹r)ᵀ∂ᵢSS⁻¹∂ⱼSS⁻¹r
             # Put everything together
-            H[j,i] = 1/2*(2*(prt0+prt1+prt2) + prt3+prt4+prt5)
+            @views H[j,i] = (
+                1/2*(
+                    2*(prt0+prt1+prt2) 
+                    +prt3+prt4+prt5
+                    - tr(F \ ∂ᵢSS⁻¹∂ⱼS)
+                    + tr(F \ ∂ᵢⱼS)
+                )
+            )
         end
     end
     # Only compute the upper triangular part of the hessian

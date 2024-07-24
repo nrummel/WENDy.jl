@@ -8,14 +8,15 @@ function _solve_ode(
     alg::OrdinaryDiffEq.OrdinaryDiffEqAlgorithm=Rosenbrock23(), 
     reltol::Real=1e-12, 
     abstol::Real=1e-12,
+    verbose::Bool=false,
     kwargs...
 )
     odeprob = ODEProblem{true, SciMLBase.FullSpecialize}(f!, u0, tRng, w)
     t_step = (tRng[end]-tRng[1]) / (M-1)
     solve(odeprob, alg; 
-        reltol=reltol, abstol = abstol, 
+        # reltol=reltol, abstol = abstol, 
         saveat=t_step,
-        verbose=true, kwargs...
+        verbose=verbose, kwargs...
     )
 end
 ##
@@ -25,8 +26,13 @@ function forwardSolve(prob::WENDyProblem, w::AbstractVector{<:Real}; kwargs...)
 end
 ## compute forward solve relative error
 function forwardSolveRelErr(prob::WENDyProblem, w::AbstractVector{<:Real}; kwargs...)
-    Uhat = forwardSolve(prob, w; verbose=false)
-    norm(Uhat-prob.U) / norm(prob.U)
+    Uhat = forwardSolve(prob, w; kwargs...)
+    # norm(Uhat-prob.U_exact) / norm(prob.U_exact)
+    Ustar = wendyProb.U_exact
+    _, M = size(Ustar)
+    @views avg_rel_err = sum(norm(Uhat[:,m] - Ustar[:,m]) for m in 1:M) / sum(norm(Ustar[:,m]) for m in 1:M)
+    @views final_rel_err = norm(Uhat[:,end] - Ustar[:,end]) / norm(Ustar[:,end])
+    avg_rel_err, final_rel_err
 end
 ## 
 function _l2(w::AbstractVector{<:Real}, U::AbstractMatrix, ex::WENDyData)
@@ -45,10 +51,11 @@ function _l2(w::AbstractVector{<:Real}, U::AbstractMatrix, ex::WENDyData)
             # reltol=1e-12, abstol=1e-12, 
             # saveat=t_step, 
             saveat=ex.tRng[1]:t_step:ex.tRng[end], 
-            verbose=true
+            verbose=false
         )
         Uhat = reduce(hcat, sol.u)
-        sum((Uhat[:] - U[:]).^2) 
+        _, M = size(U)
+        @views sum(norm(Uhat[:,m] - U[:,m]) for m in 1:M)
     catch
         NaN
     end

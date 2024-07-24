@@ -1,15 +1,15 @@
 using Symbolics: jacobian
 using ModelingToolkit: parameters, build_function, unknowns, ODESystem
 ## rhs is f(u) for normal noise
-function _getRHS_sym(data::WENDyData{LinearInParameters, Normal}) where LinearInParameters
+function _getRHS_sym(data::WENDyData{lip, Normal}) where lip
     return  [eq.rhs  for eq in equations(data.ode)]
 end
 ## rhs of ode changes to f(u) ./ u for lognormal noise
-function _getRHS_sym(data::WENDyData{LinearInParameters,LogNormal}) where LinearInParameters
+function _getRHS_sym(data::WENDyData{lip,LogNormal}) where lip
     return  [eq.rhs / u  for (u,eq) in zip(unknowns(data.ode),equations(data.ode))]
 end
 
-function getRHS(data::WENDyData{LinearInParameters,DistType}) where {LinearInParameters, DistType<:Distribution}
+function getRHS(data::WENDyData{lip,DistType}) where {lip, DistType<:Distribution}
     w = parameters(data.ode)
     u = unknowns(data.ode)
     rhs_sym = _getRHS_sym(data)
@@ -17,13 +17,13 @@ function getRHS(data::WENDyData{LinearInParameters,DistType}) where {LinearInPar
     return _rhs,_rhs! 
 end
 
-function _getJacw_sym(data::WENDyData{LinearInParameters,DistType}) where {LinearInParameters, DistType<:Distribution}
+function _getJacw_sym(data::WENDyData{lip,DistType}) where {lip, DistType<:Distribution}
     w = parameters(data.ode)
     rhs_sym = _getRHS_sym(data)
     return jacobian(rhs_sym, w)
 end
 
-function getJacw(data::WENDyData{LinearInParameters,DistType}) where {LinearInParameters, DistType<:Distribution}
+function getJacw(data::WENDyData{lip,DistType}) where {lip, DistType<:Distribution}
     w = parameters(data.ode)
     u = unknowns(data.ode)
     jac_sym = _getJacw_sym(data)
@@ -31,13 +31,13 @@ function getJacw(data::WENDyData{LinearInParameters,DistType}) where {LinearInPa
     return jac, jac!
 end
 ## for normal noise ∇ᵤf 
-function _getJacu_sym(data::WENDyData{LinearInParameters,Normal}) where LinearInParameters
+function _getJacu_sym(data::WENDyData{lip,Normal}) where lip
     u = unknowns(data.ode)
     rhs_sym = _getRHS_sym(data)
     return jacobian(rhs_sym, u)
 end
 ## for normal noise ∇_yf(u)/u where y = log(u)  
-function _getJacu_sym(data::WENDyData{LinearInParameters,LogNormal}) where LinearInParameters
+function _getJacu_sym(data::WENDyData{lip,LogNormal}) where lip
     rhs = _getRHS_sym(data)
     mymap = Dict([u =>exp(u) for u in unknowns(data.ode)])
     rhs_sym = [simplify(substitute(rhs_d, mymap)) for rhs_d in rhs]
@@ -45,7 +45,7 @@ function _getJacu_sym(data::WENDyData{LinearInParameters,LogNormal}) where Linea
     return jacobian(rhs_sym, u)
 end
 
-function getJacu(data::WENDyData{LinearInParameters,DistType}) where {LinearInParameters, DistType<:Distribution}
+function getJacu(data::WENDyData{lip,DistType}) where {lip, DistType<:Distribution}
     w = parameters(data.ode)
     u = unknowns(data.ode)
     jac_sym = _getJacu_sym(data)
@@ -53,7 +53,7 @@ function getJacu(data::WENDyData{LinearInParameters,DistType}) where {LinearInPa
     return jac, jac!
 end
 
-function getJacwJacu(data::WENDyData{LinearInParameters,DistType}) where {LinearInParameters, DistType<:Distribution}
+function getJacwJacu(data::WENDyData{lip,DistType}) where {lip, DistType<:Distribution}
     w = parameters(data.ode)
     u = unknowns(data.ode)
     jacu_sym = _getJacu_sym(data)
@@ -62,7 +62,7 @@ function getJacwJacu(data::WENDyData{LinearInParameters,DistType}) where {Linear
     return jac, jac!
 end
 
-function getHeswJacu(data::WENDyData{LinearInParameters,DistType}) where {LinearInParameters, DistType<:Distribution}
+function getHeswJacu(data::WENDyData{lip,DistType}) where {lip, DistType<:Distribution}
     w = parameters(data.ode)
     u = unknowns(data.ode)
     jacu_sym = _getJacu_sym(data)
@@ -72,7 +72,7 @@ function getHeswJacu(data::WENDyData{LinearInParameters,DistType}) where {Linear
     return hes, hes!
 end
 
-function getHesw(data::WENDyData{LinearInParameters,DistType}) where {LinearInParameters, DistType<:Distribution}
+function getHesw(data::WENDyData{lip,DistType}) where {lip, DistType<:Distribution}
     w = parameters(data.ode)
     u = unknowns(data.ode)
     jacw_sym = _getJacw_sym(data)

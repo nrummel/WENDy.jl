@@ -47,7 +47,7 @@ function do_it(ex::WENDyData)
         @info "Running sweep on $(ex.name)"
         # global results, wendyProb, params, m, ∇m!, Hm!, l2, ∇l2!, Hl2!,w0,ix,wTrue,what
         ## preallocate space for results to be stored
-        J = length(ex.trueParameters)
+        J = length(ex.wTrue)
         results = NamedTuple(
             name=>NamedTuple(
                 metric=> metric == :what ? zeros(_I,II,III,IV,J) : zeros(_I,II,III,IV)  
@@ -159,26 +159,21 @@ function do_it(ex::WENDyData)
                     end
                     dt = @elapsed a = @allocations begin 
                         @info "Running $name"
-                        what,cl2,fsl2,mDist,iters,alg_dt = try 
-                            alg_dt = @elapsed (what, iters) = try 
-                                algo(wendyProb, params, w0, m, ∇m!, Hm!,l2,∇l2!,Hl2!) 
-                            catch
-                                (NaN*ones(J), NaN) 
-                            end
-                            cl2 = norm(what - wTrue) / norm(wTrue)
-                            fsl2 = try
-                                fsl2 = forwardSolveRelErr(wendyProb, what)
-                            catch 
-                                NaN 
-                            end
-                            mDist = try
-                                m(what)
-                            catch 
-                                NaN 
-                            end
-                            what,cl2,fsl2,mDist,iters,alg_dt
+                        alg_dt = @elapsed (what, iters) = try 
+                            algo(wendyProb, params, w0, m, ∇m!, Hm!,l2,∇l2!,Hl2!) 
+                        catch
+                            (NaN*ones(J), NaN) 
+                        end
+                        cl2 = norm(what - wTrue) / norm(wTrue)
+                        fsl2 = try
+                            fsl2 = forwardSolveRelErr(wendyProb, what)
                         catch 
-                            Nan*ones(J),NaN,NaN,NaN,NaN,NaN
+                            NaN 
+                        end
+                        mDist = try
+                            m(what)
+                        catch 
+                            NaN 
                         end
                         @info """
                           $name Results: $(ex.name), nr=$nr, sub=$sub, μ=$μ, mc=$iv/$numSamples
