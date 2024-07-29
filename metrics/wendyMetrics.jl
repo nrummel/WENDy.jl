@@ -41,7 +41,8 @@ function plotjs(prob::WENDyProblem, title::String="", file::Union{Nothing, Strin
                 x=prob.tt,
                 y=prob.U[d,:],
                 name="U_$d", 
-                mode="markers" 
+                mode="markers" ,
+                marker_color=DATA_COLORS[d]
             )
         )
         push!( 
@@ -51,7 +52,8 @@ function plotjs(prob::WENDyProblem, title::String="", file::Union{Nothing, Strin
                 y=prob.U_exact[d,:],
                 name="U*_$d", 
                 mode="lines" ,
-                line_dash="dash"
+                line_dash="dash",
+                line_color=TRUTH_COLORS[d]
             )
         )
     end
@@ -410,7 +412,7 @@ function plotSols(examples=[GOODWIN, HINDMARSH_ROSE, LOGISTIC_GROWTH, ROBERTSON,
     end
 end
 ##
-function plotDeepDive(wendyProb, what; title="", yaxis_type="log", file=nothing)
+function plotDeepDive(wendyProb, what; title="", yaxis_type="linear", file=nothing)
     Uhat = forwardSolve(wendyProb, what, 
     reltol=1e-12
     )
@@ -478,7 +480,7 @@ function plotDeepDive(wendyProb, what; title="", yaxis_type="log", file=nothing)
             title_xanchor = "center",
             yaxis_range = yaxis_range,
             xaxis_title = "time (s)",
-            include_mathjax = "cdn",
+            hovermode = "x unified",
         ),
     )
 
@@ -535,4 +537,48 @@ function plotWits(m::Function, wits_vec::AbstractVector{<:AbstractMatrix}; names
             yaxis_type=yaxis_type,
         )
     )
+end
+##
+function plotCostSurface(
+    wendyProb::WENDyProblem, nll::CostFunction, IX::NTuple{2,Int}=(1,2); 
+    w1Rng::Union{Nothing, AbstractVector}=nothing, w2Rng::Union{Nothing, AbstractVector}=nothing, del::Real=2, step::Real=0.1, 
+    wFix::Union{Nothing, AbstractVector{<:Real}}=nothing, zaxis_type::String="linear"
+)
+    ## Define the values we sweep over 
+    isnothing(wFix) && (wFix = copy(wendyProb.wTrue))
+    isnothing(w1Rng) && (w1Rng = range(wFix[IX[1]]-del, step=step, stop=wFix[IX[1]]+del))
+    isnothing(w2Rng) && (w2Rng = range(wFix[IX[2]]-del, step=step, stop=wFix[IX[2]]+del))
+    w = similar(wFix)
+    mm = zeros(length(w1Rng), length(w2Rng))
+    xx = similar(mm)
+    yy = similar(mm)
+    @showprogress "Getting surface values from cost fun..." for (n,w1) in enumerate(w1Rng), (nn,w2) in enumerate(w2Rng)
+        w .= wFix 
+        w[IX[1]] = w1
+        w[IX[2]] = w2
+        xx[n,nn] = w1
+        yy[n,nn] = w2
+        mm[n,nn] = nll.f(w)
+    end
+    ## use log scale on z-axis plotly seems busted here
+    if zaxis_type == "log" 
+        @views minVal = minimum(mm[:])
+        if minVal < 0 
+            mm .-= minVal - 1e-12
+        end
+        mm .= log10.(mm)
+    end 
+    ##
+    p = plotjs(
+        PlotlyJS.surface(
+            x=xx,
+            y=yy,
+            z=mm,
+            showscale=false        
+        ),
+        Layout(
+            # zaxis=attr(type="log")
+        )
+    )
+    
 end

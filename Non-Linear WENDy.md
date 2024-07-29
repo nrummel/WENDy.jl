@@ -296,7 +296,7 @@ Choice of example problems is guided by what was previously done in  the previou
 	- [[Zotero/storage/QK273B4H/Bollerslev and Wooldridge - 1992 - Quasi-maximum likelihood estimation and inference .pdf#page=39|Bollerslev Lemma A.2]] - Dan suggested this for us to show that we have a unique minimizer. Seems very powerful also has tons of citations
 	- [[Russo and Laiu - 2024 - Convergence of weak-SINDy Surrogate Models.pdf|WSINDy Convergence Paper]] - Dan said this may not be worth reading but we can talk about it. 
 - Optimization
-	- [SFN Paper](https://arxiv.org/abs/2112.02089) - This is not ending up being a good solver but Cooper is invested so make time to read this
+	- [ARCqK Paper](https://arxiv.org/abs/2112.02089) - This is not ending up being a good solver but Cooper is invested so make time to read this
 	- [[Dussault and Orban - 2021 - Scalable adaptive cubic regularization methods.pdf|ARC Paper]] - This may end up being faster/more reliable than the good ol trust region 
 	- [[Pal et al. - 2024 - NonlinearSolve.jl High-Performance and Robust Sol.pdf|NonlinearSolve.jl]] - We use this to extend the IRWLS and possibly initialize our point [docs](https://docs.sciml.ai/NonlinearSolve/stable/) 
 	- [Trust Region](https://julianlsolvers.github.io/Optim.jl/stable/algo/newton_trust_region/) Optim.jl provides both a way to call the traditional trust region solvers both the Newton and Krylov-Newton methods. They point the interested reader to the [[Nocedal and Wright - 2006 - Numerical optimization.pdf#page=87|Nocedal Book]].
@@ -332,3 +332,6 @@ We want to see what happens as the our optimization methods converge, and analyz
 - Normality of the noise, $\epsilon \sim N(0, \sigma)$, because we generate the noise, this is a non issue for our tests, but when we have empirical data we should have a way of evaluating this. 
 - The quadrature error to be low (In general this should be ok, but when the number of time points becomes low $M \in [1,100]$ then we could have problems because $|e^\text{int}| \approx |e^\theta - b^\epsilon|$ )
 - If the method is not convergent, or the initialization point $w_0$ is to far away from the true weights then the nonlinear terms in the residual become large $|H(u^*,w,\epsilon)|\geq \big|\langle\nabla_uG(u,w),\epsilon\rangle\big|$ . Then the distribution is not valid. 
+# Parameter Identifiably 
+[http://biorxiv.org/lookup/doi/10.1101/2024.05.09.593464](http://biorxiv.org/lookup/doi/10.1101/2024.05.09.593464)
+[http://arxiv.org/abs/2405.20591](http://arxiv.org/abs/2405.20591)

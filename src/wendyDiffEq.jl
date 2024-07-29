@@ -6,8 +6,8 @@ function _solve_ode(
     w::AbstractVector{<:Real}, 
     u0::AbstractVector{<:Real}; 
     alg::OrdinaryDiffEq.OrdinaryDiffEqAlgorithm=Rosenbrock23(), 
-    reltol::Real=1e-12, 
-    abstol::Real=1e-12,
+    # reltol::Real=1e-12, 
+    # abstol::Real=1e-12,
     verbose::Bool=false,
     kwargs...
 )

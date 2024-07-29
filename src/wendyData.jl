@@ -104,7 +104,7 @@ function SimulatedWENDyData(
     initCond::AbstractVector{<:Real},
     tRng::NTuple{2,<:Real},
     wTrue::AbstractVector{<:Real};
-    M::Int=1024,
+    M::Int=1025,
     linearInParameters::Val{lip}=Val(false),
     file::Union{String, Nothing}=nothing,
     noiseDist::Val{DistType}=Val(Normal),

@@ -47,6 +47,7 @@ end
 ## helper function that unpacks data and fill in NaN for truth
 function _unpackData(data::EmpricalWENDyData, params::WENDyParameters)
     @info "Using EmpricalWENDyData"
+    J = length(parameters(data.ode))
     data.tt_full, data.U_full, NaN*ones(size(data.U_full,1)), NaN*ones(size(data.U_full)), NaN*ones(J), NaN*ones(size(data.U_full))
 end
 ## helper function to build G matrix
@@ -216,9 +217,48 @@ function buildCostFunctions(wendyProb::WENDyProblem, params::WENDyParameters; ll
         @info "  $(@sprintf "%.4g" dt ) s, $(_fmt_allocations(a))"
         all(g .== 0) ? (@warn "Auto diff failed on fs") : @info "gradient looks good at w0"
         all(H .== 0) ? (@warn "Auto diff failed on fs") : @info "Hessian looks good at w0"
+
+        ##
+        function _nll_fwdSolve(w)
+            Uhat = forwardSolve(wendyProb, w)
+            sig = wendyProb.sig
+            U = wendyProb.U
+            M = wendyProb.M
+            try 
+                sum(
+                    1/2*log(2*pi) 
+                    + J/2 * sum(log.(sig)) 
+                    + 1/2*dot(Uhat[:,m] - U[:,m], diagm(1 ./ sig), Uhat[:,m] - U[:,m])
+                    for m in 1:M
+                )
+            catch 
+                NaN 
+            end
+        end
+        @info "Forwad Nolve Negative Log-Likelihood"
+        nll_fwdSolve = WENDy.SecondOrderCostFunction(
+            _nll_fwdSolve, 
+            (g,w) -> ForwardDiff.gradient!(g, _nll_fwdSolve, w),
+            (H,w) -> ForwardDiff.hessian!(H, _nll_fwdSolve, w),
+        )
+        g = zeros(J)
+        H = zeros(J,J)
+        
+        @info "f nll_fwdSolve" 
+        dt = @elapsed a = @allocations nll_fwdSolve.f(w)
+        @info "  $(@sprintf "%.4g" dt ) s, $(_fmt_allocations(a))"
+        @info "∇f! nll_fwdSolve" 
+        dt = @elapsed a = @allocations nll_fwdSolve.∇f!(g, w)
+        @info "  $(@sprintf "%.4g" dt ) s, $(_fmt_allocations(a))"
+        @time "Hf! nll_fwdSolve" 
+        dt = @elapsed a = @allocations nll_fwdSolve.Hf!(H,w)
+        @info "  $(@sprintf "%.4g" dt ) s, $(_fmt_allocations(a))"
+
+
         (
             SecondOrderCostFunction(m, ∇m!, Hm!), 
-            SecondOrderCostFunction(l2, ∇l2!, Hl2!)
+            SecondOrderCostFunction(l2, ∇l2!, Hl2!),
+            nll_fwdSolve
         )
     end
 end
