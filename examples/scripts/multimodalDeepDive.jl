@@ -171,3 +171,51 @@ p_nll_fwdSolve = plotCostSurface(
     w1Rng=range(0, step=0.5, stop=5),
     w2Rng=range(0, step=0.5, stop=5)
 )
+## Contour plot
+IX = (3,4)
+_wits = results.arc_sfn.wits[]
+p_nll = plotContourSurface(
+    wendyProb, nll, (3,4);
+    w1Rng=range(0, step=0.1, stop=5), 
+    w2Rng=range(0, step=0.1, stop=5),
+    zaxis_type="log"
+)
+
+relayout!(
+    p_nll, 
+    title_text="Negative Log-Likelihood",
+    # title_y=.9,
+    # title_font_size=36,
+    title_yanchor="center",
+    # showcolorbar=false,
+    xaxis=attr(
+        title="w_$(IX[1])"
+    ),
+    yaxis=attr(
+        title="w_$(IX[2])"
+    ),
+    margin=attr(t=30, r=0, l=20, b=10),
+    annotations=[
+        attr(
+            x=_wits[IX[1],i],
+            y=_wits[IX[2],i],
+            z=log10.(nll.f(_wits[:,i])),
+            text="Iter $i",
+            font=attr(
+                color="white"
+            )
+        )
+        for i in 1:size(_wits,2)
+    ] 
+)
+addtraces!(
+    p_nll, 
+    scatter( 
+        x=_wits[IX[1],:],
+        y=_wits[IX[2],:],
+        z=log10.([nll.f(_wits[:,i]) for i in 1:size(_wits,2)]),
+        mode="markers",
+        hovertext=["w_$(IX[1])=$(_wits[IX[1],i])<br>w_$(IX[2])=$(_wits[IX[2],i])<br>log₁₀(-ℒ)=$(log10(nll.f(_wits[:,i])))" for i in 1:size(_wits,2)]
+    )
+)
+p_nll

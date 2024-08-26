@@ -262,3 +262,14 @@ function buildCostFunctions(wendyProb::WENDyProblem, params::WENDyParameters; ll
         )
     end
 end
+
+## 
+mutable struct WENDyResult
+    w::AbstractVector{<:AbstractFloat}
+    S::AbstractMatrix{<:AbstractFloat}
+end
+
+function WENDyResult(prob::WENDyProblem, params::WENDyParameters, w::AbstractVector{<:AbstractFloat})
+    cov = WENDy.Covariance(prob, params)
+    return WENDyResult(w, cov(w; doChol=false))
+end

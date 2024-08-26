@@ -335,3 +335,8 @@ We want to see what happens as the our optimization methods converge, and analyz
 # Parameter Identifiably 
 [http://biorxiv.org/lookup/doi/10.1101/2024.05.09.593464](http://biorxiv.org/lookup/doi/10.1101/2024.05.09.593464)
 [http://arxiv.org/abs/2405.20591](http://arxiv.org/abs/2405.20591)
+$$
+\begin{align*}
+r(w) = Gw-b &\sim N(0,S(\hat{w}))\\\\
+w &\sim N(\underbrace{G^{-1}b}_{\approx \hat{w}}, G^{-1}S(\hat{w})G^{-1})
+\end{align*}$$

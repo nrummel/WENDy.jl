@@ -16,7 +16,7 @@ wendyProb, params, simParams = init(
     ll = Warn
 );
 ## build costFunction
-nll, l2Loss = buildCostFunctions(wendyProb, params; ll=Info);
+nll, l2Loss, nll_fwdSolve = buildCostFunctions(wendyProb, params; ll=Info);
 ## Pick a initializaiotn point
 w0 = getW0(
     wendyProb, simParams; 
@@ -24,7 +24,7 @@ w0 = getW0(
 );
 ## run algorithms 
 algoNames = [:tr_optim,:arc_sfn,:tr_jso,:arc_jso,:irwls,:fsnls_tr_optim]
-results = runAlgos(wendyProb, params, nll, l2Loss, algoNames; return_wits=true)
+results = runAlgos(wendyProb, params, nll, l2Loss, nll_fwdSolve, algoNames; return_wits=true)
 ## Make plots
 # Residual parted out
 _algoName = :tr_optim
