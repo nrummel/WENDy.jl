@@ -27,4 +27,5 @@ GOODWIN = SimulatedWENDyData(
     GOODWIN_TRNG,
     GOODWIN_TRUE_PARAMS;
     linearInParameters=Val(false), # NONLINEAR!
+    noiseDist=Val(LogNormal),
 );

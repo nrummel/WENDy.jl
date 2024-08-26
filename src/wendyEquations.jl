@@ -30,14 +30,17 @@ function _R!(
     nothing
 end
 # m(w) - Maholinobis distance
-function _m(S::AbstractMatrix, r::AbstractVector, S⁻¹r::AbstractVector)
+function _m(S::AbstractMatrix, r::AbstractVector, S⁻¹r::AbstractVector, constTerm::AbstractFloat)
     F = svd(S)
     ldiv!(S⁻¹r, F, r)
-    1/2*dot(r, S⁻¹r)
+    1/2*(
+        dot(r, S⁻¹r) 
+        + sum(log.(F.S))
+    ) + constTerm
 end
-function _m(Rᵀ⁻¹r::AbstractVector)
-    1/2*dot(Rᵀ⁻¹r, Rᵀ⁻¹r)
-end
+# function _m(Rᵀ⁻¹r::AbstractVector, )
+#     1/2*(dot(Rᵀ⁻¹r, Rᵀ⁻¹r) + sum(log.()))
+# end
 # ∇m(w) - Gradient of Maholinobis distance
 function _∇m!(
     ∇m::AbstractVector{<:Real},w::AbstractVector{<:Real},
@@ -59,7 +62,12 @@ function _∇m!(
     @inbounds for j in 1:J 
         @views prt0 = 2*dot(∇r[:,j], S⁻¹r)         # 2∂ⱼrᵀS⁻¹r
         @views prt1 = - dot(S⁻¹r, ∇S[:,:,j], S⁻¹r) # rᵀ∂ⱼS⁻¹r = -(S⁻¹r)ᵀ∂ⱼSS⁻¹r
-        ∇m[j] = 1/2 * (prt0 + prt1)
+        @views logDetPrt = tr(F \ ∇S[:,:,j])
+        ∇m[j] = 1/2 * (
+            prt0 
+            + prt1 
+            + logDetPrt
+            )
     end 
     nothing
 end

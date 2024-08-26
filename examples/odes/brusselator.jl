@@ -52,6 +52,6 @@ BRUSSELATOR = SimulatedWENDyData(
     BRUSSELATOR_T_RNG,
     1024;
     initCond=BRUSSELATOR_INIT_COND[:],
-    trueParameters=BRUSSELATOR_PARAMS,
+    wTrue=BRUSSELATOR_PARAMS,
     linearInParameters=Val(true)
 );

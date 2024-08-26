@@ -1,12 +1,12 @@
 ## L(w)
 abstract type CovarianceFactor<:Function end 
-function CovarianceFactor(prob::WENDyProblem{LinearInParameters}, params::WENDyParameters) where LinearInParameters
-    return LinearInParameters ? LinearCovarianceFactor(prob, params) : NonlinearCovarianceFactor(prob, params)
+function CovarianceFactor(prob::WENDyProblem{lip}, params::WENDyParameters) where lip
+    return lip ? LinearCovarianceFactor(prob, params) : NonlinearCovarianceFactor(prob, params)
 end
 ## ∇L(w)
 abstract type GradientCovarianceFactor<:Function end 
-function GradientCovarianceFactor(prob::WENDyProblem{LinearInParameters}, params::WENDyParameters, ::Val{T}=Val(Float64)) where {LinearInParameters, T<:Real}
-    return LinearInParameters ? LinearGradientCovarianceFactor(prob, params, Val(T)) : NonlinearGradientCovarianceFactor(prob, params, Val(T))
+function GradientCovarianceFactor(prob::WENDyProblem{lip}, params::WENDyParameters, ::Val{T}=Val(Float64)) where {lip, T<:Real}
+    return lip ? LinearGradientCovarianceFactor(prob, params, Val(T)) : NonlinearGradientCovarianceFactor(prob, params, Val(T))
 end
 ## R(w)
 # struct/method
@@ -67,12 +67,12 @@ function (m::Covariance)(w::AbstractVector{W}; ll::LogLevel=Warn, transpose::Boo
 end
 ## G(w) - b / G*w - b 
 abstract type Residual<:Function end 
-function Residual(prob::WENDyProblem{LinearInParameters}, params::WENDyParameters, ::Val{T}=Val(Float64)) where {LinearInParameters,T<:Real} 
-    return LinearInParameters ? LinearResidual(prob, params, Val(T)) :  NonlinearResidual(prob, params, Val(T))
+function Residual(prob::WENDyProblem{lip}, params::WENDyParameters, ::Val{T}=Val(Float64)) where {lip,T<:Real} 
+    return lip ? LinearResidual(prob, params, Val(T)) :  NonlinearResidual(prob, params, Val(T))
 end
 abstract type GradientResidual<:Function end
-function GradientResidual(prob::WENDyProblem{LinearInParameters}, params::WENDyParameters, ::Val{T}=Val(Float64)) where {LinearInParameters,T<:Real}
-    return LinearInParameters ? LinearGradientResidual(prob, params, Val(T)) : NonlinearGradientResidual(prob, params, Val(T))
+function GradientResidual(prob::WENDyProblem{lip}, params::WENDyParameters, ::Val{T}=Val(Float64)) where {lip,T<:Real}
+    return lip ? LinearGradientResidual(prob, params, Val(T)) : NonlinearGradientResidual(prob, params, Val(T))
 end
 ## Maholinobis distance 
 # struct
@@ -108,24 +108,26 @@ function MahalanobisDistance(prob::WENDyProblem, params::WENDyParameters, ::Val{
 end
 # method
 function (m::MahalanobisDistance)(w::AbstractVector{T}; ll::LogLevel=Warn, efficient::Bool=false) where T<:Real
-    if efficient
-        # Can be unstable because in worst case S(w) ⊁ 0
-        # m(w) = r(w)ᵀS⁻¹r(w) = ((Rᵀ)⁻¹r)ᵀ((Rᵀ)⁻¹r)
-        m.R!(
-            m.Rᵀ,w;
-            ll=ll
-        )
-        b = similar(m.b₀)
-        ldiv!(b, LowerTriangular(m.Rᵀ), m.b₀) # b = (Rᵀ)⁻¹b₀
-        m.r!(
-            m.Rᵀ⁻¹r, b, w; 
-            ll=ll, Rᵀ=m.Rᵀ
-        ) # b = (Rᵀ)⁻¹G(w)
-        return _m(m.Rᵀ⁻¹r) # ((Rᵀ)⁻¹r)^T(Rᵀ)⁻¹r
-    end 
+    # if efficient
+    #     # Can be unstable because in worst case S(w) ⊁ 0
+    #     # m(w) = r(w)ᵀS⁻¹r(w) = ((Rᵀ)⁻¹r)ᵀ((Rᵀ)⁻¹r)
+    #     m.R!(
+    #         m.Rᵀ,w;
+    #         ll=ll
+    #     )
+    #     b = similar(m.b₀)
+    #     ldiv!(b, LowerTriangular(m.Rᵀ), m.b₀) # b = (Rᵀ)⁻¹b₀
+    #     m.r!(
+    #         m.Rᵀ⁻¹r, b, w; 
+    #         ll=ll, Rᵀ=m.Rᵀ
+    #     ) # b = (Rᵀ)⁻¹G(w)
+    #     return _m(m.Rᵀ⁻¹r) # ((Rᵀ)⁻¹r)^T(Rᵀ)⁻¹r
+    # end 
+    KD,_ = size(m.S) 
+    constTerm = KD/2*log(2*pi)
     m.r!(m.r,m.b₀,w;ll=ll)
     m.R!(m.S,w;ll=ll, doChol=false)
-    return _m(m.S,m.r,m.S⁻¹r)
+    return _m(m.S, m.r, m.S⁻¹r, constTerm)
 end
 ## ∇m(w) - gradient of Maholinobis distance
 struct GradientMahalanobisDistance<:Function
@@ -201,6 +203,6 @@ function (m::GradientMahalanobisDistance)(w::AbstractVector{W}; ll::LogLevel=War
 end
 ## Because of the complications we separate these into separate types
 abstract type HesianMahalanobisDistance<:Function end
-function HesianMahalanobisDistance(prob::WENDyProblem{LinearInParameters}, params::WENDyParameters) where LinearInParameters
-    return LinearInParameters ? LinearHesianMahalanobisDistance(prob, params) : NonlinearHesianMahalanobisDistance(prob, params)
+function HesianMahalanobisDistance(prob::WENDyProblem{lip}, params::WENDyParameters) where lip
+    return lip ? LinearHesianMahalanobisDistance(prob, params) : NonlinearHesianMahalanobisDistance(prob, params)
 end

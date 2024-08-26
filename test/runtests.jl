@@ -195,10 +195,10 @@ function WENDyParameters(matlab_data::Dict)
     noiseRatio=matlab_data["noise_ratio"]
     WENDyParameters(noiseRatio=noiseRatio)
 end
-function EmpricalWENDyData(matlab_data::Dict, ode::ODESystem, ::Val{LinearInParameters}=Val(true), ::Val{DistType}=Val(Normal)) where {LinearInParameters, DistType<:Distribution}
+function EmpricalWENDyData(matlab_data::Dict, ode::ODESystem, ::Val{lip}=Val(true), ::Val{DistType}=Val(Normal)) where {lip, DistType<:Distribution}
     t = matlab_data["tobs"][:]
     U = Matrix(matlab_data["xobs"]')
-    EmpricalWENDyData{LinearInParameters,DistType}("", ode, t, U)
+    EmpricalWENDyData{lip,DistType}("", ode, t, U)
 end
 function _getMatlabProblem(matfile::String, ode::ODESystem, LineearInParameters::Bool)
     matlab_data=matread(matfile)
@@ -367,9 +367,9 @@ function test_it_all()
             @test test_VVp(dataFile=file) 
             @info " testEstimateNoise "
             @test testEstimateNoise(dataFile=file) 
-            for LinearInParameters in [true,false]
-                prob, params, w0, matlab_data = _getMatlabProblem(file, ode, LinearInParameters)
-                linstr  =  LinearInParameters ? "Linear" : "Nonlinear"
+            for lip in [true,false]
+                prob, params, w0, matlab_data = _getMatlabProblem(file, ode, lip)
+                linstr  =  lip ? "Linear" : "Nonlinear"
                 @info "  testResidual, $linstr, $name"
                 @test testResidual(prob, params, w0, matlab_data)  
                 @info "  testWeightedResidual, $linstr, $name"

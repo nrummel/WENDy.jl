@@ -1,12 +1,12 @@
 ## Don't add noise if it is an empirical data set
-generateNoise(data::EmpricalWENDyData, params::WENDyParameters) = (
+generateNoise(data::EmpricalWENDyData, params::SimulationParameters) = (
     data.U_full, 
     NaN .* ones(size(data.U_full)), 
     nothing, 
     NaN .* ones(size(data.U_full,1))
 )
 ## Add data according to the noise distribution and noise ratio
-function generateNoise(U_exact::AbstractMatrix{<:Real}, params::WENDyParameters, ::Val{DistType}; isotropic::Bool=true) where {DistType<:Distribution}
+function generateNoise(U_exact::AbstractMatrix{<:Real}, params::SimulationParameters, ::Val{DistType}; isotropic::Bool=true) where {DistType<:Distribution}
     if (!isnothing(params.seed) && params.seed > 0) 
         Random.seed!(params.seed)
         @info "Seeeding the noise with value $(params.seed)"
