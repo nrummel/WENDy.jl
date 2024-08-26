@@ -92,7 +92,7 @@ function _call_algo(
 end
 
 function runAlgos(
-    wendyProb::WENDyProblem, params::WENDyParameters, nll::CostFunction, l2Loss::CostFunction, nll_fwdSolve::CostFunction, algoNames::AbstractVector{<:Symbol}; 
+    wendyProb::WENDyProblem, params::WENDyParameters, w0::AbstractVector, nll::CostFunction, l2Loss::CostFunction, nll_fwdSolve::CostFunction, algoNames::AbstractVector{<:Symbol}; 
     return_wits::Bool=false, ll::LogLevel=Info, kwargs...
 )
     with_logger(ConsoleLogger(stdout, ll)) do
@@ -255,7 +255,7 @@ function runExample(ex;
         fsnll      = $(@sprintf "%.4g" _fsnll_star)
         nll        = $(@sprintf "%.4g" _nll_star)
     """
-    results = runAlgos(wendyProb, params, nll, l2Loss, nll_fwdSolve, algoNames; return_wits=true);
+    results = runAlgos(wendyProb, params, w0, nll, l2Loss, nll_fwdSolve, algoNames; return_wits=true);
     return (
         wendyProb, params, simParams, 
         nll, l2Loss, nll_fwdSolve,

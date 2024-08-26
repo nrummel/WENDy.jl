@@ -582,3 +582,43 @@ function plotCostSurface(
     )
     
 end
+##
+function plotContourSurface(
+    wendyProb::WENDyProblem, nll::CostFunction, IX::NTuple{2,Int}=(1,2); 
+    w1Rng::Union{Nothing, AbstractVector}=nothing, w2Rng::Union{Nothing, AbstractVector}=nothing, del::Real=2, step::Real=0.1, 
+    wFix::Union{Nothing, AbstractVector{<:Real}}=nothing, zaxis_type::String="linear"
+)
+    ## Define the values we sweep over 
+    isnothing(wFix) && (wFix = copy(wendyProb.wTrue))
+    isnothing(w1Rng) && (w1Rng = range(wFix[IX[1]]-del, step=step, stop=wFix[IX[1]]+del))
+    isnothing(w2Rng) && (w2Rng = range(wFix[IX[2]]-del, step=step, stop=wFix[IX[2]]+del))
+    w = similar(wFix)
+    mm = zeros(length(w1Rng), length(w2Rng))
+    xx = similar(mm)
+    yy = similar(mm)
+    @showprogress "Getting surface values from cost fun..." for (n,w1) in enumerate(w1Rng), (nn,w2) in enumerate(w2Rng)
+        w .= wFix 
+        w[IX[1]] = w1
+        w[IX[2]] = w2
+        xx[n,nn] = w1
+        yy[n,nn] = w2
+        mm[n,nn] = nll.f(w)
+    end
+    ## use log scale on z-axis plotly seems busted here
+    if zaxis_type == "log" 
+        @views minVal = minimum(mm[:])
+        if minVal < 0 
+            mm .-= minVal - 1e-12
+        end
+        mm .= log10.(mm)
+    end 
+    ##
+    p = plotjs(
+        contour(
+            x=w1Rng,
+            y=w2Rng,
+            z=mm,
+        ),
+        Layout()
+    )
+end
