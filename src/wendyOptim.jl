@@ -308,7 +308,7 @@ function arc_JSO(
     end
     # store iteratios in a callback
     wits_arc = zeros(J, 0)
-    function _clbk(nlp, slvr::AdaptiveRegularization.TRARCSolver, stats)
+    function _clbk(nlp, slvr, stats)
         wits_arc = hcat(wits_arc, nlp.x)
         nothing
     end 

@@ -3,7 +3,7 @@ module WENDy
     ## external dependencies
     # optimization algorithms
     using NonlinearSolve # high performance nonlinear solver
-    using DiffEqParamEstim, ForwardDiff # forward solve nonlinear lsq comparison
+    using ForwardDiff # forward solve nonlinear lsq comparison
     using Optimization, OptimizationOptimJL, Optim # Trust Region Solver
     using JSOSolvers, ManualNLPModels, AdaptiveRegularization
     using SFN # ARC and SFN solvers

@@ -57,6 +57,7 @@ function _getData(f!::Function, tRng::NTuple{2,<:AbstractFloat}, M::Int, wTrue::
             sol = _solve_ode(f!, tRng, M, wTrue, initCond)
             t = sol.t
             u = reduce(hcat, sol.u)
+            mkpath(dirname(file))
             BSON.@save file t u
             return t,u, sol
         end
