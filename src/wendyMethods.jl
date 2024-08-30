@@ -76,7 +76,7 @@ function GradientResidual(prob::WENDyProblem{lip}, params::WENDyParameters, ::Va
 end
 ## Maholinobis distance 
 # struct
-struct MahalanobisDistance<:Function
+struct WeakNLL<:Function
     b₀::AbstractVector{<:Real}
     # functions
     R!::Covariance
@@ -89,7 +89,7 @@ struct MahalanobisDistance<:Function
     Rᵀ⁻¹r::AbstractVector{<:Real}
 end
 # constructor
-function MahalanobisDistance(prob::WENDyProblem, params::WENDyParameters, ::Val{T}=Val(Float64)) where T<:Real
+function WeakNLL(prob::WENDyProblem, params::WENDyParameters, ::Val{T}=Val(Float64)) where T<:Real
     # functions
     R! = Covariance(prob, params, Val(T))
     r! = Residual(prob, params, Val(T))
@@ -100,14 +100,14 @@ function MahalanobisDistance(prob::WENDyProblem, params::WENDyParameters, ::Val{
     r = zeros(T, K*D)
     S⁻¹r = zeros(T, K*D)
     Rᵀ⁻¹r = zeros(T, K*D)
-    MahalanobisDistance(
+    WeakNLL(
         prob.b₀, 
         R!, r!, 
         S, Rᵀ, r, S⁻¹r,Rᵀ⁻¹r
     )
 end
 # method
-function (m::MahalanobisDistance)(w::AbstractVector{T}; ll::LogLevel=Warn, efficient::Bool=false) where T<:Real
+function (m::WeakNLL)(w::AbstractVector{T}; ll::LogLevel=Warn, efficient::Bool=false) where T<:Real
     # if efficient
     #     # Can be unstable because in worst case S(w) ⊁ 0
     #     # m(w) = r(w)ᵀS⁻¹r(w) = ((Rᵀ)⁻¹r)ᵀ((Rᵀ)⁻¹r)
@@ -130,7 +130,7 @@ function (m::MahalanobisDistance)(w::AbstractVector{T}; ll::LogLevel=Warn, effic
     return _m(m.S, m.r, m.S⁻¹r, constTerm)
 end
 ## ∇m(w) - gradient of Maholinobis distance
-struct GradientMahalanobisDistance<:Function
+struct GradientWeakNLL<:Function
     # output
     ∇m::AbstractVector{<:Real}
     # data 
@@ -146,7 +146,7 @@ struct GradientMahalanobisDistance<:Function
     ∇S::AbstractArray{<:Real,3}
 end
 # constructor
-function GradientMahalanobisDistance(prob::WENDyProblem, params::WENDyParameters, ::Val{T}=Val(Float64)) where T
+function GradientWeakNLL(prob::WENDyProblem, params::WENDyParameters, ::Val{T}=Val(Float64)) where T
     K,D,J  = prob.K, prob.D, prob.J
     # output
     ∇m = zeros(T,J)
@@ -159,7 +159,7 @@ function GradientMahalanobisDistance(prob::WENDyProblem, params::WENDyParameters
     S⁻¹r = zeros(T, K*D)
     ∂ⱼLLᵀ = zeros(T, K*D,K*D)
     ∇S = zeros(T,K*D,K*D,J)
-    GradientMahalanobisDistance(
+    GradientWeakNLL(
         ∇m,
         prob.b₀,
         R!, r!, ∇r!, ∇L!,
@@ -167,7 +167,7 @@ function GradientMahalanobisDistance(prob::WENDyProblem, params::WENDyParameters
     )
 end
 # method inplace
-function (m::GradientMahalanobisDistance)(∇m::AbstractVector{<:Real}, w::AbstractVector{W}; ll::LogLevel=Warn) where W<:Real
+function (m::GradientWeakNLL)(∇m::AbstractVector{<:Real}, w::AbstractVector{W}; ll::LogLevel=Warn) where W<:Real
     # Compute L(w) & S(w)
     m.R!(w; ll=ll, transpose=false, doChol=false) 
     # Compute residal
@@ -185,7 +185,7 @@ function (m::GradientMahalanobisDistance)(∇m::AbstractVector{<:Real}, w::Abstr
     )
 end
 # method mutate internal data
-function (m::GradientMahalanobisDistance)(w::AbstractVector{W}; ll::LogLevel=Warn) where W<:Real
+function (m::GradientWeakNLL)(w::AbstractVector{W}; ll::LogLevel=Warn) where W<:Real
     # Compute L(w) & S(w)
     m.R!(w; ll=ll, transpose=false, doChol=false) 
     # Compute residal
@@ -202,7 +202,7 @@ function (m::GradientMahalanobisDistance)(w::AbstractVector{W}; ll::LogLevel=War
     )
 end
 ## Because of the complications we separate these into separate types
-abstract type HesianMahalanobisDistance<:Function end
-function HesianMahalanobisDistance(prob::WENDyProblem{lip}, params::WENDyParameters) where lip
-    return lip ? LinearHesianMahalanobisDistance(prob, params) : NonlinearHesianMahalanobisDistance(prob, params)
+abstract type HesianWeakNLL<:Function end
+function HesianWeakNLL(prob::WENDyProblem{lip}, params::WENDyParameters) where lip
+    return lip ? LinearHesianWeakNLL(prob, params) : NonlinearHesianWeakNLL(prob, params)
 end

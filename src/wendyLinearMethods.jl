@@ -173,7 +173,7 @@ function (m::LinearGradientResidual)(w::AbstractVector{<:Real}; ll::LogLevel=War
     nothing
 end 
 ## Hm(w) - Hessian of Maholinobis Distance
-struct LinearHesianMahalanobisDistance<:HesianMahalanobisDistance
+struct LinearHesianWeakNLL<:HesianWeakNLL
     # output 
     H::AbstractMatrix{<:Real}
     # data 
@@ -194,7 +194,7 @@ struct LinearHesianMahalanobisDistance<:HesianMahalanobisDistance
     ∂ᵢSS⁻¹∂ⱼS::AbstractMatrix{<:Real}
 end
 
-function LinearHesianMahalanobisDistance(prob::WENDyProblem{true}, params::WENDyParameters, ::Val{T}=Val(Float64)) where T<:Real
+function LinearHesianWeakNLL(prob::WENDyProblem{true}, params::WENDyParameters, ::Val{T}=Val(Float64)) where T<:Real
     K,M,D,J = prob.K, prob.M, prob.D, prob.J
     # ouput 
     H = zeros(J,J)
@@ -212,7 +212,7 @@ function LinearHesianMahalanobisDistance(prob::WENDyProblem{true}, params::WENDy
     ∂ᵢⱼS = zeros(T, K*D, K*D)
     S⁻¹∂ⱼS = zeros(T, K*D, K*D)
     ∂ᵢSS⁻¹∂ⱼS = zeros(T, K*D, K*D)
-    LinearHesianMahalanobisDistance(
+    LinearHesianWeakNLL(
         H,
         prob.b₀,
         R!, r!, ∇r!, ∇L!,
@@ -220,7 +220,7 @@ function LinearHesianMahalanobisDistance(prob::WENDyProblem{true}, params::WENDy
     )
 end
 # method inplace
-function (m::LinearHesianMahalanobisDistance)(H::AbstractMatrix{<:Real}, w::AbstractVector{<:Real}; ll::LogLevel=Warn)
+function (m::LinearHesianWeakNLL)(H::AbstractMatrix{<:Real}, w::AbstractVector{<:Real}; ll::LogLevel=Warn)
     # TODO: try letting cholesky factorization back in here
     m.R!(w; transpose=false, doChol=false) 
     m.r!(m.b₀, w) 
@@ -234,7 +234,7 @@ function (m::LinearHesianMahalanobisDistance)(H::AbstractMatrix{<:Real}, w::Abst
     )
 end
 # method mutate internal data
-function (m::LinearHesianMahalanobisDistance)(w::AbstractVector{<:Real}; ll::LogLevel=Warn)
+function (m::LinearHesianWeakNLL)(w::AbstractVector{<:Real}; ll::LogLevel=Warn)
     # TODO: try letting cholesky factorization back in here
     m.R!(w; transpose=false, doChol=false) 
     m.r!(m.b₀, w) 

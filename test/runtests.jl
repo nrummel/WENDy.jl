@@ -259,18 +259,18 @@ function testCovariance(prob, params, w0, matlab_data)
     return true 
 end
 #
-function testMahalanobisDistance(prob, params, w0, matlab_data)
+function testWeakNLL(prob, params, w0, matlab_data)
     m0_matlab = 1/2*matlab_data["m"];
-    m = MahalanobisDistance(prob, params);
+    m = WeakNLL(prob, params);
     m0 = m(w0;efficient=true)
     return abs(m0 -m0_matlab) / abs(m0) < eps()*1e4
 end
 #
-function testGradientMahalanobisDistance(prob, params, w0, matlab_data;ll=Warn)
+function testGradientWeakNLL(prob, params, w0, matlab_data;ll=Warn)
 with_logger(ConsoleLogger(stdout, ll)) do
     flag=true
     ∇m_matlab = 1/2*matlab_data["gradm"][:];
-    ∇m! = GradientMahalanobisDistance(prob, params);
+    ∇m! = GradientWeakNLL(prob, params);
     ∇m!(w0)
     relErr = norm(∇m!.∇m -∇m_matlab) / norm(∇m_matlab)
     if relErr < 1e-10 
@@ -279,7 +279,7 @@ with_logger(ConsoleLogger(stdout, ll)) do
         flag = false
         @warn "H out of spec (relerr = $relErr) with MATLAB"
     end
-    m = MahalanobisDistance(prob, params)
+    m = WeakNLL(prob, params)
     ∇m_df = similar(∇m_matlab)
     FiniteDiff.finite_difference_gradient!(∇m_df,m,w0);
     relErr = norm(∇m!.∇m -∇m_df) / norm(∇m_df)
@@ -293,14 +293,14 @@ with_logger(ConsoleLogger(stdout, ll)) do
 end
 end
 ##
-function testHessianMahalanobisDistance(prob, params, w0, matlab_data;ll=Warn)
+function testHessianWeakNLL(prob, params, w0, matlab_data;ll=Warn)
     with_logger(ConsoleLogger(stdout, ll)) do
     ##
     flag = true
     @info "Building functions"
-    m = MahalanobisDistance(prob, params)
-    ∇m! = GradientMahalanobisDistance(prob, params)
-    Hm! = HesianMahalanobisDistance(prob, params);
+    m = WeakNLL(prob, params)
+    ∇m! = GradientWeakNLL(prob, params)
+    Hm! = HesianWeakNLL(prob, params);
     ##
     @info "Evaluating analytic hessian"
     dt = @elapsed als = @allocations Hm!(w0)
@@ -354,8 +354,8 @@ prob, params, w0, matlab_data = _getMatlabProblem(
     false
 );
 testGradientCovarianceFactor(prob, params, w0, matlab_data;ll=Info)
-# testGradientMahalanobisDistance(prob, params, w0, matlab_data)  
-# testHessianMahalanobisDistance(prob, params, w0, matlab_data;ll=Info) 
+# testGradientWeakNLL(prob, params, w0, matlab_data)  
+# testHessianWeakNLL(prob, params, w0, matlab_data;ll=Info) 
 ##
 function test_it_all()
     @testset verbose=true begin 
@@ -378,14 +378,14 @@ function test_it_all()
                 @test testCovarianceFactor(prob, params, w0, matlab_data)  
                 @info "  testCovariance, $linstr, $name"
                 @test testCovariance(prob, params, w0, matlab_data)  
-                @info "  testMahalanobisDistance, $linstr, $name"
-                @test testMahalanobisDistance(prob, params, w0, matlab_data)  
+                @info "  testWeakNLL, $linstr, $name"
+                @test testWeakNLL(prob, params, w0, matlab_data)  
                 @info "  testGradientCovarianceFactor, $linstr, $name"
                 @test testGradientCovarianceFactor(prob, params, w0, matlab_data)  
-                @info "  testGradientMahalanobisDistance, $linstr, $name"
-                @test testGradientMahalanobisDistance(prob, params, w0, matlab_data)  
-                @info "  testHessianMahalanobisDistance, $linstr, $name"
-                @test testHessianMahalanobisDistance(prob, params, w0, matlab_data)  
+                @info "  testGradientWeakNLL, $linstr, $name"
+                @test testGradientWeakNLL(prob, params, w0, matlab_data)  
+                @info "  testHessianWeakNLL, $linstr, $name"
+                @test testHessianWeakNLL(prob, params, w0, matlab_data)  
             end
         end
     end

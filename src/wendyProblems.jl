@@ -1,9 +1,9 @@
 ##
 struct WENDyProblem{lip, DistType} 
-    D::Int
-    J::Int
-    M::Int
-    K::Int
+    D::Int # number of state variables
+    J::Int # number of parameters (to be estimated)
+    M::Int # (M+1) number of data points in time 
+    K::Int # number of test functions 
     b₀::AbstractVector{<:AbstractFloat}
     sig::AbstractVector{<:AbstractFloat}
     tt::AbstractVector{<:AbstractFloat}
@@ -22,7 +22,7 @@ struct WENDyProblem{lip, DistType}
     heswf!::Function
     heswjacuf!::Function
     data::WENDyData
-    ## Truth info
+    # Truth info
     sigTrue::AbstractVector{AbstractFloat}
     wTrue::AbstractVector{<:AbstractFloat}
     noise::AbstractMatrix{<:AbstractFloat}
@@ -109,7 +109,6 @@ end
 function WENDyProblem(data::WENDyData{false, DistType}, params::WENDyParameters; ll::LogLevel=Warn, matlab_data::Union{Dict,Nothing}=nothing) where DistType<:Distribution
     with_logger(ConsoleLogger(stderr, ll)) do
         J = length(parameters(data.ode))
-        J = length(parameters(data.ode))
         tt, U, sigTrue, noise, wTrue, U_exact = _unpackData(data, params)
         D, M = size(U)
         @info "============================="
@@ -140,125 +139,6 @@ function WENDyProblem(data::WENDyData{false, DistType}, params::WENDyParameters;
             jacwf!,jacwjacuf!,heswf!,heswjacuf!,
             data,
             sigTrue,wTrue,noise
-        )
-    end
-end
-##
-abstract type CostFunction end
-
-struct FirstOrderCostFunction <: CostFunction
-    f::Function 
-    ∇f!::Function 
-end
-
-struct SecondOrderCostFunction <: CostFunction
-    f::Function 
-    ∇f!::Function 
-    Hf!::Function 
-end
-
-function _fmt_allocations(a::Real)
-    _exp_dict = Dict(
-        0=>"",
-        1=>"K",
-        2=>"M",
-        3=>"B",
-        4=>"T"
-    )
-    if a == 0 
-        return "$a allocations"
-    end
-    e = log10(a)
-    k = Int(floor(e / 3))
-    suffix = _exp_dict[k]
-    str = @sprintf "%.4g" (a * 10.0^-(k*3))
-    str*" $suffix allocations"
-end
-
-function buildCostFunctions(wendyProb::WENDyProblem, params::WENDyParameters; ll::LogLevel=Warn)
-    with_logger(ConsoleLogger(stdout, ll)) do 
-        w = wendyProb.wTrue
-        J = wendyProb.J
-        g = similar(wendyProb.wTrue)
-        H = zeros(J,J)
-        @info "Cost functions"
-        dt = @elapsed a = @allocations begin
-            m = MahalanobisDistance(wendyProb, params);
-            ∇m! = GradientMahalanobisDistance(wendyProb, params);
-            Hm! = HesianMahalanobisDistance(wendyProb, params);
-        end
-        @info "  $(@sprintf "%.4g" dt ) s, $(_fmt_allocations(a))"
-        @info " m"
-        dt = @elapsed a = @allocations m(w)
-        @info "  $(@sprintf "%.4g" dt ) s, $(_fmt_allocations(a))"
-        @info " ∇m!"
-        dt = @elapsed a = @allocations ∇m!(g, w)
-        @info "  $(@sprintf "%.4g" dt ) s, $(_fmt_allocations(a))"
-        @info " Hm!"
-        dt = @elapsed a = @allocations Hm!(H, w)
-        @info "  $(@sprintf "%.4g" dt ) s, $(_fmt_allocations(a))"
-        ##
-        @info "Forward Solve L2 loss"
-        dt = @elapsed a = @allocations begin
-            l2(w::AbstractVector{<:Real}) = _l2(w,wendyProb.U,wendyProb.data)
-            ∇l2!(g::AbstractVector{<:Real},w::AbstractVector{<:Real}) = ForwardDiff.gradient!(g, l2, w) 
-            Hl2!(H::AbstractMatrix{<:Real},w::AbstractVector{<:Real}) = ForwardDiff.hessian!(H, l2, w) 
-        end
-        @info "  $(@sprintf "%.4g" dt ) s, $(_fmt_allocations(a))"
-        @info "Run once so that compilation time is isolated here"
-        @info " l2"
-        dt = @elapsed a = @allocations l2(w)
-        @info "  $(@sprintf "%.4g" dt ) s, $(_fmt_allocations(a))"
-        @info " ∇l2!"
-        dt = @elapsed a = @allocations ∇l2!(g, w)
-        @info "  $(@sprintf "%.4g" dt ) s, $(_fmt_allocations(a))"
-        @info " Hl2!"
-        dt = @elapsed a = @allocations Hl2!(H, w);
-        @info "  $(@sprintf "%.4g" dt ) s, $(_fmt_allocations(a))"
-        all(g .== 0) ? (@warn "Auto diff failed on fs") : @info "gradient looks good at w0"
-        all(H .== 0) ? (@warn "Auto diff failed on fs") : @info "Hessian looks good at w0"
-
-        ##
-        function _nll_fwdSolve(w)
-            Uhat = forwardSolve(wendyProb, w)
-            sig = wendyProb.sig
-            U = wendyProb.U
-            M = wendyProb.M
-            try 
-                sum(
-                    1/2*log(2*pi) 
-                    + J/2 * sum(log.(sig)) 
-                    + 1/2*dot(Uhat[:,m] - U[:,m], diagm(1 ./ sig), Uhat[:,m] - U[:,m])
-                    for m in 1:M
-                )
-            catch 
-                NaN 
-            end
-        end
-        @info "Forwad Nolve Negative Log-Likelihood"
-        nll_fwdSolve = WENDy.SecondOrderCostFunction(
-            _nll_fwdSolve, 
-            (g,w) -> ForwardDiff.gradient!(g, _nll_fwdSolve, w),
-            (H,w) -> ForwardDiff.hessian!(H, _nll_fwdSolve, w),
-        )
-        g = zeros(J)
-        H = zeros(J,J)
-        
-        @info "f nll_fwdSolve" 
-        dt = @elapsed a = @allocations nll_fwdSolve.f(w)
-        @info "  $(@sprintf "%.4g" dt ) s, $(_fmt_allocations(a))"
-        @info "∇f! nll_fwdSolve" 
-        dt = @elapsed a = @allocations nll_fwdSolve.∇f!(g, w)
-        @info "  $(@sprintf "%.4g" dt ) s, $(_fmt_allocations(a))"
-        @time "Hf! nll_fwdSolve" 
-        dt = @elapsed a = @allocations nll_fwdSolve.Hf!(H,w)
-        @info "  $(@sprintf "%.4g" dt ) s, $(_fmt_allocations(a))"
-
-
-        (
-            SecondOrderCostFunction(m, ∇m!, Hm!), 
-            SecondOrderCostFunction(l2, ∇l2!, Hl2!),
-            nll_fwdSolve
         )
     end
 end

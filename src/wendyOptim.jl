@@ -107,7 +107,10 @@ function (m::NLS_iter)(wnm1::AbstractVector{<:AbstractFloat};ll::LogLevel=Warn, 
     end
 end
 ##
-function IRWLS(prob::WENDyProblem{lip}, w0::AbstractVector{<:AbstractFloat}, params::WENDyParameters; ll::LogLevel=Warn, iterll::LogLevel=Warn, compareIters::Bool=false, maxIt::Int=1000, return_wits::Bool=false) where lip
+function IRWLS(prob::WENDyProblem{lip}, w0::AbstractVector{<:AbstractFloat}, params::WENDyParameters; 
+    ll::LogLevel=Warn, iterll::LogLevel=Warn, compareIters::Bool=false, 
+    maxIt::Int=1000, return_wits::Bool=false
+) where lip
     with_logger(ConsoleLogger(stderr,ll)) do 
         reltol,abstol = params.optimReltol, params.optimAbstol
         @info "Building Iteration "
@@ -165,6 +168,19 @@ function IRWLS(prob::WENDyProblem{lip}, w0::AbstractVector{<:AbstractFloat}, par
         return return_wits ? (wn, maxIt, hcat(w0,wit)) : (wn,maxIt)
     end
 end 
+##
+abstract type CostFunction end
+
+struct FirstOrderCostFunction <: CostFunction
+    f::Function 
+    ∇f!::Function 
+end
+
+struct SecondOrderCostFunction <: CostFunction
+    f::Function 
+    ∇f!::Function 
+    Hf!::Function 
+end
 ##
 function bfgs_Optim(
     costFun::CostFunction, w0::AbstractVector{<:Real}, params::WENDyParameters; 

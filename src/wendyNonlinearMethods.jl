@@ -266,7 +266,7 @@ function (m::NonlinearGradientResidual)(w::AbstractVector{<:Real}; ll::LogLevel=
 end 
 ##
 ## Hm(w) - Hessian of Maholinobis Distance
-struct NonlinearHesianMahalanobisDistance<:HesianMahalanobisDistance 
+struct NonlinearHesianWeakNLL<:HesianWeakNLL 
     # output 
     H::AbstractMatrix{<:Real}
     # data 
@@ -302,7 +302,7 @@ struct NonlinearHesianMahalanobisDistance<:HesianMahalanobisDistance
     ∂ᵢSS⁻¹∂ⱼS::AbstractMatrix{<:Real}
 end
 
-function NonlinearHesianMahalanobisDistance(prob::WENDyProblem{false}, params::WENDyParameters, ::Val{T}=Val(Float64)) where T<:Real
+function NonlinearHesianWeakNLL(prob::WENDyProblem{false}, params::WENDyParameters, ::Val{T}=Val(Float64)) where T<:Real
     K,M,D,J = prob.K, prob.M, prob.D, prob.J
     # ouput 
     H = zeros(J,J)
@@ -328,7 +328,7 @@ function NonlinearHesianMahalanobisDistance(prob::WENDyProblem{false}, params::W
     ∂ᵢⱼS = zeros(T, K*D, K*D)
     S⁻¹∂ⱼS = zeros(T, K*D, K*D)
     ∂ᵢSS⁻¹∂ⱼS = zeros(T, K*D, K*D)
-    NonlinearHesianMahalanobisDistance(
+    NonlinearHesianWeakNLL(
         H,
         prob.tt,prob.U, prob._Y, prob.V, prob.b₀, prob.sig,
         R!, r!, ∇r!, ∇L!, prob.heswf!, prob.heswjacuf!,  
@@ -336,7 +336,7 @@ function NonlinearHesianMahalanobisDistance(prob::WENDyProblem{false}, params::W
     )
 end
 ## method inplace
-function (m::NonlinearHesianMahalanobisDistance)(H::AbstractMatrix{<:Real}, w::AbstractVector{<:Real}; ll::LogLevel=Warn)
+function (m::NonlinearHesianWeakNLL)(H::AbstractMatrix{<:Real}, w::AbstractVector{<:Real}; ll::LogLevel=Warn)
     # TODO: try letting cholesky factorization back in here
     m.R!(w; transpose=false, doChol=false) 
     m.r!(m.b₀, w) 
@@ -351,7 +351,7 @@ function (m::NonlinearHesianMahalanobisDistance)(H::AbstractMatrix{<:Real}, w::A
     )
 end
 # method mutate internal data
-function (m::NonlinearHesianMahalanobisDistance)(w::AbstractVector{<:Real}; ll::LogLevel=Warn)
+function (m::NonlinearHesianWeakNLL)(w::AbstractVector{<:Real}; ll::LogLevel=Warn)
     # TODO: try letting cholesky factorization back in here
     m.R!(w; transpose=false, doChol=false) 
     m.r!(m.b₀, w) 

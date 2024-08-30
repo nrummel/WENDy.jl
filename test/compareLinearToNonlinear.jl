@@ -17,12 +17,12 @@ J = length(wTrue)
 w0 = wTrue + μ * abs.(wTrue) .* randn(J);
 ## solve with Maximum Likelihood Estimate
 @time "create m funs" begin 
-    m_l = MahalanobisDistance(wendyProb_l, params);
-    ∇m!_l = GradientMahalanobisDistance(wendyProb_l, params);
-    Hm!_l = HesianMahalanobisDistance(wendyProb_l, params);
-    m_nl = MahalanobisDistance(wendyProb_nl, params);
-    ∇m!_nl = GradientMahalanobisDistance(wendyProb_nl, params);
-    Hm!_nl = HesianMahalanobisDistance(wendyProb_nl, params);
+    m_l = WeakNLL(wendyProb_l, params);
+    ∇m!_l = GradientWeakNLL(wendyProb_l, params);
+    Hm!_l = HesianWeakNLL(wendyProb_l, params);
+    m_nl = WeakNLL(wendyProb_nl, params);
+    ∇m!_nl = GradientWeakNLL(wendyProb_nl, params);
+    Hm!_nl = HesianWeakNLL(wendyProb_nl, params);
     Hm!_fd = (H,w) -> FiniteDiff.finite_difference_jacobian!(H, ∇m!_l, w)
 end
 ##
