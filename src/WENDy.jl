@@ -3,7 +3,6 @@ module WENDy
     ## external dependencies
     # optimization algorithms
     using NonlinearSolve # high performance nonlinear solver
-    using ForwardDiff # forward solve nonlinear lsq comparison
     using Optimization, OptimizationOptimJL, Optim # Trust Region Solver
     using JSOSolvers, ManualNLPModels, AdaptiveRegularization
     using SFN # ARC and SFN solvers
@@ -39,6 +38,7 @@ module WENDy
     include("wendyNonlinearMethods.jl")
     include("wendyOptim.jl")
     export WENDyProblem, WENDyParameters, WENDyData, CostFunction, SimulatedWENDyData, EmpricalWENDyData, SimulationParameters
+    export WeakNLL, GradientWeakNLL, HesianWeakNLL
     export simulate!, buildCostFunctions, forwardSolveRelErr, forwardSolve
     export IRWLS, bfgs_Optim, tr_Optim, arc_SFN, tr_JSO, arc_JSO
 end # module WENDy
