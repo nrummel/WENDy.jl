@@ -12,7 +12,7 @@ struct WENDyParameters
     optimReltol::AbstractFloat  
     optimMaxiters::Int
     optimTimelimit::AbstractFloat
-end
+end 
 ## Defaults values for params are set in the kwargs
 function WENDyParameters(;
     Kmax::Int=Int(5.0e3),
@@ -73,7 +73,7 @@ end
     timeSubsampleRate::Int = 2
     seed::Union{Int,Nothing} = nothing
     noiseRatio::AbstractFloat = 0.01
-    μ::Real = 0.01
+    ρ::Real = 0.01
 end
 
 struct SimulatedWENDyData{lip,DistType}<:WENDyData{lip,DistType}

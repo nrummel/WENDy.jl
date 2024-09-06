@@ -19,6 +19,7 @@ function _solve_ode(
         verbose=verbose, kwargs...
     )
 end
+
 ##
 function forwardSolve(prob::WENDyProblem, w::AbstractVector{<:Real}; kwargs...)
     sol = _solve_ode(prob.data.f!, prob.data.tRng, prob.M, w, prob.data.initCond; kwargs...)

@@ -9,12 +9,12 @@ params = WENDyParameters(;
     seed=1, 
     timeSubsampleRate=4,
 )
-μ = .1 
+ρ = .1 
 wendyProb_l = WENDyProblem(ex, params; ll=Warn, forceNonlinear=false);
 wendyProb_nl = WENDyProblem(ex, params; ll=Warn, forceNonlinear=true);
 wTrue = wendyProb_l.wTrue
 J = length(wTrue)
-w0 = wTrue + μ * abs.(wTrue) .* randn(J);
+w0 = wTrue + ρ * abs.(wTrue) .* randn(J);
 ## solve with Maximum Likelihood Estimate
 @time "create m funs" begin 
     m_l = WeakNLL(wendyProb_l, params);

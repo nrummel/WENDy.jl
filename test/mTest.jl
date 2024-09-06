@@ -20,8 +20,8 @@ includet(joinpath(@__DIR__, "../ForStephen/gradientCheck.jl"))
 ## Load data from file
 wTrue = [1.1]
 J = length(wTrue)
-μ = 0.1
-w0 = wTrue + μ * abs.(wTrue) .* randn(J);
+ρ = 0.1
+w0 = wTrue + ρ * abs.(wTrue) .* randn(J);
 BSON.@load joinpath(@__DIR__, "../ForStephen/ExponentialData.bson") U V Vp b0 sig diagReg
 b₀ = b0; # I didn't know how bson would like the unicode var name...
 ## Define Functions that only need w with the current data fixed
