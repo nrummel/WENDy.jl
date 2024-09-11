@@ -63,7 +63,7 @@ function (m::Covariance)(w::AbstractVector{W}; ll::LogLevel=Warn, transpose::Boo
     if transpose 
         @views m.R .= m.R'
     end
-    nothing
+    m.R
 end
 ## G(w) - b / G*w - b 
 abstract type Residual<:Function end 
