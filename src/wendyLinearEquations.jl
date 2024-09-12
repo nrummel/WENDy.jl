@@ -7,11 +7,11 @@ function _L₁!(
     JuF::AbstractArray{<:Real, 3}, _∂Lⱼ::AbstractArray{<:Real, 4}, ∂Lⱼ::AbstractArray{<:Real, 4},  eⱼ::AbstractVector{<:Real}
 )
     KD,MD,J = size(L₁)
-    _,_,M = size(JuF)
+    _,_,Mp1 = size(JuF)
     for j = 1:J 
         eⱼ .= 0
         eⱼ[j] = 1
-        @inbounds for m in 1:M
+        @inbounds for m in 1:Mp1
             jacuf!(view(JuF,:,:,m), view(U,:,m), eⱼ, tt[m])
         end
         @tullio _∂Lⱼ[k,d2,d1,m] = JuF[d2,d1,m] * V[k,m]* sig[d1] # increases allocation from 4 to 45 

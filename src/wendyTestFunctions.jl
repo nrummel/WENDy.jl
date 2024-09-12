@@ -16,14 +16,14 @@ function rad_select(t0::AbstractVector,uobs::AbstractMatrix,
     ϕ::TestFunction, m_max::Int;inc::Real=1,
     sub::Real=2.1,q::Real=0.0,s::Real=1.0,m_min::Int=2
 )::Int
-    D,M = size(uobs)
+    D,Mp1 = size(uobs)
     if isnothing(ϕ)
         return m_min
     elseif m_max<=m_min
         return m_min
     end
     dt = mean(diff(t0))
-    t = 0:dt/inc:(M-1)*dt
+    t = 0:dt/inc:(Mp1-1)*dt
     mts = m_min:m_max
     errs = zeros(length(mts))
     for (b,mt) in enumerate(mts)
@@ -36,9 +36,9 @@ function rad_select(t0::AbstractVector,uobs::AbstractMatrix,
             phi_vec[ix:ix+length(t_phi)-1] = ϕ.(t_phi)
             phi_vec /= norm(phi_vec,2)
             for d=1:D
-                phiu_fft = (dt/sqrt(M*dt))*fft(phi_vec .* uobs[d,:])
-                alias = phiu_fft[1:Int(floor(M/sub)):Int(floor(inc*M/2))]
-                errs_temp[d,i] = 2*(2*pi/sqrt(M*dt))*sum((0:length(alias)-1).*imag(alias[:]'))
+                phiu_fft = (dt/sqrt(Mp1*dt))*fft(phi_vec .* uobs[d,:])
+                alias = phiu_fft[1:Int(floor(Mp1/sub)):Int(floor(inc*Mp1/2))]
+                errs_temp[d,i] = 2*(2*pi/sqrt(Mp1*dt))*sum((0:length(alias)-1).*imag(alias[:]'))
             end
         end
         errs[b] = sqrt(mean(errs_temp[:].^2))
@@ -91,8 +91,8 @@ struct TimeFracRadMethod<:RadMethod end
 struct MtminRadMethod <:RadMethod end
 
 function _getMtMinMax(tobs::AbstractVector{<:Real}, uobs::AbstractMatrix{<:Real}, ϕ::TestFunction, Kmin::Int)
-    M = size(uobs,2)
-    mt_max = Int(max(floor((M-1)/2)-Kmin,1));
+    Mp1 = size(uobs,2)
+    mt_max = Int(max(floor((Mp1-1)/2)-Kmin,1));
     mt_min = rad_select(tobs,uobs,ϕ,mt_max);
     return mt_min, mt_max 
 end
@@ -173,17 +173,17 @@ struct SpecifiedDiscritizationMethod <:TestFunDiscritizationMethod
 end  
 function _prepare_discritization(mt::Int,t::AbstractVector{<:Real},ϕ::TestFunction,max_derivative::Int)
     dt = mean(diff(t));
-    M = length(t);
+    Mp1 = length(t);
     Φ = _getTestFunctionWeights(ϕ,mt,max_derivative);
-    return dt, M, Φ
+    return dt, Mp1, Φ
 end 
 
 function (meth::UniformDiscritizationMethod)(mt::Int,t::AbstractVector{<:Real},ϕ::TestFunction,max_derivative::Int, K::Real)
-    dt, M, Φ = _prepare_discritization(mt,t,ϕ,max_derivative)
-    gap      = Int(max(1,floor((M-2*mt)/K)));
-    dd       = 0:gap:M-2*mt-1;
+    dt, Mp1, Φ = _prepare_discritization(mt,t,ϕ,max_derivative)
+    gap      = Int(max(1,floor((Mp1-2*mt)/K)));
+    dd       = 0:gap:Mp1-2*mt-1;
     dd       = dd[1:min(K,end)];
-    V        = zeros(length(dd),M);
+    V        = zeros(length(dd),Mp1);
     for j=1:length(dd)
         for (i,d) = enumerate(0:max_derivative)
             V[j,gap*(j-1)+1:gap*(j-1)+2*mt+1,i] = Φ[i,:]*(mt*dt)^(-d)*dt;
@@ -193,9 +193,9 @@ function (meth::UniformDiscritizationMethod)(mt::Int,t::AbstractVector{<:Real},�
 end
 
 function (meth::RandomDiscritizationMethod)(mt::Int,t::AbstractVector{<:Real},ϕ::TestFunction,max_derivative::Int, K::Real)
-    dt, M, Φ = _prepare_discritization(mt,t,ϕ,max_derivative)
-    gaps = randperm(M-2*mt,K);        
-    V = zeros(K,M);
+    dt, Mp1, Φ = _prepare_discritization(mt,t,ϕ,max_derivative)
+    gaps = randperm(Mp1-2*mt,K);        
+    V = zeros(K,Mp1);
     for j=1:K
         for (i,d) = enumerate(0:max_derivative)
             V[j,gaps[j]:gaps[j]+2*mt,i] = Φ[i,:]*(mt*dt)^(-d)*dt;
@@ -205,10 +205,10 @@ function (meth::RandomDiscritizationMethod)(mt::Int,t::AbstractVector{<:Real},ϕ
 end
 
 function (meth::SpecifiedDiscritizationMethod)(mt::Int,t::AbstractVector{<:Real},ϕ::TestFunction,max_derivative::Int, ::Real)
-    dt, M, Φ = _prepare_test_fun_svd(mt,t,ϕ,max_derivative)
-    center_scheme = unique(max.(min.(meth.ix,M-mt),mt+1));
+    dt, Mp1, Φ = _prepare_test_fun_svd(mt,t,ϕ,max_derivative)
+    center_scheme = unique(max.(min.(meth.ix,Mp1-mt),mt+1));
     K = length(center_scheme);
-    V = zeros(K,M,max_derivative+1);
+    V = zeros(K,Mp1,max_derivative+1);
     for j=1:K
         for (i,d) = enumerate(0:max_derivative)
             V[j,center_scheme[j]-mt:center_scheme[j]+mt,i] = Φ[i,:]*(mt*dt)^(-d)*dt;
@@ -231,12 +231,12 @@ struct SingularValuePruningMethod <: TestFunctionPruningMethod
     end
 end
 
-function _getK(Kmax::Int, D::Int, numRad::Int, M::Int)
-    return Int(min(floor(Kmax/(D*numRad)), M))
+function _getK(Kmax::Int, D::Int, numRad::Int, Mp1::Int)
+    return Int(min(floor(Kmax/(D*numRad)), Mp1))
 end
 
 function (meth::NoPruningMethod)(tobs::AbstractVector{<:Real},uobs::AbstractMatrix{<:Real}, ϕ::TestFunction,Kmin::Int,Kmax::Int,mtParams::AbstractVector{<:Real})
-    M, D = size(uobs)
+    Mp1, D = size(uobs)
     numRad = length(mtParams)
     mt = meth.radMeth(tobs, uobs, ϕ, Kmin)
     K = _getK(Kmax, D, numRad, length(t))
@@ -249,11 +249,11 @@ function (meth::SingularValuePruningMethod)(tobs::AbstractVector{<:Real}, uobs::
     if numRad == 1
         return NoPruningMethod(meth.randMeth, meth.discMeth)(mt, tobs, ϕ, K)
     end
-    D, M = size(uobs)
+    D, Mp1 = size(uobs)
     mt = meth.radMeth(tobs, uobs, ϕ, mtParams, Kmin)
     K = _getK(Kmax, D, numRad, length(tobs))
     Vfull = reduce(vcat,meth.discMeth(m,tobs,ϕ,0, K) for m in mt)
-    M = length(tobs);
+    Mp1 = length(tobs);
     dt = mean(diff(tobs));
     svd_fact = svd(Matrix(Vfull'); full=false);
     U = svd_fact.U 
@@ -274,16 +274,16 @@ function (meth::SingularValuePruningMethod)(tobs::AbstractVector{<:Real}, uobs::
     Vt = U[:,inds]*dt;
     V = Matrix(Vt')
     Vp_hat = fft(Vt,(1,)); # the second argument specifies that we want to do the fft across columns like in matlab
-    if mod(M,2)==0
-        k = vcat(0:M/2, -M/2+1:-1);
+    if mod(Mp1,2)==0
+        k = vcat(0:Mp1/2, -Mp1/2+1:-1);
     else
-        k = vcat(0:floor(M/2), -floor(M/2):-1);
+        k = vcat(0:floor(Mp1/2), -floor(Mp1/2):-1);
     end
-    Vp_hat = -((2*pi/M/dt)*k).*Vp_hat;
+    Vp_hat = -((2*pi/Mp1/dt)*k).*Vp_hat;
     # For odd derivatives there is a loss of symmetry
-    if mod(M,2)==0
-        # TODO : is this a bug? should be   Vp_hat[Int(M/2),:] .= 0 
-        Vp_hat[Int(M/2)] = 0;        
+    if mod(Mp1,2)==0
+        # TODO : is this a bug? should be   Vp_hat[Int(Mp1/2),:] .= 0 
+        Vp_hat[Int(Mp1/2)] = 0;        
     end
     Vp = Matrix(imag(ifft(Vp_hat,(1,)))');
     return V, Vp, Vfull

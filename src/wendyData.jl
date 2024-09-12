@@ -37,7 +37,10 @@ abstract type WENDyData{lip,DistType<:Distribution} end
 ## For observed data
 struct EmpricalWENDyData{lip,DistType}<:WENDyData{lip,DistType}
     name::String
-    ode::ODESystem
+    odeprob::ODEProblem
+    f!::Function
+    initCond::AbstractVector{<:Real}
+    tRng::NTuple{2,<:Real}
     tt_full::AbstractVector{<:Real}
     U_full::AbstractMatrix{<:Real}
 end
@@ -50,11 +53,11 @@ function EmpricalWENDyData(
     EmpricalWENDyData{lip, DistType}(name, ode, tt_full, U_full)
 end
 ##
-function _getData(f!::Function, tRng::NTuple{2,<:AbstractFloat}, M::Int, wTrue::AbstractVector{<:Real}, initCond::AbstractVector{<:Real}, file::String; forceOdeSolve::Bool=false, ll::LogLevel=Warn)
+function _getData(f!::Function, tRng::NTuple{2,<:AbstractFloat}, Mp1::Int, wTrue::AbstractVector{<:Real}, initCond::AbstractVector{<:Real}, file::String; forceOdeSolve::Bool=false, ll::LogLevel=Warn)
     with_logger(ConsoleLogger(stdout, ll)) do 
         if forceOdeSolve || !isfile(file)
             @info "  Generating data for $file by solving ode"
-            sol = _solve_ode(f!, tRng, M, wTrue, initCond)
+            sol = _solve_ode(f!, tRng, Mp1, wTrue, initCond)
             t = sol.t
             u = reduce(hcat, sol.u)
             mkpath(dirname(file))
@@ -78,14 +81,13 @@ end
 
 struct SimulatedWENDyData{lip,DistType}<:WENDyData{lip,DistType}
     name::String
-    ode::ODESystem
     odeprob::ODEProblem
     f!::Function
     initCond::AbstractVector{<:Real}
     tRng::NTuple{2,<:Real}
     wTrue::AbstractVector{<:Real}
     # defaul values provided
-    M::Int
+    Mp1::Int
     file::String 
     tt_full::AbstractVector{<:Real}
     U_full::AbstractMatrix{<:Real}
@@ -99,21 +101,20 @@ end
 
 function SimulatedWENDyData( 
     name::String,
-    ode::ODESystem,
     odeprob::ODEProblem,
     f!::Function,
     initCond::AbstractVector{<:Real},
     tRng::NTuple{2,<:Real},
     wTrue::AbstractVector{<:Real};
-    M::Int=1025,
-    linearInParameters::Val{lip}=Val(false),
+    Mp1::Int=1025,
+    linearInParameters::Val{lip}=Val(false), #linearInParameters
     file::Union{String, Nothing}=nothing,
-    noiseDist::Val{DistType}=Val(Normal),
+    noiseDist::Val{DistType}=Val(Normal), #distributionType
     forceOdeSolve::Bool=false
 ) where {lip, DistType<:Distribution}
     isnothing(file) && (file = joinpath(@__DIR__, "../data/$name.bson"))
     tt_full, U_exact = _getData(
-        f!, tRng, M, wTrue, initCond, file;
+        f!, tRng, Mp1, wTrue, initCond, file;
         forceOdeSolve=forceOdeSolve, ll=Info
     )
     @assert DistType == Normal || DistType == LogNormal "Only LogNormal and Normal Noise distributions are supported"
@@ -128,8 +129,8 @@ function SimulatedWENDyData(
     end
 
     SimulatedWENDyData{lip,DistType}(
-        name, ode, odeprob, f!, initCond, tRng, wTrue, 
-        M, file, tt_full, U_exact,
+        name, odeprob, f!, initCond, tRng, wTrue, 
+        Mp1, file, tt_full, U_exact,
         nothing, nothing, nothing, nothing, nothing # subsampled and noisey data needs to be simulated with the simulate! function
     )
 end
@@ -138,7 +139,7 @@ function SimulatedWENDyData(data::SimulatedWENDyData{old_lip, old_DistType}, ::V
     lip = new_lip == Nothing ? old_lip : new_lip 
     DistType = new_DistType == Nothing ? old_DistType : new_DistType 
     SimulatedWENDyData{lip,DistType}(
-        data.name, data.ode, data.odeprob, data.f!, data.initCond, data.tRng, data.wTrue, data.M, data.file, data.tt_full, data.U_exact
+        data.name, data.odeprob, data.f!, data.initCond, data.tRng, data.wTrue, data.Mp1, data.file, data.tt_full, data.U_exact
     )
 end
 
@@ -149,7 +150,7 @@ function simulate!(data::SimulatedWENDyData{lip,DistType}, params::SimulationPar
         @info "  Subsample data "
         tt = data.tt_full[1:params.timeSubsampleRate:end]
         U_exact = data.U_full[:,1:params.timeSubsampleRate:end]
-        D, M = size(U_exact)
+        D, Mp1 = size(U_exact)
         @info "Adding noise from Distribution $DistType"
         U, noise, _, sigTrue = generateNoise(U_exact, params, Val(DistType))
         data.tt[] = tt

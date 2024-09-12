@@ -12,25 +12,25 @@ function LinearCovarianceFactor(prob::WENDyProblem{true}, params::Union{Nothing,
     ::Val{T}=Val(Float64) #optional type
 ) where T<:Real
     U, V, Vp, sig, jacuf! = prob.U, prob.V, prob.Vp, prob.sig, prob.jacuf!
-    D, M = size(U)
+    D, Mp1 = size(U)
     K, _ = size(V)
     J = prob.J
     # preallocate output
-    L = zeros(T,K*D,M*D)
+    L = zeros(T,K*D,Mp1*D)
     # precompute L₀ because it does not depend on w
-    __L₀ = zeros(T,K,D,D,M)
-    _L₀ = zeros(T,K,D,M,D)
-    L₀ = zeros(T,K*D,M*D)
+    __L₀ = zeros(T,K,D,D,Mp1)
+    _L₀ = zeros(T,K,D,Mp1,D)
+    L₀ = zeros(T,K*D,Mp1*D)
     _L₀!(
         L₀,
         Vp, sig,
         __L₀,_L₀
     )
     # precompute L₁ because it is constant wrt w 
-    L₁ = zeros(T, K*D, M*D,J)
-    JuF = zeros(T,D,D,M)
-    _∂Lⱼ = zeros(T,K,D,D,M)
-    ∂Lⱼ = zeros(T,K,D,M,D)
+    L₁ = zeros(T, K*D, Mp1*D,J)
+    JuF = zeros(T,D,D,Mp1)
+    _∂Lⱼ = zeros(T,K,D,D,Mp1)
+    ∂Lⱼ = zeros(T,K,D,Mp1,D)
     eⱼ = zeros(T,J)
     _L₁!(
         L₁, 
@@ -68,11 +68,11 @@ struct LinearGradientCovarianceFactor<:GradientCovarianceFactor
     ∇L::AbstractArray{<:Real,3}
 end 
 function LinearGradientCovarianceFactor(prob, params, ::Val{T}=Val(Float64)) where T<:Real
-    K,M,D,J = prob.K, prob.M, prob.D, prob.J
-    L₁ = zeros(T, K*D, M*D,J)
-    JuF = zeros(T,D,D,M)
-    _∂Lⱼ = zeros(T,K,D,D,M)
-    ∂Lⱼ = zeros(T,K,D,M,D)
+    K,Mp1,D,J = prob.K, prob.Mp1, prob.D, prob.J
+    L₁ = zeros(T, K*D, Mp1*D,J)
+    JuF = zeros(T,D,D,Mp1)
+    _∂Lⱼ = zeros(T,K,D,D,Mp1)
+    ∂Lⱼ = zeros(T,K,D,Mp1,D)
     eⱼ = zeros(T,J)
     _L₁!(
         L₁, 
@@ -100,7 +100,7 @@ struct LinearResidual<:Residual
 end
 # constructors 
 function LinearResidual(prob::WENDyProblem{true}, params::Union{WENDyParameters, Nothing}=nothing, ::Val{T}=Val(Float64)) where T<:Real 
-    D, M = size(prob.U)
+    D, Mp1 = size(prob.U)
     K, _ = size(prob.V)
     # ouput
     r = zeros(T,K*D)
@@ -195,7 +195,7 @@ struct LinearHesianWeakNLL<:HesianWeakNLL
 end
 
 function LinearHesianWeakNLL(prob::WENDyProblem{true}, params::WENDyParameters, ::Val{T}=Val(Float64)) where T<:Real
-    K,M,D,J = prob.K, prob.M, prob.D, prob.J
+    K,Mp1,D,J = prob.K, prob.Mp1, prob.D, prob.J
     # ouput 
     H = zeros(J,J)
     # functions

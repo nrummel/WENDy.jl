@@ -7,8 +7,8 @@ function _L₀!(
 )
     @tullio __L₀[k,d,d,m] = Vp[k,m]*sig[d]
     permutedims!(_L₀,__L₀,(1,2,4,3))
-    K,D,M,_ = size(_L₀)
-    @views L₀ .= reshape(_L₀,K*D,M*D)
+    K,D,Mp1,_ = size(_L₀)
+    @views L₀ .= reshape(_L₀,K*D,Mp1*D)
     nothing 
 end
 # R(w) - Cholesky factorization of the Covariance/just compute and regularizee the covariance

@@ -46,7 +46,7 @@ function generateNoise(U_exact::AbstractMatrix{<:Real}, params::SimulationParame
 end
 ## estimate the standard deviation of noise by filtering then computing rmse
 function estimate_std(_Y::AbstractMatrix{<:Real}; k::Int=6) 
-    D,M = size(_Y) 
+    D,Mp1 = size(_Y) 
     std = zeros(D)
     for d = 1:D
         f = _Y[d,:]

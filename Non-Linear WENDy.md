@@ -14,7 +14,7 @@ Given the ODE (the PDE case can be thought of by taking a tensor product over th
 $$\dot{U}(t) = \sum\limits_{j=1}^J w_jf_j(U(t))$$
 ### SINDy Framework
 The seminal [[Brunton et al. - 2016 - Discovering governing equations from data Sparse .pdf|paper by Brunton]]. Given data on a grid with additive noise
-$$\{t_m, u_m\}_{m=1}^M = \{t_m, u^*_m +\varepsilon_m\}_{m=1}^M \text{ where } \varepsilon_m \stackrel{idd}{\sim} N(0,\sigma^2)$$
+$$\{t_m, u_m\}_{m=1}^Mp1 = \{t_m, u^*_m +\varepsilon_m\}_{m=1}^Mp1 \text{ where } \varepsilon_m \stackrel{idd}{\sim} N(0,\sigma^2)$$
 We build the linear system 
 $$\dot{\tilde{u}} = \Theta w $$
 where $\Theta_{jm} = f_j(u_m)$ and $\dot{\tilde{u}}_m = \tilde{D}[u_1,\cdots,u_M]$ is an approximate of the $\dot{u}(t_m)$. This works quite well but it has been shown that even with considerable effort to "de-noise" or compensate for noise in the data that the operator $\tilde{D}$ can the exacerbate effects of noise.
@@ -93,7 +93,7 @@ We now look at
 $$\dot{U}(t) =  F(U(t), w)$$
 ### Residual's Distribution 
 This is a straight forward extension of what was done previously because it relied on an expansion about the data, and did not rely on the an expansion in the parameters. I summarize the derivation below If we consider data of the familiar form 
-$$\{t_m, u_m\}_{m=1}^M = \{t_m, u^*_m +\varepsilon_m\}_{m=1}^M \text{ where } \varepsilon_m \stackrel{idd}{\sim} N(0,\sigma^2)$$
+$$\{t_m, u_m\}_{m=1}^Mp1 = \{t_m, u^*_m +\varepsilon_m\}_{m=1}^Mp1 \text{ where } \varepsilon_m \stackrel{idd}{\sim} N(0,\sigma^2)$$
 The residual in the weak form is 
 $$\begin{align*}
 	r(w) &= \langle \Phi, F(u, w)\rangle + \langle \dot{\Phi}, u \rangle \\
@@ -123,7 +123,7 @@ $$\begin{align*}
 	&\approx \langle \nabla_u G(u,w) + \dot{\Phi}, \epsilon\rangle
 \end{align*}$$
 Notice that because $\epsilon_m \stackrel{iid}{\sim} N(0,\sigma^2) \Leftrightarrow \epsilon \sim N(0, \sigma^2 I)$. Now if we say that $|\epsilon| \ll 1$ then because $H = O(\epsilon^2)$ and can be throw out. 
-Assuming that $w \rightarrow w^*$ and $M \gg 1$, then we have
+Assuming that $w \rightarrow w^*$ and $Mp1 \gg 1$, then we have
 $$\begin{align*}
 	\mathbb{E}[r(w^*)|u] &= \mathbb{E}[e^\Theta -b^\epsilon |u]\\
 	&= \langle \Phi \nabla_u F(w,u) \mathbb{E}[\epsilon | u] \rangle + \dot{\Phi} \mathbb{E}[\epsilon | u] \\
@@ -315,7 +315,7 @@ $$\begin{align*}\\
 \end{align*}$$
 Now if we do our asymptotic expansion wrt $y$ instead of $u$ everything would be the same. 
 $$\begin{align*}
-	r(w) &\underset{M\rightarrow \infty, w\rightarrow w^*}{\rightarrow} e^\Theta-b^\epsilon \\
+	r(w) &\underset{Mp1\rightarrow \infty, w\rightarrow w^*}{\rightarrow} e^\Theta-b^\epsilon \\
 	&= G(y,w) - G(y^*,w) + \langle \dot{\Phi}, \epsilon \rangle \\
 	&= G(y, w) + \langle \dot{\Phi}, \epsilon \rangle \\
 	&- \Big(G(y,w) - \langle \nabla_y G(y,w), \epsilon \rangle + H(y^*,w,\epsilon) \Big) \\
@@ -330,7 +330,7 @@ Frechet Derivative
 ### Estimated/Computing the Different Parts of Residual
 We want to see what happens as the our optimization methods converge, and analyze why the fail. Our algorithm relies on a few things in order for the distribution of the residual to be estimated well by a normal. 
 - Normality of the noise, $\epsilon \sim N(0, \sigma)$, because we generate the noise, this is a non issue for our tests, but when we have empirical data we should have a way of evaluating this. 
-- The quadrature error to be low (In general this should be ok, but when the number of time points becomes low $M \in [1,100]$ then we could have problems because $|e^\text{int}| \approx |e^\theta - b^\epsilon|$ )
+- The quadrature error to be low (In general this should be ok, but when the number of time points becomes low $Mp1 \in [1,100]$ then we could have problems because $|e^\text{int}| \approx |e^\theta - b^\epsilon|$ )
 - If the method is not convergent, or the initialization point $w_0$ is to far away from the true weights then the nonlinear terms in the residual become large $|H(u^*,w,\epsilon)|\geq \big|\langle\nabla_uG(u,w),\epsilon\rangle\big|$ . Then the distribution is not valid. 
 # Parameter Identifiably 
 [http://biorxiv.org/lookup/doi/10.1101/2024.05.09.593464](http://biorxiv.org/lookup/doi/10.1101/2024.05.09.593464)

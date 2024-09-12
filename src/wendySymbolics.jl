@@ -1,61 +1,77 @@
-using Symbolics: jacobian
-using ModelingToolkit: parameters, build_function, unknowns, ODESystem
+# extend these to ODEProblem for convience of not having to store a ODESystem at the high level
+function equations(prob::ODEProblem)
+    @mtkbuild sys = modelingtoolkitize(prob)
+    equations(sys)
+end
+function parameters(prob::ODEProblem)
+    @mtkbuild sys = modelingtoolkitize(prob)
+    parameters(sys)
+end
+function unknowns(prob::ODEProblem)
+    @mtkbuild sys = modelingtoolkitize(prob)
+    unknowns(sys)
+end
+
 ## rhs is f(u) for normal noise
 function _getRHS_sym(data::WENDyData{lip, Normal}) where lip
-    return  [eq.rhs  for eq in equations(data.ode)]
+    return  [eq.rhs  for eq in equations(data.odeprob)]
 end
 ## rhs of ode changes to f(u) ./ u for lognormal noise
 function _getRHS_sym(data::WENDyData{lip,LogNormal}) where lip
-    return  [eq.rhs / u  for (u,eq) in zip(unknowns(data.ode),equations(data.ode))]
+    return  [eq.rhs / u  for (u,eq) in zip(unknowns(data.odeprob),equations(data.odeprob))]
 end
 
 function getRHS(data::WENDyData{lip,DistType}) where {lip, DistType<:Distribution}
-    w = parameters(data.ode)
-    u = unknowns(data.ode)
+    t = t_nounits
+    w = parameters(data.odeprob)
+    u = unknowns(data.odeprob)
     rhs_sym = _getRHS_sym(data)
     _rhs,_rhs! = build_function(rhs_sym, u,w,t; expression=false)
     return _rhs,_rhs! 
 end
 
 function _getJacw_sym(data::WENDyData{lip,DistType}) where {lip, DistType<:Distribution}
-    w = parameters(data.ode)
+    w = parameters(data.odeprob)
     rhs_sym = _getRHS_sym(data)
     return jacobian(rhs_sym, w)
 end
 
 function getJacw(data::WENDyData{lip,DistType}) where {lip, DistType<:Distribution}
-    w = parameters(data.ode)
-    u = unknowns(data.ode)
+    t = t_nounits
+    w = parameters(data.odeprob)
+    u = unknowns(data.odeprob)
     jac_sym = _getJacw_sym(data)
     jac,jac! = build_function(jac_sym, u,w,t; expression=false)
     return jac, jac!
 end
 ## for normal noise ∇ᵤf 
 function _getJacu_sym(data::WENDyData{lip,Normal}) where lip
-    u = unknowns(data.ode)
+    u = unknowns(data.odeprob)
     rhs_sym = _getRHS_sym(data)
     return jacobian(rhs_sym, u)
 end
 ## for normal noise ∇_yf(u)/u where y = log(u)  
 function _getJacu_sym(data::WENDyData{lip,LogNormal}) where lip
     rhs = _getRHS_sym(data)
-    mymap = Dict([u =>exp(u) for u in unknowns(data.ode)])
+    mymap = Dict([u =>exp(u) for u in unknowns(data.odeprob)])
     rhs_sym = [simplify(substitute(rhs_d, mymap)) for rhs_d in rhs]
-    u = unknowns(data.ode)
+    u = unknowns(data.odeprob)
     return jacobian(rhs_sym, u)
 end
 
 function getJacu(data::WENDyData{lip,DistType}) where {lip, DistType<:Distribution}
-    w = parameters(data.ode)
-    u = unknowns(data.ode)
+    t = t_nounits
+    w = parameters(data.odeprob)
+    u = unknowns(data.odeprob)
     jac_sym = _getJacu_sym(data)
     jac,jac! = build_function(jac_sym, u,w,t; expression=false)
     return jac, jac!
 end
 
 function getJacwJacu(data::WENDyData{lip,DistType}) where {lip, DistType<:Distribution}
-    w = parameters(data.ode)
-    u = unknowns(data.ode)
+    t = t_nounits
+    w = parameters(data.odeprob)
+    u = unknowns(data.odeprob)
     jacu_sym = _getJacu_sym(data)
     jacwjacu_sym = jacobian(jacu_sym, w)
     jac, jac! = build_function(jacwjacu_sym, u,w,t; expression=false)
@@ -63,8 +79,9 @@ function getJacwJacu(data::WENDyData{lip,DistType}) where {lip, DistType<:Distri
 end
 
 function getHeswJacu(data::WENDyData{lip,DistType}) where {lip, DistType<:Distribution}
-    w = parameters(data.ode)
-    u = unknowns(data.ode)
+    t = t_nounits
+    w = parameters(data.odeprob)
+    u = unknowns(data.odeprob)
     jacu_sym = _getJacu_sym(data)
     jacwjacu_sym = jacobian(jacu_sym, w)
     heswjacu_sym = jacobian(jacwjacu_sym, w)
@@ -73,8 +90,9 @@ function getHeswJacu(data::WENDyData{lip,DistType}) where {lip, DistType<:Distri
 end
 
 function getHesw(data::WENDyData{lip,DistType}) where {lip, DistType<:Distribution}
-    w = parameters(data.ode)
-    u = unknowns(data.ode)
+    t = t_nounits
+    w = parameters(data.odeprob)
+    u = unknowns(data.odeprob)
     jacw_sym = _getJacw_sym(data)
     hesw_sym = jacobian(jacw_sym, w)
     hes, hes! = build_function(hesw_sym, u,w,t; expression=false)

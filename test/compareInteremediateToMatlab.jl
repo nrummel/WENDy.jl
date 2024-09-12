@@ -19,11 +19,11 @@ wendyProb = _MATLAB_WENDyProblem(ex, params;ll=Info)
 wTrue = wendyProb.wTrue
 J = length(wTrue)
 w0 = wendyProb._matdata["w0"][:]
-K,M,D = wendyProb.K, wendyProb.M, wendyProb.D
+K,Mp1,D = wendyProb.K, wendyProb.Mp1, wendyProb.D
 nothing
 ## Lw
 _L! = Lw(wendyProb,params)
-Lw0 = zeros(K*D,M*D)
+Lw0 = zeros(K*D,Mp1*D)
 @time _L!(Lw0,w0)
 relErr = norm(Lw0 - wendyProb._matdata["Lw"]) /norm( wendyProb._matdata["Lw"])
 relErr < eps()*1e2 ? (@info "Lw in spec (relerr = $relErr)") : (@warn "Lw out of spec (relerr = $relErr)")

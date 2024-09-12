@@ -2,7 +2,7 @@
 struct WENDyProblem{lip, DistType} 
     D::Int # number of state variables
     J::Int # number of parameters (to be estimated)
-    M::Int # (M+1) number of data points in time 
+    Mp1::Int # (Mp1+1) number of data points in time 
     K::Int # number of test functions 
     b₀::AbstractVector{<:AbstractFloat}
     sig::AbstractVector{<:AbstractFloat}
@@ -47,21 +47,20 @@ end
 ## helper function that unpacks data and fill in NaN for truth
 function _unpackData(data::EmpricalWENDyData, params::WENDyParameters)
     @info "Using EmpricalWENDyData"
-    J = length(parameters(data.ode))
+    J = length(data.odeprob.p)
     data.tt_full, data.U_full, NaN*ones(size(data.U_full,1)), NaN*ones(size(data.U_full)), NaN*ones(J), NaN*ones(size(data.U_full))
 end
 ## helper function to build G matrix
 function _buildGmat(f!::Function, tt::AbstractVector{<:Real}, U::AbstractMatrix{<:Real}, V::AbstractMatrix{<:Real}, J::Int)
-    D, M = size(U)
+    D, Mp1 = size(U)
     K, _ = size(V)
-    @info " Build G mat for linear problem"
     eⱼ = zeros(J)
-    F = zeros(D,M)
+    F = zeros(D,Mp1)
     G = zeros(K*D,J)
     for j in 1:J 
         eⱼ .= 0
         eⱼ[j] = 1
-        for m in 1:M 
+        for m in 1:Mp1 
             @views f!(F[:,m], U[:,m],eⱼ,tt[m])
         end 
         gⱼ = V * F'
@@ -73,44 +72,41 @@ end
 function _foo!(::Any, ::Any, ::Any) 
     @assert false "This function is not implemented of linear problems"
 end
-## linear Wendy problem 
-function WENDyProblem(data::WENDyData{true, DistType}, params::WENDyParameters; ll::LogLevel=Warn, matlab_data::Union{Dict,Nothing}=nothing) where DistType<:Distribution
-    with_logger(ConsoleLogger(stderr, ll)) do
-        J = length(parameters(data.ode))
-        tt, U, sigTrue, noise, wTrue, U_exact = _unpackData(data, params)
-        D, M = size(U)
-        @info "============================="
-        @info "Start of Algo"
-        @info " Estimate the noise in each dimension"
-        _Y = DistType == Normal ? U : log.(U)
-        sig = estimate_std(_Y)
-        noiseEstRelErr = norm(sigTrue - sig) / norm(sigTrue)
-        @info "  Relative Error in noise estimate $noiseEstRelErr"
-        V,Vp,_ = isnothing(matlab_data) ? params.pruneMeth(tt,_Y,params.ϕ,J,params.Kmax,params.testFuctionRadii) : (matlab_data["V"], matlab_data["Vp"], nothing)
-        K, _ = size(V)
-        @info " Building the LHS to the residual"
-        b₀ = reshape(-Vp * _Y', K*D);
-        @info " Build julia functions from symbolic expressions of ODE"
-        _,f!     = getRHS(data) # the derivatives wrt u are only affected by noise dist
-        _,jacuf! = getJacu(data);
-        G = _buildGmat(f!, tt, U, V, J)
-        return WENDyProblem{true, DistType}(
-            D,J,M,K,
-            b₀,sig,tt,U_exact,U,_Y,V,Vp,
-            f!,jacuf!,
-            G, # Linear Only
-            _foo!,_foo!,_foo!,_foo!, # Nonlinear only
-            data,
-            sigTrue,wTrue,noise
-        )
-    end
+
+function _getRhsAndDerivatives(data, tt, U, V, D, J, K, ::Val{true})
+    _,f!     = getRHS(data) # the derivatives wrt u are only affected by noise dist
+    _,jacuf! = getJacu(data);
+    @info " Computing G matrix for linear problem"
+    G = _buildGmat(f!, tt, U, V, J)
+    return (
+        f!, jacuf!, 
+        G, 
+        _foo!,_foo!,_foo!,_foo!
+    )
 end
+
+function _getRhsAndDerivatives(data, tt, U, V, D, J, K, ::Val{false})
+    _,f!     = getRHS(data) # the derivatives wrt u are only affected by noise dist
+    _,jacuf! = getJacu(data);
+    G = NaN.*ones(K*D, J)
+    @info " Computing additional symbolic functions for nonlinear problem"
+    _,jacwf! = getJacw(data); # the derivatives wrt u are only affected by noise dist
+    _,jacwjacuf! = getJacwJacu(data);
+    _,heswf! = getHesw(data); # the derivatives wrt u are only affected by noise dist
+    _,heswjacuf! = getHeswJacu(data);
+    return (
+        f!,jacuf!,
+        G,
+        jacwf!,jacwjacuf!,heswf!,heswjacuf!
+    )
+end
+
 ## nonlinear Wendy problem 
-function WENDyProblem(data::WENDyData{false, DistType}, params::WENDyParameters; ll::LogLevel=Warn, matlab_data::Union{Dict,Nothing}=nothing) where DistType<:Distribution
+function WENDyProblem(data::WENDyData{lip, DistType}, params::WENDyParameters; ll::LogLevel=Warn, matlab_data::Union{Dict,Nothing}=nothing) where {lip,DistType<:Distribution}
     with_logger(ConsoleLogger(stderr, ll)) do
-        J = length(parameters(data.ode))
+        J = length(data.odeprob.p)
         tt, U, sigTrue, noise, wTrue, U_exact = _unpackData(data, params)
-        D, M = size(U)
+        D, Mp1 = size(U)
         @info "============================="
         @info "Start of Algo"
         @info " Estimate the noise in each dimension"
@@ -123,16 +119,13 @@ function WENDyProblem(data::WENDyData{false, DistType}, params::WENDyParameters;
         @info " Building the LHS to the residual"
         b₀ = reshape(-Vp * _Y', K*D);
         @info " Build julia functions from symbolic expressions of ODE"
-        _,f!     = getRHS(data) # the derivatives wrt u are only affected by noise dist
-        _,jacuf! = getJacu(data);
-        @info " Computing additional symbolic functions for nonlinear problem"
-        G = NaN.*ones(K*D, J)
-        _,jacwf! = getJacw(data); # the derivatives wrt u are only affected by noise dist
-        _,jacwjacuf! = getJacwJacu(data);
-        _,heswf! = getHesw(data); # the derivatives wrt u are only affected by noise dist
-        _,heswjacuf! = getHeswJacu(data);
-        return WENDyProblem{false, DistType}(
-            D,J,M,K,
+        (
+            f!,jacuf!,
+            G,
+            jacwf!,jacwjacuf!,heswf!,heswjacuf!
+        ) = _getRhsAndDerivatives(data, tt, U, V, D, J, K, Val(lip))
+        return WENDyProblem{lip, DistType}(
+            D,J,Mp1,K,
             b₀,sig,tt,U_exact,U,_Y,V,Vp,
             f!,jacuf!,
             G,

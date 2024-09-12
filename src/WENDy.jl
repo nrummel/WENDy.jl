@@ -9,8 +9,9 @@ module WENDy
     # For solving and symbolicly representing diff eq 
     using OrdinaryDiffEq, ModelingToolkit, Symbolics
     using OrdinaryDiffEq: ODESolution, OrdinaryDiffEqAlgorithm
-    using ModelingToolkit: t_nounits as t, D_nounits
-    using ModelingToolkit: ODESystem
+    using Symbolics: jacobian
+    using ModelingToolkit: build_function, modelingtoolkitize, @mtkbuild
+    import ModelingToolkit: equations, parameters, unknowns, D_nounits, t_nounits
     using Symbolics: @variables
     # Other Necessities
     using BSON, MAT

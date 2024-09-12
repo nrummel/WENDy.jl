@@ -18,23 +18,23 @@ struct NonlinearCovarianceFactor<:CovarianceFactor
 end 
 # constructor
 function NonlinearCovarianceFactor(prob::WENDyProblem{false}, params::Union{WENDyParameters,Nothing}=nothing, ::Val{T}=Val(Float64)) where T<:Real
-    D, M = size(prob.U)
+    D, Mp1 = size(prob.U)
     K, _ = size(prob.V)
     # preallocate output
-    L = zeros(T,K*D,M*D)
+    L = zeros(T,K*D,Mp1*D)
     # precompute L₀ because it does not depend on w
-    __L₀ = zeros(T,K,D,D,M)
-    _L₀ = zeros(T,K,D,M,D)
-    L₀ = zeros(T,K*D,M*D)
+    __L₀ = zeros(T,K,D,D,Mp1)
+    _L₀ = zeros(T,K,D,Mp1,D)
+    L₀ = zeros(T,K*D,Mp1*D)
     _L₀!(
         L₀,
         prob.Vp, prob.sig,
         __L₀,_L₀
     )
     # buffers
-    JuF = zeros(T,D,D,M)
-    __L₁ = zeros(T,K,D,D,M)
-    _L₁ = zeros(T,K,D,M,D)
+    JuF = zeros(T,D,D,Mp1)
+    __L₁ = zeros(T,K,D,D,Mp1)
+    _L₁ = zeros(T,K,D,Mp1,D)
 
     return NonlinearCovarianceFactor(
         L,
@@ -82,11 +82,11 @@ struct NonlinearGradientCovarianceFactor<:GradientCovarianceFactor
     _∇L::AbstractArray{<:Real,5}
 end 
 function NonlinearGradientCovarianceFactor(prob, params, ::Val{T}=Val(Float64)) where T<:Real
-    K,M,D,J = prob.K, prob.M, prob.D, prob.J
-    ∇L = zeros(T,K*D,M*D,J)
-    JwJuF = zeros(T,D,D,J,M)
-    __∇L = zeros(T,K,D,D,J,M)
-    _∇L = zeros(T,K,D,M,D,J)
+    K,Mp1,D,J = prob.K, prob.Mp1, prob.D, prob.J
+    ∇L = zeros(T,K*D,Mp1*D,J)
+    JwJuF = zeros(T,D,D,J,Mp1)
+    __∇L = zeros(T,K,D,D,J,Mp1)
+    _∇L = zeros(T,K,D,Mp1,D,J)
    
     NonlinearGradientCovarianceFactor(
         ∇L,
@@ -131,12 +131,12 @@ struct NonlinearResidual<:Residual
 end
 # constructors 
 function NonlinearResidual(prob::WENDyProblem{false}, params::Union{WENDyParameters, Nothing}=nothing, ::Val{T}=Val(Float64)) where T<:Real
-    D, M = size(prob.U)
+    D, Mp1 = size(prob.U)
     K, _ = size(prob.V)
     # ouput
     r = zeros(T,K*D)
     # buffers
-    F = zeros(T, D, M)
+    F = zeros(T, D, Mp1)
     G = zeros(T, K, D)
     g = zeros(T, K*D)
     NonlinearResidual(
@@ -208,10 +208,10 @@ end
 # constructors
 function NonlinearGradientResidual(prob::WENDyProblem{false}, params::Union{WENDyParameters, Nothing}=nothing, ::Val{T}=Val(Float64)) where T<:Real 
     J = prob.J
-    D, M = size(prob.U)
+    D, Mp1 = size(prob.U)
     K, _ = size(prob.V)
     Rᵀ⁻¹∇r = zeros(K*D,J)
-    JwF = zeros(T,D,J,M)
+    JwF = zeros(T,D,J,Mp1)
     __∇r = zeros(T,D,J,K)
     _∇r = zeros(T,K,D,J)
     ∇r = zeros(T,K*D, J)
@@ -303,7 +303,7 @@ struct NonlinearHesianWeakNLL<:HesianWeakNLL
 end
 
 function NonlinearHesianWeakNLL(prob::WENDyProblem{false}, params::WENDyParameters, ::Val{T}=Val(Float64)) where T<:Real
-    K,M,D,J = prob.K, prob.M, prob.D, prob.J
+    K,Mp1,D,J = prob.K, prob.Mp1, prob.D, prob.J
     # ouput 
     H = zeros(J,J)
     # functions
@@ -316,13 +316,13 @@ function NonlinearHesianWeakNLL(prob::WENDyProblem{false}, params::WENDyParamete
     S⁻¹∇r = zeros(T, K*D, J)
     ∂ⱼLLᵀ = zeros(T, K*D, K*D)
     ∇S = zeros(T, K*D, K*D, J)
-    HwF = zeros(T, D, J, J, M)
+    HwF = zeros(T, D, J, J, Mp1)
     _∇²r = zeros(T, K, D, J, J)
     ∇²r = zeros(T, K*D, J, J)
-    HwJuF = zeros(T, D, D, J, J, M)
-    __∇²L = zeros(T, K, D, D, J, J, M)
-    _∇²L = zeros(T, K, D, M, D, J, J)
-    ∇²L = zeros(T, K*D, M*D, J, J)
+    HwJuF = zeros(T, D, D, J, J, Mp1)
+    __∇²L = zeros(T, K, D, D, J, J, Mp1)
+    _∇²L = zeros(T, K, D, Mp1, D, J, J)
+    ∇²L = zeros(T, K*D, Mp1*D, J, J)
     ∂ⱼL∂ᵢLᵀ = zeros(T, K*D, K*D)
     ∂ⱼᵢLLᵀ = zeros(T, K*D, K*D)
     ∂ᵢⱼS = zeros(T, K*D, K*D)

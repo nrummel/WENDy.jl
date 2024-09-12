@@ -111,7 +111,7 @@ function testBuildV(;dataFile::String=joinpath(@__DIR__,"../data/buildV.mat"), l
             UniformDiscritizationMethod()
         )
         ϕ          = ExponentialTestFun()
-        D,M     = size(xobs)
+        D,Mp1     = size(xobs)
         Kmin      = 10
         ## Compute mt_min/max
         mt_min, mt_max = _getMtMinMax(tobs, xobs, ϕ, Kmin)
