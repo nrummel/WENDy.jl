@@ -125,12 +125,8 @@ function (::MtminRadMethod)(tobs::AbstractVector{<:Real},uobs::AbstractVecOrMat{
     mt_min, mt_max = _getMtMinMax(tobs, uobs, ϕ, Kmin)
     D = size(uobs,1)
     numRad=length(mtParams)
-    mt = zeros(numRad, D)
-    for (m, p) in enumerate(mtParams), d in 1:D
-        mt[m,d] = min(mt_max, p*mt_min)
-    end
-    mt = Int.(ceil.(1 ./ mean(1 ./ mt, dims=2)))
-    return mt[:]
+    radii =[ min(mt_max, ρ*mt_min) for ρ in mtParams]
+    return Int.(ceil.(radii))# radii of test functions
 end
 ## Helper to get derivative of test functions
 function _computeDerivative(ϕ::TestFunction, deg::Int) 
@@ -179,14 +175,14 @@ function _prepare_discritization(mt::Int,t::AbstractVector{<:Real},ϕ::TestFunct
 end 
 
 function (meth::UniformDiscritizationMethod)(mt::Int,t::AbstractVector{<:Real},ϕ::TestFunction,max_derivative::Int, K::Real)
-    dt, Mp1, Φ = _prepare_discritization(mt,t,ϕ,max_derivative)
-    gap      = Int(max(1,floor((Mp1-2*mt)/K)));
-    dd       = 0:gap:Mp1-2*mt-1;
-    dd       = dd[1:min(K,end)];
-    V        = zeros(length(dd),Mp1);
-    for j=1:length(dd)
+    dt, Mp1, dϕ = _prepare_discritization(mt,t,ϕ,max_derivative)
+    testFunWidth = size(dϕ,2)
+    endPoint = Int(floor(Mp1/testFunWidth)*testFunWidth)
+    IX = Iterators.partition(1:endPoint, testFunWidth)
+    V = zeros(length(IX), Mp1, max_derivative+1);
+    for (j, ix) in enumerate(IX)
         for (i,d) = enumerate(0:max_derivative)
-            V[j,gap*(j-1)+1:gap*(j-1)+2*mt+1,i] = Φ[i,:]*(mt*dt)^(-d)*dt;
+            @views V[j,ix,i] = dϕ[i,:] # The stuff after here is uniform quad weights, but we dont care about that because they cancel *(mt*dt)^(-d)*dt;
         end
     end
     return V
@@ -221,6 +217,10 @@ abstract type TestFunctionPruningMethod end
 struct NoPruningMethod <: TestFunctionPruningMethod
     radMeth::RadMethod
     discMeth::TestFunDiscritizationMethod
+    K::Union{Int, Nothing}
+end 
+function NoPruningMethod(radMeth, discMeth, K=nothing)
+    NoPruningMethod(radMeth, discMeth, K)
 end 
 struct SingularValuePruningMethod <: TestFunctionPruningMethod 
     radMeth::RadMethod
@@ -232,16 +232,22 @@ struct SingularValuePruningMethod <: TestFunctionPruningMethod
 end
 
 function _getK(Kmax::Int, D::Int, numRad::Int, Mp1::Int)
-    return Int(min(floor(Kmax/(D*numRad)), Mp1))
+    # return Int(min(floor(Kmax/(D*numRad)), Mp1))
+    return Int(floor(Kmax/(D*numRad)))
 end
 
 function (meth::NoPruningMethod)(tobs::AbstractVector{<:Real},uobs::AbstractMatrix{<:Real}, ϕ::TestFunction,Kmin::Int,Kmax::Int,mtParams::AbstractVector{<:Real})
-    Mp1, D = size(uobs)
-    numRad = length(mtParams)
-    mt = meth.radMeth(tobs, uobs, ϕ, Kmin)
-    K = _getK(Kmax, D, numRad, length(t))
-    V = cat(discMeth(m,t,ϕ,1,K) for m in mt;dims=1)
-    return V[:,:,1], V[:,:,2]
+    D, Mp1 = size(uobs)
+    numRad = length(mtParams)  
+    mt = meth.radMeth(tobs, uobs, ϕ, mtParams, Kmin)
+    K = _getK(Kmax, D, numRad, length(tobs))
+    V = reduce(vcat,meth.discMeth(m, tobs, ϕ, 1, K) for m in mt)
+    
+    return (
+        isnothing(meth.K) ? 
+        (V[:,:,1], V[:,:,2], nothing) :
+        (V[1:meth.K,:,1], V[1:meth.K,:,2], nothing)
+    )
 end
 
 function (meth::SingularValuePruningMethod)(tobs::AbstractVector{<:Real}, uobs::AbstractMatrix{<:Real}, ϕ::TestFunction,Kmin::Int,Kmax::Int,mtParams::AbstractVector{<:Real})
@@ -252,7 +258,7 @@ function (meth::SingularValuePruningMethod)(tobs::AbstractVector{<:Real}, uobs::
     D, Mp1 = size(uobs)
     mt = meth.radMeth(tobs, uobs, ϕ, mtParams, Kmin)
     K = _getK(Kmax, D, numRad, length(tobs))
-    Vfull = reduce(vcat,meth.discMeth(m,tobs,ϕ,0, K) for m in mt)
+    @views Vfull = reduce(vcat,meth.discMeth(m,tobs,ϕ,0, K) for m in mt)[:,:,1]
     Mp1 = length(tobs);
     dt = mean(diff(tobs));
     svd_fact = svd(Matrix(Vfull'); full=false);
