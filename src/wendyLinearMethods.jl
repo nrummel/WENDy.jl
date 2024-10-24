@@ -142,20 +142,20 @@ function (m::LinearResidual)(b::AbstractVector{<:Real}, w::AbstractVector{T}; ll
             ll=ll 
         )
     end
-    nothing
+    return m.r
 end
-struct LinearGradientResidual<:GradientResidual
+struct LinearJacobianResidual<:JacobianResidual
     Rᵀ⁻¹∇r::AbstractMatrix{<:Real}
     ∇r::AbstractMatrix{<:Real}
     G::AbstractMatrix{<:Real}
     g::AbstractVector{<:Real}
 end
 # constructors
-function LinearGradientResidual(prob::WENDyProblem{true}, params::Union{WENDyParameters, Nothing}=nothing, ::Val{T}=Val(Float64)) where T<:Real 
-    LinearGradientResidual(similar(prob.G), similar(prob.G), prob.G, similar(prob.b₀))
+function LinearJacobianResidual(prob::WENDyProblem{true}, params::Union{WENDyParameters, Nothing}=nothing, ::Val{T}=Val(Float64)) where T<:Real 
+    LinearJacobianResidual(similar(prob.G), similar(prob.G), prob.G, similar(prob.b₀))
 end
 # method inplace 
-function (m::LinearGradientResidual)(Rᵀ⁻¹∇r::AbstractMatrix{<:Real}, w::AbstractVector{<:Real}; ll::LogLevel=Warn, Rᵀ::Union{Nothing,AbstractMatrix{<:Real}}=nothing)
+function (m::LinearJacobianResidual)(Rᵀ⁻¹∇r::AbstractMatrix{<:Real}, w::AbstractVector{<:Real}; ll::LogLevel=Warn, Rᵀ::Union{Nothing,AbstractMatrix{<:Real}}=nothing)
     if isnothing(Rᵀ)
         @views Rᵀ⁻¹∇r .= m.G
         return nothing
@@ -163,14 +163,14 @@ function (m::LinearGradientResidual)(Rᵀ⁻¹∇r::AbstractMatrix{<:Real}, w::A
     ldiv!(Rᵀ⁻¹∇r, LowerTriangular(Rᵀ), m.∇r)
     nothing
 end 
-# method mutate internal data 
-function (m::LinearGradientResidual)(w::AbstractVector{<:Real}; ll::LogLevel=Warn, Rᵀ::Union{Nothing,AbstractMatrix{<:Real}}=nothing)
+# method mutate internal data and return
+function (m::LinearJacobianResidual)(w::AbstractVector{<:Real}; ll::LogLevel=Warn, Rᵀ::Union{Nothing,AbstractMatrix{<:Real}}=nothing)
     if isnothing(Rᵀ)
         @views m.∇r .= m.G
         return nothing
     end
     ldiv!(m.Rᵀ⁻¹∇r, LowerTriangular(Rᵀ), m.G)
-    nothing
+    m.Rᵀ⁻¹∇r
 end 
 ## Hm(w) - Hessian of Maholinobis Distance
 struct LinearHesianWeakNLL<:HesianWeakNLL
@@ -181,7 +181,7 @@ struct LinearHesianWeakNLL<:HesianWeakNLL
     # functions 
     R!::Covariance
     r!::Residual
-    ∇r!::GradientResidual
+    ∇r!::JacobianResidual
     ∇L!::GradientCovarianceFactor
     # buffers 
     S⁻¹r::AbstractVector{<:Real}
@@ -201,7 +201,7 @@ function LinearHesianWeakNLL(prob::WENDyProblem{true}, params::WENDyParameters, 
     # functions
     R! = Covariance(prob, params)
     r! = Residual(prob, params)
-    ∇r! = GradientResidual(prob, params)
+    ∇r! = JacobianResidual(prob, params)
     ∇L! = GradientCovarianceFactor(prob, params)
     # buffers
     S⁻¹r = zeros(T, K*D)

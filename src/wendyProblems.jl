@@ -25,14 +25,16 @@ struct WENDyProblem{lip, DistType}
     # Truth info
     sigTrue::AbstractVector{AbstractFloat}
     wTrue::AbstractVector{<:AbstractFloat}
+    paramRng::AbstractVector{<:Tuple}
     noise::AbstractMatrix{<:AbstractFloat}
 end 
 ## convience constructor if we wish to arbitrarily say its lineear or not
-function WENDyProblem(data::SimulatedWENDyData{lip, DistType}, params::WENDyParameters, forceLinear::Val{lip}; kwargs...) where {lip, DistType<:Distribution}
-    if !isnothing(forceLinear)
-        data = SimulatedWENDyData(data, Val(lip))
+function WENDyProblem(data::SimulatedWENDyData{lip, DistType}, params::WENDyParameters, ::Val{new_lip}; kwargs...) where {lip, new_lip, DistType<:Distribution}
+    if lip !== new_lip
+        new_data = SimulatedWENDyData(data, Val(lip))
+        return WENDyProblem(new_data, params; kwargs...)
     end
-    WENDyProblem(data, params; kwargs...)
+    data
 end
 ## Helper function to unpack data and then simulate noise
 function _unpackData(data::SimulatedWENDyData{lip, DistType}, params::WENDyParameters) where {lip, DistType<:Distribution}
@@ -41,7 +43,7 @@ function _unpackData(data::SimulatedWENDyData{lip, DistType}, params::WENDyParam
     @assert !isnothing(data.sigTrue) "sigTrue is nothing, please call the simulate! function to generate noise"
     @assert !isnothing(data.noise) "noise is nothing, please call the simulate! function to generate noise"
     return (
-        data.tt[], data.U[], data.sigTrue[], data.noise[], Float64.(data.wTrue), data.U_exact[]
+        data.tt[], data.U[], data.sigTrue[], data.noise[], Float64.(data.wTrue), data.paramRng, data.U_exact[]
     )
 end
 ## helper function that unpacks data and fill in NaN for truth
@@ -101,11 +103,11 @@ function _getRhsAndDerivatives(data, tt, U, V, D, J, K, ::Val{false})
     )
 end
 
-## nonlinear Wendy problem 
+## constructor
 function WENDyProblem(data::WENDyData{lip, DistType}, params::WENDyParameters; ll::LogLevel=Warn, matlab_data::Union{Dict,Nothing}=nothing) where {lip,DistType<:Distribution}
     with_logger(ConsoleLogger(stderr, ll)) do
         J = length(data.odeprob.p)
-        tt, U, sigTrue, noise, wTrue, U_exact = _unpackData(data, params)
+        tt, U, sigTrue, noise, wTrue, paramRng, U_exact = _unpackData(data, params)
         D, Mp1 = size(U)
         @info "============================="
         @info "Start of Algo"
@@ -131,7 +133,7 @@ function WENDyProblem(data::WENDyData{lip, DistType}, params::WENDyParameters; l
             G,
             jacwf!,jacwjacuf!,heswf!,heswjacuf!,
             data,
-            sigTrue,wTrue,noise
+            sigTrue, wTrue, paramRng, noise
         )
     end
 end

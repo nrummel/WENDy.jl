@@ -190,7 +190,7 @@ function (m::NonlinearResidual)(b::AbstractVector{<:Real}, w::AbstractVector{T};
 end
 ## ∇r & Rᵀ∇r
 # struct
-struct NonlinearGradientResidual<:GradientResidual
+struct NonlinearJacobianResidual<:JacobianResidual
     # ouput 
     Rᵀ⁻¹∇r::AbstractMatrix{<:Real}
     # data 
@@ -206,7 +206,7 @@ struct NonlinearGradientResidual<:GradientResidual
     ∇r::AbstractMatrix{<:Real} 
 end
 # constructors
-function NonlinearGradientResidual(prob::WENDyProblem{false}, params::Union{WENDyParameters, Nothing}=nothing, ::Val{T}=Val(Float64)) where T<:Real 
+function NonlinearJacobianResidual(prob::WENDyProblem{false}, params::Union{WENDyParameters, Nothing}=nothing, ::Val{T}=Val(Float64)) where T<:Real 
     J = prob.J
     D, Mp1 = size(prob.U)
     K, _ = size(prob.V)
@@ -215,7 +215,7 @@ function NonlinearGradientResidual(prob::WENDyProblem{false}, params::Union{WEND
     __∇r = zeros(T,D,J,K)
     _∇r = zeros(T,K,D,J)
     ∇r = zeros(T,K*D, J)
-    NonlinearGradientResidual(
+    NonlinearJacobianResidual(
         Rᵀ⁻¹∇r, 
         prob.tt, prob.U, prob.V, 
         prob.jacwf!, 
@@ -223,7 +223,7 @@ function NonlinearGradientResidual(prob::WENDyProblem{false}, params::Union{WEND
     )
 end
 # method inplace 
-function (m::NonlinearGradientResidual)(Rᵀ⁻¹∇r::AbstractMatrix{<:Real}, w::AbstractVector{<:Real}; ll::LogLevel=Warn, Rᵀ::Union{Nothing,AbstractMatrix{<:Real}}=nothing)
+function (m::NonlinearJacobianResidual)(Rᵀ⁻¹∇r::AbstractMatrix{<:Real}, w::AbstractVector{<:Real}; ll::LogLevel=Warn, Rᵀ::Union{Nothing,AbstractMatrix{<:Real}}=nothing)
     if isnothing(Rᵀ)
         _∇r!(
             Rᵀ⁻¹∇r,w, # in this context Rᵀ⁻¹∇r === ∇r
@@ -244,7 +244,7 @@ function (m::NonlinearGradientResidual)(Rᵀ⁻¹∇r::AbstractMatrix{<:Real}, w
     nothing
 end 
 # method mutate internal data 
-function (m::NonlinearGradientResidual)(w::AbstractVector{<:Real}; ll::LogLevel=Warn, Rᵀ::Union{Nothing,AbstractMatrix{<:Real}}=nothing)
+function (m::NonlinearJacobianResidual)(w::AbstractVector{<:Real}; ll::LogLevel=Warn, Rᵀ::Union{Nothing,AbstractMatrix{<:Real}}=nothing)
     if isnothing(Rᵀ)
         _∇r!(
             m.∇r,w, 
@@ -279,7 +279,7 @@ struct NonlinearHesianWeakNLL<:HesianWeakNLL
     # functions 
     R!::Covariance
     r!::Residual
-    ∇r!::GradientResidual
+    ∇r!::JacobianResidual
     ∇L!::GradientCovarianceFactor
     heswf!::Function
     heswjacuf!::Function
@@ -309,7 +309,7 @@ function NonlinearHesianWeakNLL(prob::WENDyProblem{false}, params::WENDyParamete
     # functions
     R! = Covariance(prob, params)
     r! = Residual(prob, params)
-    ∇r! = GradientResidual(prob, params)
+    ∇r! = JacobianResidual(prob, params)
     ∇L! = GradientCovarianceFactor(prob, params)
     # buffers
     S⁻¹r = zeros(T, K*D)

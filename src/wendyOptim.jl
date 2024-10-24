@@ -10,7 +10,7 @@ function Linear_IRWLS_Iter(prob::WENDyProblem, params::WENDyParameters;ll::LogLe
     J = prob.J
     K = prob.K 
     G0 = zeros(K*D, J)
-    ∇r! = GradientResidual(prob, params)
+    ∇r! = JacobianResidual(prob, params)
     ∇r!(G0, zeros(J))
     Rᵀ! = Covariance(prob, params)
     Linear_IRWLS_Iter(prob.b₀, G0, Rᵀ!)
@@ -36,7 +36,7 @@ struct NLS_iter <: IRWLS_Iter
     b₀::AbstractVector
     Rᵀ!::Covariance 
     r!::Residual
-    ∇r!::GradientResidual
+    ∇r!::JacobianResidual
     reltol::AbstractFloat
     abstol::AbstractFloat
     maxiters::Int
@@ -45,7 +45,7 @@ end
 function NLS_iter(prob::WENDyProblem, params::WENDyParameters)
     Rᵀ! = Covariance(prob, params)
     r! = Residual(prob, params)
-    ∇r! = GradientResidual(prob, params)
+    ∇r! = JacobianResidual(prob, params)
 
     NLS_iter(prob.b₀, Rᵀ!, r!, ∇r!, params.nlsReltol,params.nlsAbstol,  params.nlsMaxiters)
 end
@@ -53,6 +53,7 @@ end
 function (m::NLS_iter)(wnm1::AbstractVector{<:AbstractFloat};ll::LogLevel=Warn, _ll::LogLevel=Warn)
     with_logger(ConsoleLogger(stderr,ll)) do 
         @info "  Running local optimization method"
+        # compute the covariance 
         try 
             m.Rᵀ!(wnm1)
         catch 
@@ -75,7 +76,7 @@ function (m::NLS_iter)(wnm1::AbstractVector{<:AbstractFloat};ll::LogLevel=Warn, 
             ::Any; 
             ll::LogLevel=_ll
         ) = m.∇r!(jac, w; ll=ll, Rᵀ=m.Rᵀ!.R,)
-                
+        # Solve nonlinear Least squares problem         
         prob = NonlinearLeastSquaresProblem(
             NonlinearFunction(
                 resn!; 
@@ -181,6 +182,13 @@ struct SecondOrderCostFunction <: CostFunction
     ∇f!::Function 
     Hf!::Function 
 end
+
+struct LeastSquaresCostFunction <: CostFunction 
+    r!::Function 
+    J!::Function 
+    KD::Int
+end 
+
 ##
 function bfgs_Optim(
     costFun::CostFunction, w0::AbstractVector{<:Real}, params::WENDyParameters; 
@@ -209,11 +217,13 @@ function tr_Optim(
     # Unpack optimization params
     maxIt,reltol,abstol,timelimit = params.optimMaxiters, params.optimReltol, params.optimAbstol, params.optimTimelimit
     # Call algorithm
+    J = length(w0)
     res = Optim.optimize(
-        costFun.f, costFun.∇f!, costFun.Hf!, 
-        w0, Optim.NewtonTrustRegion(),
+        costFun.f, costFun.∇f!, costFun.Hf!, # f, g, h
+        zeros(J), Inf*ones(J), # box constraints 
+        w0, Optim.IPNewton(), # x0, algo
         Optim.Options(
-            x_reltol=reltol, x_abstol=abstol, iterations=maxIt, time_limit=timelimit,
+            x_reltol=reltol, x_abstol=abstol, iterations=maxIt, time_limit=timelimit, 
             store_trace=return_wits, extended_trace=return_wits
         )
     )
@@ -346,4 +356,53 @@ function arc_JSO(
         max_time=params.optimTimelimit,
     )
     return return_wits ? (out.solution, out.iter, wits_arc) : (out.solution, out.iter) 
+end
+
+function nonlinearLeastSquares(costFun::LeastSquaresCostFunction,
+    w0::AbstractVector{<:Real}, 
+    params::WENDyParameters; 
+    return_wits::Bool=false, kwargs...
+)   
+    sol = NonlinearSolve.solve(
+        NonlinearLeastSquaresProblem(
+            NonlinearFunction(
+                (r,w,_)->costFun.r!(r,w),
+                jac=(J,w,_)->costFun.J!(J,w), 
+                resid_prototype=zeros(costFun.KD)
+            ),
+            w0
+        ),
+        NonlinearSolve.LevenbergMarquardt();
+        # NonlinearSolve.TrustRegion();
+        abstol=params.optimAbstol,
+        reltol=params.optimReltol,
+        maxiters=params.optimMaxiters,
+        maxtime=params.optimTimelimit,
+        store_trace=Val(return_wits), 
+        trace_level=return_wits ? TraceAll() : TraceMinimal(),
+        verbose=false
+    )
+    what = sol.u
+    iter = sol.stats.nsteps
+    return return_wits ? (what, iter, hcat(w0, what)) : (what, iter) 
+end
+
+function hybrid(
+    wnll::SecondOrderCostFunction, fslsq::LeastSquaresCostFunction, w0::AbstractVector{<:Real}, params::WENDyParameters; 
+    return_wits::Bool=false, kwargs...
+)
+    what_wendy, iter_wendy, wits_wendy = if return_wits
+        tr_Optim(wnll, w0, params, return_wits=true)
+    else 
+        what_wendy, iter_wendy = tr_Optim(wnll, w0, params, return_wits=false)
+        what_wendy, iter_wendy, nothing
+    end 
+
+    what_fslsq, iter_fslsq, wits_fslsq = if return_wits 
+        nonlinearLeastSquares(fslsq, what_wendy, params, return_wits=true)
+    else 
+        what_fslsq, iter_fslsq = nonlinearLeastSquares(fslsq, what_wendy, params, return_wits=false)
+        what_fslsq, iter_fslsq, nothing
+    end 
+    return return_wits ?  (what_fslsq, iter_wendy+iter_fslsq, hcat(wits_wendy, wits_fslsq )) : (what_fslsq, iter_wendy+iter_fslsq)
 end

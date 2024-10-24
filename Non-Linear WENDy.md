@@ -81,10 +81,10 @@ I implemented a large sweep comparing using this local optimization solver compa
 - In general the MLE and IRWLS gives similar approximations of $w$ while the MLE is slower
 - This does address the Hindmarsh-Rose behavior at high noise and lower number of data points by giving an improved answer to the OLS solution while the IRWLS diverges. 
 ##### Global Optimization Effort
-While the local optimization methods gives a more robust solution to the IRWLS in general. There is no gaurentee that it is converging to a global or local minimum. So I have been developing a Branch and Bound algorithm for the MLE.
+While the local optimization methods gives a more robust solution to the IRWLS in general. There is no guarantee that it is converging to a global or local minimum. So I have been developing a Branch and Bound algorithm for the MLE.
 - I have developed [[Bounding MLE|numerous lower bounds]] to make the algorithm more efficient
 - I have implemented this in MATLAB
-- The method coverges to a superior minimum when given an initial search space bases on a confidence interval derived from the local optimization method's estimate.
+- The method coverages to a superior minimum when given an initial search space bases on a confidence interval derived from the local optimization method's estimate.
 	![[manufactured_BnB_dim12.png]]
 ## Non-Linear WENDy
 One obvious extension of the work already done, is to now consider the case when the right hand side of the ODE $F$ is no longer linear in parameters. To highlight what this means, instead of considering 
@@ -251,7 +251,9 @@ Choice of example problems is guided by what was previously done in  the previou
 	As mentioned, this can be solved with linear in parameters with an equality constraint $w = (a,b,c,d), d = 1/c$, so perhaps not a necessary problem 
 - Lotka-Volterra 
 	Found in [SciML Benchmarks](https://docs.sciml.ai/SciMLBenchmarksOutput/stable/NonStiffODE/LotkaVolterra_wpd/) and the [[WENDy_ode2023.pdf#page=16|WENDy Paper]], so this probably is good choice at least to 
-- [[Calver - Parameter Estimation for Systems of Ordinary Diffe.pdf#page=47|Goodwin]] - *Loop model*$$\begin{aligned} 
+- Goodwin: [[Calver - Parameter Estimation for Systems of Ordinary Diffe.pdf#page=47|Calver]], [[Zotero/storage/KBLMKKZT/Gonze and Abou-Jaoudé - 2013 - The Goodwin model behind the Hill function.pdf|Gonze et all]], and [[Goodwin - 1965 - Oscillatory behavior in enzymatic control processe.pdf|Goodin OG]] 
+	Also referred to as the *Loop model* by Calver, This is an extension of the original Goodwin model that was used to model the "negative feedback control processes operating at the molecular level in cells" by Goodwin in 1965. This model was expanded by Gonze to describe circadian rythm. as an intermediate 
+  $$\begin{aligned} 
 	& y_1^{\prime}(t)=\frac{a}{A+y_3(t)^\sigma}-b y_1(t), \\ 
 	& y_2^{\prime}(t)=\alpha y_1(t)-\beta y_2(t), \\ 
 	& y_3^{\prime}(t)=\gamma y_2(t)-\delta y_3(t),\end{aligned}$$

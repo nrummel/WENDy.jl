@@ -33,9 +33,12 @@ end
 function _m(S::AbstractMatrix, r::AbstractVector, S⁻¹r::AbstractVector, constTerm::AbstractFloat)
     F = svd(S)
     ldiv!(S⁻¹r, F, r)
+    mdist = dot(r, S⁻¹r)
+    logDet = sum(log.(F.S))
+    #constTerm
     1/2*(
-        dot(r, S⁻¹r) 
-        + sum(log.(F.S))
+        mdist 
+        + logDet 
     ) + constTerm
 end
 # function _m(Rᵀ⁻¹r::AbstractVector, )

@@ -13,7 +13,7 @@ function (ϕ::QuadradicTestFun)(x::Number,η::Real=9)
 end
 ##
 function rad_select(t0::AbstractVector,uobs::AbstractMatrix,
-    ϕ::TestFunction, m_max::Int;inc::Real=1,
+    ϕ::TestFunction, m_max::Int; inc::Real=1,
     sub::Real=2.1,q::Real=0.0,s::Real=1.0,m_min::Int=2
 )::Int
     D,Mp1 = size(uobs)
@@ -97,19 +97,19 @@ function _getMtMinMax(tobs::AbstractVector{<:Real}, uobs::AbstractMatrix{<:Real}
     return mt_min, mt_max 
 end
 
-function (::DirectRadMethod)(tobs::AbstractVector{<:Real},uobs::AbstractVecOrMat{<:Real}, ϕ::TestFunction, mtParams::AbstractVector{<:Int}, Kmin::Int)
+function (::DirectRadMethod)(tobs::AbstractVector{<:Real},uobs::AbstractVecOrMat{<:Real}, ϕ::TestFunction, mtParams::AbstractVector{<:Real}, Kmin::Int)
     mt_min, mt_max = _getMtMinMax(tobs, uobs, ϕ, Kmin)
     D = size(uobs,1)
     numRad=length(mtParams)
     mts = zeros(numRad, D)
     for (m, p) in enumerate(mtParams), d in 1:D
         mts[m,d] = min(mt_max, p)
-    end
+    end 
     mts = Int.(ceil.(1 ./ mean(1 ./ mts, dims=2)))
     return mts[:]
 end 
 
-function (::TimeFracRadMethod)(tobs::AbstractVector{<:Real},uobs::AbstractVecOrMat{<:Real}, ϕ::TestFunction, mtParams::AbstractVector{<:Int}, Kmin::Int)
+function (::TimeFracRadMethod)(tobs::AbstractVector{<:Real},uobs::AbstractVecOrMat{<:Real}, ϕ::TestFunction, mtParams::AbstractVector{<:Real}, Kmin::Int)
     mt_min, mt_max = _getMtMinMax(tobs, uobs, ϕ, Kmin)
     D = size(uobs,1)
     numRad=length(mtParams)
@@ -121,7 +121,7 @@ function (::TimeFracRadMethod)(tobs::AbstractVector{<:Real},uobs::AbstractVecOrM
     return mt[:]
 end
 
-function (::MtminRadMethod)(tobs::AbstractVector{<:Real},uobs::AbstractVecOrMat{<:Real},  ϕ::TestFunction, mtParams::AbstractVector{<:Int}, Kmin::Int)
+function (::MtminRadMethod)(tobs::AbstractVector{<:Real},uobs::AbstractVecOrMat{<:Real},  ϕ::TestFunction, mtParams::AbstractVector{<:Real}, Kmin::Int)
     mt_min, mt_max = _getMtMinMax(tobs, uobs, ϕ, Kmin)
     D = size(uobs,1)
     numRad=length(mtParams)
@@ -183,7 +183,7 @@ function (meth::UniformDiscritizationMethod)(mt::Int,t::AbstractVector{<:Real},�
     gap      = Int(max(1,floor((Mp1-2*mt)/K)));
     dd       = 0:gap:Mp1-2*mt-1;
     dd       = dd[1:min(K,end)];
-    V        = zeros(length(dd),Mp1);
+    V        = zeros(length(dd),Mp1, max_derivative+1);
     for j=1:length(dd)
         for (i,d) = enumerate(0:max_derivative)
             V[j,gap*(j-1)+1:gap*(j-1)+2*mt+1,i] = Φ[i,:]*(mt*dt)^(-d)*dt;
@@ -238,10 +238,10 @@ end
 function (meth::NoPruningMethod)(tobs::AbstractVector{<:Real},uobs::AbstractMatrix{<:Real}, ϕ::TestFunction,Kmin::Int,Kmax::Int,mtParams::AbstractVector{<:Real})
     Mp1, D = size(uobs)
     numRad = length(mtParams)
-    mt = meth.radMeth(tobs, uobs, ϕ, Kmin)
-    K = _getK(Kmax, D, numRad, length(t))
-    V = cat(discMeth(m,t,ϕ,1,K) for m in mt;dims=1)
-    return V[:,:,1], V[:,:,2]
+    mt = meth.radMeth(tobs, uobs, ϕ, mtParams, Kmin)
+    K = _getK(Kmax, D, numRad, length(tobs))
+    V = reduce(vcat, meth.discMeth(m,tobs,ϕ,1, K) for m in mt)
+    return V[:,:,1], V[:,:,2], V[:,:,1]
 end
 
 function (meth::SingularValuePruningMethod)(tobs::AbstractVector{<:Real}, uobs::AbstractMatrix{<:Real}, ϕ::TestFunction,Kmin::Int,Kmax::Int,mtParams::AbstractVector{<:Real})
@@ -252,7 +252,7 @@ function (meth::SingularValuePruningMethod)(tobs::AbstractVector{<:Real}, uobs::
     D, Mp1 = size(uobs)
     mt = meth.radMeth(tobs, uobs, ϕ, mtParams, Kmin)
     K = _getK(Kmax, D, numRad, length(tobs))
-    Vfull = reduce(vcat,meth.discMeth(m,tobs,ϕ,0, K) for m in mt)
+    Vfull = reduce(vcat,meth.discMeth(m,tobs,ϕ,0, K) for m in mt)[:,:,1]
     Mp1 = length(tobs);
     dt = mean(diff(tobs));
     svd_fact = svd(Matrix(Vfull'); full=false);

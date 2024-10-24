@@ -41,5 +41,5 @@ module WENDy
     export WENDyProblem, WENDyParameters, WENDyData, CostFunction, SimulatedWENDyData, EmpricalWENDyData, SimulationParameters
     export WeakNLL, GradientWeakNLL, HesianWeakNLL
     export simulate!, buildCostFunctions, forwardSolveRelErr, forwardSolve
-    export IRWLS, bfgs_Optim, tr_Optim, arc_SFN, tr_JSO, arc_JSO
+    export IRWLS, bfgs_Optim, tr_Optim, arc_SFN, tr_JSO, arc_JSO, hybrid, nonlinearLeastSquares
 end # module WENDy

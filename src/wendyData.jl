@@ -17,7 +17,7 @@ end
 function WENDyParameters(;
     Kmax::Int=Int(5.0e3),
     diagReg::AbstractFloat=1.0e-10,
-    testFuctionRadii::AbstractVector{Int}=Int.(2 .^(0:3)),
+    testFuctionRadii::AbstractVector{<:Real}=2 .^(0:3),
     ϕ::TestFunction=ExponentialTestFun(),
     pruneMeth::TestFunctionPruningMethod=SingularValuePruningMethod(MtminRadMethod(),UniformDiscritizationMethod()),
     nlsAbstol::AbstractFloat=1e-8,
@@ -43,14 +43,7 @@ struct EmpricalWENDyData{lip,DistType}<:WENDyData{lip,DistType}
     tRng::NTuple{2,<:Real}
     tt_full::AbstractVector{<:Real}
     U_full::AbstractMatrix{<:Real}
-end
-
-function EmpricalWENDyData(
-    name,ode,tt_full, U_full, 
-    ::Val{lip}=Val(false), ::Val{DistType}=Val(Normal), 
-    # boxConstraints::Union{Nothing, AbstractMatrix}=nothing
-) where {lip,DistType<:Distribution}
-    EmpricalWENDyData{lip, DistType}(name, ode, tt_full, U_full)
+    paramRng::AbstractVector{<:Tuple}
 end
 ##
 function _getData(f!::Function, tRng::NTuple{2,<:AbstractFloat}, Mp1::Int, wTrue::AbstractVector{<:Real}, initCond::AbstractVector{<:Real}, file::String; forceOdeSolve::Bool=false, ll::LogLevel=Warn)
@@ -76,7 +69,6 @@ end
     timeSubsampleRate::Int = 2
     seed::Union{Int,Nothing} = nothing
     noiseRatio::AbstractFloat = 0.01
-    ρ::Real = 0.01
 end
 
 struct SimulatedWENDyData{lip,DistType}<:WENDyData{lip,DistType}
@@ -86,6 +78,7 @@ struct SimulatedWENDyData{lip,DistType}<:WENDyData{lip,DistType}
     initCond::AbstractVector{<:Real}
     tRng::NTuple{2,<:Real}
     wTrue::AbstractVector{<:Real}
+    paramRng::AbstractVector{<:Tuple}
     # defaul values provided
     Mp1::Int
     file::String 
@@ -105,17 +98,19 @@ function SimulatedWENDyData(
     f!::Function,
     initCond::AbstractVector{<:Real},
     tRng::NTuple{2,<:Real},
-    wTrue::AbstractVector{<:Real};
+    wTrue::AbstractVector{<:Real},
+    paramRng::AbstractVector{<:Tuple};
     Mp1::Int=1025,
     linearInParameters::Val{lip}=Val(false), #linearInParameters
     file::Union{String, Nothing}=nothing,
     noiseDist::Val{DistType}=Val(Normal), #distributionType
-    forceOdeSolve::Bool=false
+    forceOdeSolve::Bool=false,
+    ll::LogLevel=Warn
 ) where {lip, DistType<:Distribution}
     isnothing(file) && (file = joinpath(@__DIR__, "../data/$name.bson"))
     tt_full, U_exact = _getData(
         f!, tRng, Mp1, wTrue, initCond, file;
-        forceOdeSolve=forceOdeSolve, ll=Info
+        forceOdeSolve=forceOdeSolve, ll=ll
     )
     @assert DistType == Normal || DistType == LogNormal "Only LogNormal and Normal Noise distributions are supported"
 
@@ -129,17 +124,18 @@ function SimulatedWENDyData(
     end
 
     SimulatedWENDyData{lip,DistType}(
-        name, odeprob, f!, initCond, tRng, wTrue, 
+        name, odeprob, f!, initCond, tRng, wTrue, paramRng, 
         Mp1, file, tt_full, U_exact,
         nothing, nothing, nothing, nothing, nothing # subsampled and noisey data needs to be simulated with the simulate! function
     )
 end
 ## Change data's lip or dist type
-function SimulatedWENDyData(data::SimulatedWENDyData{old_lip, old_DistType}, ::Val{new_lip}=Val(Nothing), ::Val{new_DistType}=Val(Nothing)) where {old_lip, old_DistType, new_DistType, new_lip}
-    lip = new_lip == Nothing ? old_lip : new_lip 
-    DistType = new_DistType == Nothing ? old_DistType : new_DistType 
-    SimulatedWENDyData{lip,DistType}(
-        data.name, data.odeprob, data.f!, data.initCond, data.tRng, data.wTrue, data.Mp1, data.file, data.tt_full, data.U_exact
+function SimulatedWENDyData(data::SimulatedWENDyData{old_lip, old_DistType}, ::Val{new_lip}=Val(nothing), ::Val{new_DistType}=Val(nothing)) where {old_lip, old_DistType, new_DistType, new_lip}
+    lip = isnothing(new_lip) ? old_lip : new_lip 
+    DistType = isnothing(new_DistType) ? old_DistType : new_DistType 
+    SimulatedWENDyData(
+        data.name, data.odeprob, data.f!, data.initCond, data.tRng, data.wTrue; 
+        Mp1=data.Mp1, file=data.file, linearInParameters=Val(lip), noiseDist=Val(DistType)
     )
 end
 

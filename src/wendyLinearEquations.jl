@@ -85,7 +85,7 @@ function _Hm!(
         @views ∇S[:,:,j] .= ∂ⱼLLᵀ + (∂ⱼLLᵀ)'
     end
     ## Compute ∇²m
-    @inbounds for j = 1:J
+    @inbounds for j = 1:J 
         # this only depends on j so we do it once
         @views ldiv!(S⁻¹∂ⱼS, F, ∇S[:,:,j])
         for i = j:J 

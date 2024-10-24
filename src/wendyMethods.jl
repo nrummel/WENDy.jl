@@ -70,9 +70,9 @@ abstract type Residual<:Function end
 function Residual(prob::WENDyProblem{lip}, params::WENDyParameters, ::Val{T}=Val(Float64)) where {lip,T<:Real} 
     return lip ? LinearResidual(prob, params, Val(T)) :  NonlinearResidual(prob, params, Val(T))
 end
-abstract type GradientResidual<:Function end
-function GradientResidual(prob::WENDyProblem{lip}, params::WENDyParameters, ::Val{T}=Val(Float64)) where {lip,T<:Real}
-    return lip ? LinearGradientResidual(prob, params, Val(T)) : NonlinearGradientResidual(prob, params, Val(T))
+abstract type JacobianResidual<:Function end
+function JacobianResidual(prob::WENDyProblem{lip}, params::WENDyParameters, ::Val{T}=Val(Float64)) where {lip,T<:Real}
+    return lip ? LinearJacobianResidual(prob, params, Val(T)) : NonlinearJacobianResidual(prob, params, Val(T))
 end
 ## Maholinobis distance 
 # struct
@@ -138,7 +138,7 @@ struct GradientWeakNLL<:Function
     # functions
     R!::Covariance
     r!::Residual
-    ∇r!::GradientResidual
+    ∇r!::JacobianResidual
     ∇L!::GradientCovarianceFactor
     # Buffers
     S⁻¹r::AbstractVector{<:Real}
@@ -153,7 +153,7 @@ function GradientWeakNLL(prob::WENDyProblem, params::WENDyParameters, ::Val{T}=V
     # methods 
     R!  = Covariance(prob, params, Val(T))
     r!  = Residual(prob, params, Val(T))
-    ∇r! = GradientResidual(prob, params, Val(T))
+    ∇r! = JacobianResidual(prob, params, Val(T))
     ∇L! = GradientCovarianceFactor(prob, params, Val(T))
     # preallocate buffers
     S⁻¹r = zeros(T, K*D)
