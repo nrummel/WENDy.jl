@@ -1,5 +1,5 @@
+__precompile__(false)
 module WENDy
-    # __precompile__(false)
     ## external dependencies
     # optimization algorithms
     using NonlinearSolve # high performance nonlinear solver
