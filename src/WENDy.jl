@@ -1,4 +1,3 @@
-__precompile__(false)
 module WENDy
     ## external dependencies
     # optimization algorithms
