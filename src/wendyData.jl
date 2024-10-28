@@ -116,7 +116,7 @@ function SimulatedWENDyData(
 
     if DistType == LogNormal && any(U_exact .<= 0)
         ix = findall( all(U_exact[:,m] .> 0) for m in 1:size(U_exact,2))
-        @warn " Removing data that is zero so that logrithms are well defined: $(length(tt_full) - length(ix)) data point(s) are invalid"
+        @info " Removing data that is zero so that logrithms are well defined: $(length(tt_full) - length(ix)) data point(s) are invalid"
         tt_full = tt_full[ix]
         U_exact = U_exact[:,ix]
         initCond = U_exact[:,1]
