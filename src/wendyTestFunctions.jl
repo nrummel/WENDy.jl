@@ -2,7 +2,7 @@ using FFTW: fft, ifft
 using Symbolics 
 using Symbolics: @variables
 ## Two types of test functions of ϕ
-abstract type TestFunction end 
+abstract type TestFunction <: Function end 
 struct ExponentialTestFun <: TestFunction end 
 function (ϕ::ExponentialTestFun)(x::Number,η::Real=9) 
     exp(-η*(1-x.^2).^(-1))
