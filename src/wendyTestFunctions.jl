@@ -1,291 +1,147 @@
-using FFTW: fft, ifft
-using Symbolics 
-using Symbolics: @variables
-## Two types of test functions of ϕ
 abstract type TestFunction <: Function end 
 struct ExponentialTestFun <: TestFunction end 
 function (ϕ::ExponentialTestFun)(x::Number,η::Real=9) 
     exp(-η*(1-x.^2).^(-1))
 end
-struct QuadradicTestFun <: TestFunction end
-function (ϕ::QuadradicTestFun)(x::Number,η::Real=9) 
-    (1-x.^2).^η
-end
-##
-function rad_select(t0::AbstractVector,uobs::AbstractMatrix,
-    ϕ::TestFunction, m_max::Int; inc::Real=1,
-    sub::Real=2.1,q::Real=0.0,s::Real=1.0,m_min::Int=2
-)::Int
-    D,Mp1 = size(uobs)
-    if isnothing(ϕ)
-        return m_min
-    elseif m_max<=m_min
-        return m_min
-    end
-    dt = mean(diff(t0))
-    t = 0:dt/inc:(Mp1-1)*dt
-    mts = m_min:m_max
-    errs = zeros(length(mts))
-    for (b,mt) in enumerate(mts)
-        l = Int(2*inc*mt-1)
-        t_phi = range(-1+dt/inc,1-dt/inc,l)
-        IX = 1:Int(floor(s*inc*mt)):Int(length(t)-2*inc*mt)
-        errs_temp = zeros(D,length(IX))
-        for (i,ix) in enumerate(IX)
-            phi_vec = zeros(length(t))
-            phi_vec[ix:ix+length(t_phi)-1] = ϕ.(t_phi)
-            phi_vec /= norm(phi_vec,2)
-            for d=1:D
-                phiu_fft = (dt/sqrt(Mp1*dt))*fft(phi_vec .* uobs[d,:])
-                alias = phiu_fft[1:Int(floor(Mp1/sub)):Int(floor(inc*Mp1/2))]
-                errs_temp[d,i] = 2*(2*pi/sqrt(Mp1*dt))*sum((0:length(alias)-1).*imag(alias[:]'))
-            end
-        end
-        errs[b] = sqrt(mean(errs_temp[:].^2))
-    end
-    l = getcorner(log.(errs),mts) # This corresponds to when 'pow' is empty
-    return mts[l]
-end
-function fftshift(arr::AbstractArray)
-    return circshift(arr, Int(floor(length(arr)/2)))
-end
-## Find where the error is with the secand line approximation is minimized in L1
-function getcorner(v::AbstractVector{<:Real},xx::Union{AbstractVector{<:Real},Nothing}=nothing)
-    NN = length(v)
-    v = (v ./ maximum(abs.(v)))*NN
-    errs = zeros(NN)
-    for k=1:NN
-        l1,l2,u1,u2 = build_lines(v,k,xx)
+""" 
+    Find where the error is with the secand line approximation is minimized in L1
+"""
+function _getcorner(yy::AbstractVector{<:Real}, xx::Union{AbstractVector{<:Real},Nothing}=nothing)
+    N = length(yy)
+    isnothing(xx) && (xx = 1:N)
+    # scale by m aximum value for stability ?
+    yy = (yy ./ maximum(abs.(yy)))*N
+    errs = zeros(N)
+    for k=1:N
+        l1 = (yy[k] - yy[1]) / (xx[k] - xx[1]) * (xx[1:k] .- xx[k]) .+ yy[k] 
+        l2 = (yy[end] - yy[k]) / (xx[end] - xx[k]) * (xx[k:end] .- xx[k]) .+ yy[k] 
         # relative L1 err
-        errs[k] = sum(abs.((l1-u1)./u1)) + sum(abs.((l2-u2)./u2))
+        errs[k] = ( 
+            sum(abs.((l1-yy[1:k])./yy[1:k])) 
+            + sum(abs.((l2-yy[k:end]) ./ yy[k:end]))
+        )
     end
     replace!(errs, NaN=>Inf)
     _,ix = findmin(errs)
     return ix
 end
-## build secant lines splitting v
-function build_lines(v::AbstractVector{<:Real},k::Int,xx::Union{AbstractVector,Nothing}=nothing)
-   NN = length(v)
-   subinds1 = 1:k
-   subinds2 = k:NN
-   x1 = isnothing(xx) ? subinds1 : xx[subinds1]
-   x2 = isnothing(xx) ? subinds2 : xx[subinds2]
-   v1 = v[subinds1]
-   v2 = v[subinds2]
-   m1,b1,l1 = lin_regress(v1,x1)
-   m2,b2,l2 = lin_regress(v2,x2)
-    return l1,l2,v1,v2
-end
-## fit a line with the secant of the end points
-function lin_regress(v::AbstractVector{<:Real},x::AbstractVector{<:Real})
-    m = (v[end]-v[1])/(x[end]-x[1])
-    a = m*x[1]
-    b = v[1] - a
-    l = v[1] .+ m.*x .- a
-    return m,b,l
-end 
-## Define RadMethods
-abstract type RadMethod end 
-struct DirectRadMethod <:RadMethod end
-struct TimeFracRadMethod<:RadMethod end
-struct MtminRadMethod <:RadMethod end
-
-function _getMtMinMax(tobs::AbstractVector{<:Real}, uobs::AbstractMatrix{<:Real}, ϕ::TestFunction, Kmin::Int)
-    Mp1 = size(uobs,2)
-    mt_max = Int(max(floor((Mp1-1)/2)-Kmin,1));
-    mt_min = rad_select(tobs,uobs,ϕ,mt_max);
-    return mt_min, mt_max 
-end
-
-function (::DirectRadMethod)(tobs::AbstractVector{<:Real},uobs::AbstractVecOrMat{<:Real}, ϕ::TestFunction, mtParams::AbstractVector{<:Real}, Kmin::Int)
-    mt_min, mt_max = _getMtMinMax(tobs, uobs, ϕ, Kmin)
-    D = size(uobs,1)
-    numRad=length(mtParams)
-    mts = zeros(numRad, D)
-    for (m, p) in enumerate(mtParams), d in 1:D
-        mts[m,d] = min(mt_max, p)
-    end 
-    mts = Int.(ceil.(1 ./ mean(1 ./ mts, dims=2)))
-    return mts[:]
-end 
-
-function (::TimeFracRadMethod)(tobs::AbstractVector{<:Real},uobs::AbstractVecOrMat{<:Real}, ϕ::TestFunction, mtParams::AbstractVector{<:Real}, Kmin::Int)
-    mt_min, mt_max = _getMtMinMax(tobs, uobs, ϕ, Kmin)
-    D = size(uobs,1)
-    numRad=length(mtParams)
-    mt = zeros(numRad, D)
-    for (m, p) in enumerate(mtParams), d in 1:D
-        mt[m,d] = min(mt_max, floor(length(tobs)*p))
+"""
+    Select the minimum radius by looking for where integration error 
+    will be dominated by 
+    for more detailsSee section 2.3 of Bort and Messenger 
+"""
+function _minRadius(
+    U::AbstractMatrix, dt::Real, 
+    radiusMin::Int, numRadii::Int, testFunSubRate::Real; 
+    debug::Bool=false
+)
+    @assert 2 <= testFunSubRate < 4 "We only suppport scaling between 2 and 4"
+    D, Mp1 = size(U)
+    radii = radiusMin:radiusMin+numRadii
+    errs = zeros(length(radii))
+    # Select the fourier modes from just the where roots of unit would hit on the subsampled grid
+    IX = Int(floor((Mp1-1)/testFunSubRate)) 
+    # the fft will will be in order F[0,], F[1], ... F[M/2], F[-M/2], .. F[-1]
+    # we want the F[M/2]
+    
+    for (r,radius) in enumerate(radii)
+        VV = _buildV(radius, Mp1, dt)
+        V = VV[:,:,1]
+        K = size(V,1)
+        @tullio ΦU[k,d,m] := V[k,m]*U[d,m]
+        ΦU = reshape(ΦU, K*D, Mp1)
+        Fhat_ΦU = fft(ΦU, (2,))
+        errs[r] = norm(imag(Fhat_ΦU[:,IX]))
     end
-    mt = Int.(ceil.(1 ./ mean(1 ./ mt, dims=2)))
-    return mt[:]
+    @show ix = _getcorner(log.(errs), radii) 
+    
+    return debug ? (radii[ix], ix, radii, errs) : radii[ix]
 end
-
-function (::MtminRadMethod)(tobs::AbstractVector{<:Real},uobs::AbstractVecOrMat{<:Real},  ϕ::TestFunction, mtParams::AbstractVector{<:Real}, Kmin::Int)
-    mt_min, mt_max = _getMtMinMax(tobs, uobs, ϕ, Kmin)
-    D = size(uobs,1)
-    numRad=length(mtParams)
-    mt = zeros(numRad, D)
-    for (m, p) in enumerate(mtParams), d in 1:D
-        mt[m,d] = min(mt_max, p*mt_min)
-    end
-    mt = Int.(ceil.(1 ./ mean(1 ./ mt, dims=2)))
-    return mt[:]
-end
-## Helper to get derivative of test functions
-function _computeDerivative(ϕ::TestFunction, deg::Int) 
-    if deg == 0 
-        return ϕ
-    end 
+"""
+    Compute the derivative of a test function 
+"""
+function _derivative(radius::Int, dt::AbstractFloat, order::Int)
     @variables t
-    Dt = Differential(t)^(deg)
-    Df_sym = Dt(ϕ(t))
-    Df_sym_exp = expand_derivatives(Df_sym)
-    return build_function(Df_sym_exp,t;expression=false)
+    φ = ExponentialTestFun()
+    φ′_sym = simplify((radius*dt)^(-order) * expand_derivatives(Differential(t)(φ(t))))
+    return build_function(φ′_sym, t; expression=false)
 end
-
-## Compute the values of the test function and its derivatives on a grid from [-1,1] with m points with weights that correspond to trapazoid rule. (normalized to have norm 1)
-function _getTestFunctionWeights(ϕ::TestFunction, m::Int, maxd::Int)
-    @variables t
-    xf = range(-1,1,2*m+1);
-    x = xf[2:end-1];
-    Cfs = zeros(maxd+1,2*m+1);
-    for (j,d)= enumerate(0:maxd)
-        # Take the derivative and turn it into a function
-        Df = _computeDerivative(ϕ,d)
-        Cfs[j,2:end-1] = Df.(x)
-        replace!(Cfs[j,2:end-1],NaN=>Df(eps()),missing=>Df(eps()))
-        # handle infinite valuse by perturbing the evaluation point
-        inds = findall(isinf.(abs.(Cfs[j,:])));
-        for ix in inds
-            # Cfs[j,ix] = Df(xf[ix]-sign(xf[ix])*eps()); ## What dan has
-            Cfs[j,ix] = Df(x[ix]-sign(x[ix])*eps()); ## TODO: Possible bug
-        end
+"""
+    Build chunks of the time domain given a radius of a test function and the number of time points. By default this will pack as many test functions as possible, but this can be reduced by setting K_r
+"""
+function _buildChunks(Mp1::Int, radius::Int, Kᵣ::Union{Int,Nothing}=nothing)
+    diam = Int(2*radius+1)
+    interiorLength = (Mp1-2*(radius+1))
+    # If we dont want to manual set how many test functions 
+    # there are, we can just add as many as possible. 
+    # This is equivalent to making the gap=1 ↔ Kᵣ = I
+    gap = isnothing(Kᵣ) ? 1 : Int(floor(interiorLength / Kᵣ))
+    # @assert isnothing(Kᵣ) || Kᵣ == Int(floor(interiorLength / gap))
+    Kᵣ = Int(floor(interiorLength / gap))
+    chunks = [(1:diam).+1 .+ k*gap for k in 0:(Kᵣ-1)] 
+    mod(interiorLength, Kᵣ) 
+    if mod(interiorLength, Kᵣ) != 0
+        lastEndPt = chunks[end][end]
+        intervalToFill =  Mp1-1 - lastEndPt 
+        numToAdd = Int(ceil(intervalToFill / gap))
+        chunks = vcat( 
+            chunks,  
+            [(Mp1-diam+1:Mp1) .- 1 .- k*gap for k in numToAdd-1:-1:0]
+        )
     end
-    return Cfs ./ norm(Cfs[1,:], 2);
+    return [c[2:end-1] for c in chunks] 
 end
-## Define how to subsample the test function discritization
-abstract type TestFunDiscritizationMethod end 
-struct UniformDiscritizationMethod <:TestFunDiscritizationMethod end 
-struct RandomDiscritizationMethod <:TestFunDiscritizationMethod end
-struct SpecifiedDiscritizationMethod <:TestFunDiscritizationMethod
-    ix::AbstractVector{<:Int}
-end  
-function _prepare_discritization(mt::Int,t::AbstractVector{<:Real},ϕ::TestFunction,max_derivative::Int)
-    dt = mean(diff(t));
-    Mp1 = length(t);
-    Φ = _getTestFunctionWeights(ϕ,mt,max_derivative);
-    return dt, Mp1, Φ
-end 
-
-function (meth::UniformDiscritizationMethod)(mt::Int,t::AbstractVector{<:Real},ϕ::TestFunction,max_derivative::Int, K::Real)
-    dt, Mp1, Φ = _prepare_discritization(mt,t,ϕ,max_derivative)
-    gap      = Int(max(1,floor((Mp1-2*mt)/K)));
-    dd       = 0:gap:Mp1-2*mt-1;
-    dd       = dd[1:min(K,end)];
-    V        = zeros(length(dd),Mp1, max_derivative+1);
-    for j=1:length(dd)
-        for (i,d) = enumerate(0:max_derivative)
-            V[j,gap*(j-1)+1:gap*(j-1)+2*mt+1,i] = Φ[i,:]*(mt*dt)^(-d)*dt;
-        end
-    end
-    return V
+"""
+    Build the V_full for a particular radius and test function φ. If asked provide the functions for each test function.
+"""
+function _buildV(radius::Int, Mp1::Int, dt::Real, Kᵣ::Union{Int, Nothing}=nothing; derivativeOrder::Int=0)
+    @assert isnothing(Kᵣ) || mod(Kᵣ,2)==0 "Kᵣ must be even "
+    diam = Int(2*radius+1) 
+    f = derivativeOrder == 0 ? WENDy.ExponentialTestFun() : _derivative(radius, dt, derivativeOrder)
+    chunks = _buildChunks(Mp1, radius, Kᵣ)
+    # chunks may be slightly longer than Kᵣ because 
+    # of rounding with discretization (or could be nothing)
+    Kᵣ = length(chunks)
+    Vr = zeros(Kᵣ, Mp1) 
+    xx = range(-1,1,diam)[2:end-1]
+    ϕ = f.(xx)
+    # normalize for stability
+    ϕnorm  = norm(WENDy.ExponentialTestFun().(xx))
+    ϕ /= ϕnorm
+    for (k,c) in enumerate(chunks) 
+        Vr[k, c] .= ϕ
+    end 
+    return Vr
 end
-
-function (meth::RandomDiscritizationMethod)(mt::Int,t::AbstractVector{<:Real},ϕ::TestFunction,max_derivative::Int, K::Real)
-    dt, Mp1, Φ = _prepare_discritization(mt,t,ϕ,max_derivative)
-    gaps = randperm(Mp1-2*mt,K);        
-    V = zeros(K,Mp1);
-    for j=1:K
-        for (i,d) = enumerate(0:max_derivative)
-            V[j,gaps[j]:gaps[j]+2*mt,i] = Φ[i,:]*(mt*dt)^(-d)*dt;
-        end
-    end
-    return V
+"""
+"""
+function getTestFunctionMatrices(tt::AbstractVector{<:Real}, U::AbstractMatrix{<:Real}, radiusMinTime::Real, radiusMaxTime::Real, numRadii::Int, testFunSubRate::Real, radiiParams::AbstractVector{<:Int}, maxTestFunCondNum::Real, Kᵣ::Union{Nothing,Int}; debug::Bool=false)
+    @assert all(diff(tt) .- (tt[2] - tt[1]) .< 1e-6) "Must use uniform time grid"
+    dt = mean(diff(tt))
+    _, Mp1= size(U)
+    # dont let the radius be larger than the radius of the interior of the domain
+    @show radiusMin = Int(max(ceil(radiusMinTime/dt), 2))
+    @show radiusMax = Int(min(floor((Mp1-2)/2), floor(radiusMaxTime/dt))) 
+    # select min radius by looking that M/testFunSubRate fourier mode of Φ∘U
+    @show radiusMin = _minRadius(U, dt, radiusMin, numRadii, testFunSubRate)
+    radii = filter(r->r < radiusMax, radiiParams*radiusMin)
+    V_full = reduce(vcat, _buildV(r, Mp1,dt, Kᵣ) for r in radii)
+    Vp_full = reduce(vcat, _buildV(r, Mp1,dt, Kᵣ; derivativeOrder=1) for r in radii)
+    @show size(V_full)
+    fact = svd(V_full)
+    # Choose K off how quickly the singular values decay wrt to the max
+    condNumbers = fact.S[1] ./ fact.S
+    K = Int(max(
+        round(Mp1/5), # TODO check that this makes sense
+        findfirst(condNumbers .> maxTestFunCondNum)- 1
+    ))
+    @show K
+    V = fact.Vt[1:K,:]
+    Vp = (diagm(1 ./ fact.S) * fact.U' *  Vp_full)[1:K,:]
+    @assert size(V,2) == Mp1 && size(Vp,2) == Mp1
+    return debug ? (radii, V_full, Vp_full, V, Vp) : (V, Vp)
 end
-
-function (meth::SpecifiedDiscritizationMethod)(mt::Int,t::AbstractVector{<:Real},ϕ::TestFunction,max_derivative::Int, ::Real)
-    dt, Mp1, Φ = _prepare_test_fun_svd(mt,t,ϕ,max_derivative)
-    center_scheme = unique(max.(min.(meth.ix,Mp1-mt),mt+1));
-    K = length(center_scheme);
-    V = zeros(K,Mp1,max_derivative+1);
-    for j=1:K
-        for (i,d) = enumerate(0:max_derivative)
-            V[j,center_scheme[j]-mt:center_scheme[j]+mt,i] = Φ[i,:]*(mt*dt)^(-d)*dt;
-        end
-    end        
-    return V
+## Convience wrapper to get testfunctions with the parameter struct
+function getTestFunctionMatrices(tt::AbstractVector{<:Real}, U::AbstractMatrix{<:Real}, params::WENDyParameters; kwargs...)
+    getTestFunctionMatrices(tt, U, params.radiusMinTime,params.radiusMaxTime, params.numRadii, params.testFunSubRate,params.radiiParams,params.maxTestFunCondNum,params.Kᵣ; kwargs...)
 end
-## Pruning Methods
-abstract type TestFunctionPruningMethod end 
-struct NoPruningMethod <: TestFunctionPruningMethod
-    radMeth::RadMethod
-    discMeth::TestFunDiscritizationMethod
-end 
-struct SingularValuePruningMethod <: TestFunctionPruningMethod 
-    radMeth::RadMethod
-    discMeth::TestFunDiscritizationMethod
-    val::UInt 
-    function SingularValuePruningMethod(radMeth::RadMethod,discMeth::TestFunDiscritizationMethod,val::UInt=UInt(0))
-        return new(radMeth,discMeth, val)
-    end
-end
-
-function _getK(Kmax::Int, D::Int, numRad::Int, Mp1::Int)
-    return Int(min(floor(Kmax/(D*numRad)), Mp1))
-end
-
-function (meth::NoPruningMethod)(tobs::AbstractVector{<:Real},uobs::AbstractMatrix{<:Real}, ϕ::TestFunction,Kmin::Int,Kmax::Int,mtParams::AbstractVector{<:Real})
-    Mp1, D = size(uobs)
-    numRad = length(mtParams)
-    mt = meth.radMeth(tobs, uobs, ϕ, mtParams, Kmin)
-    K = _getK(Kmax, D, numRad, length(tobs))
-    V = reduce(vcat, meth.discMeth(m,tobs,ϕ,1, K) for m in mt)
-    return V[:,:,1], V[:,:,2], V[:,:,1]
-end
-
-function (meth::SingularValuePruningMethod)(tobs::AbstractVector{<:Real}, uobs::AbstractMatrix{<:Real}, ϕ::TestFunction,Kmin::Int,Kmax::Int,mtParams::AbstractVector{<:Real})
-    numRad = length(mtParams)
-    if numRad == 1
-        return NoPruningMethod(meth.randMeth, meth.discMeth)(mt, tobs, ϕ, K)
-    end
-    D, Mp1 = size(uobs)
-    mt = meth.radMeth(tobs, uobs, ϕ, mtParams, Kmin)
-    K = _getK(Kmax, D, numRad, length(tobs))
-    Vfull = reduce(vcat,meth.discMeth(m,tobs,ϕ,0, K) for m in mt)[:,:,1]
-    Mp1 = length(tobs);
-    dt = mean(diff(tobs));
-    svd_fact = svd(Matrix(Vfull'); full=false);
-    U = svd_fact.U 
-    sings = svd_fact.S;
-    if meth.val == 0 
-        # default is to find the corner adaptively
-        corner_data = cumsum(sings)/sum(sings);
-        ix = getcorner(corner_data);
-        ix = min(max(Kmin,ix),K);
-    else 
-        # one can specify the "corner" or where the svd values start falling off
-        ix = findfirst(cumsum(sings.^2)/sum(sings.^2)>meth.val^2 > 0 );
-        if isnothing(ix)
-            ix = min(K,size(V,1));
-        end
-    end
-    inds = 1:ix;
-    Vt = U[:,inds]*dt;
-    V = Matrix(Vt')
-    Vp_hat = fft(Vt,(1,)); # the second argument specifies that we want to do the fft across columns like in matlab
-    if mod(Mp1,2)==0
-        k = vcat(0:Mp1/2, -Mp1/2+1:-1);
-    else
-        k = vcat(0:floor(Mp1/2), -floor(Mp1/2):-1);
-    end
-    Vp_hat = -((2*pi/Mp1/dt)*k).*Vp_hat;
-    # For odd derivatives there is a loss of symmetry
-    if mod(Mp1,2)==0
-        # TODO : is this a bug? should be   Vp_hat[Int(Mp1/2),:] .= 0 
-        Vp_hat[Int(Mp1/2)] = 0;        
-    end
-    Vp = Matrix(imag(ifft(Vp_hat,(1,)))');
-    return V, Vp, Vfull
-end
-

@@ -1,48 +1,59 @@
-## Don't add noise if it is an empirical data set
-generateNoise(data::EmpricalWENDyData, params::SimulationParameters) = (
-    data.U_full, 
-    NaN .* ones(size(data.U_full)), 
-    nothing, 
-    NaN .* ones(size(data.U_full,1))
-)
-## Add data according to the noise distribution and noise ratio
-function generateNoise(U_exact::AbstractMatrix{<:Real}, params::SimulationParameters, ::Val{DistType}; isotropic::Bool=true) where {DistType<:Distribution}
-    if (!isnothing(params.seed) && params.seed > 0) 
-        Random.seed!(params.seed)
-        @info "Seeeding the noise with value $(params.seed)"
+## Seed for reproducibility if asked 
+function _seed(seed::Union{Nothing,Int})
+    if (!isnothing(seed) && seed > 0) 
+        Random.seed!(seed)
+        @info "Seeeding the noise with value $(seed)"
     else 
         @info "no seeding"
     end
-    noiseRatio = params.noiseRatio
-    @assert noiseRatio > 0 "Noise ratio must be possitive"
+end
+## Normal
+function generateNoise(U_exact::AbstractMatrix{<:Real}, noiseRatio::Real, seed::Union{Nothing, Int}, isotropic::Bool, ::Val{Normal}) 
+    @assert noiseRatio >= 0 "Noise ratio must be possitive"
+    if noiseRatio == 0 
+        return U_exact, zeros(size(U_exact)), zeros(size(U_exact,1))
+    end
+    # seed if asked
+    _seed(seed)
+    # corrupt data with noise
     U = similar(U_exact)
     noise = similar(U_exact)
     D = size(U,1)
     σ = zeros(D)
-    if DistType == Normal  # additive
-        #TODO: Check with dan here
-        mean_signals = isotropic ? mean(U_exact .^2) .* ones(size(σ)) : mean(U_exact .^2, dims=2) 
-        for (d,signal) in enumerate(mean_signals)
-            σ[d] = noiseRatio*sqrt(signal) # TODO: HERE
-            dist = DistType(0, σ[d])
-            noise[d,:] = rand(dist,size(U_exact,2))
-            U[d,:] = U_exact[d,:] + noise[d,:]
-        end
-    elseif DistType == LogNormal # multiplicative
-        #TODO check with dan
-        # mean_signals = sqrt.(mean(log.(U_exact) .^2, dims=2))
-        σ .= noiseRatio
-        for d in 1:D
-            dist = DistType(0,σ[d]) # lognormal with logmean of 0, and 
-            noise[d,:] = rand(dist,size(U_exact,2))
-            U[d,:] = U_exact[d,:].*noise[d,:]
-        end
-    else 
-        throw(ArgumentError("Only Implemented for  Normal and LogNormal"),)
+    mean_signals = isotropic ? mean(U_exact .^2) .* ones(size(σ)) : mean(U_exact .^2, dims=2) 
+    for (d,signal) in enumerate(mean_signals)
+        σ[d] = noiseRatio*sqrt(signal) # TODO: HERE
+        dist = Normal(0, σ[d])
+        noise[d,:] = rand(dist,size(U_exact,2))
+        U[d,:] = U_exact[d,:] + noise[d,:]
     end
-    noise_ratio_obs = norm(U[:]-U_exact[:])/norm(U_exact[:])
-
-    return U,noise,noise_ratio_obs,σ
+    return U,noise,σ
+end
+## Log normal 
+function generateNoise(U_exact::AbstractMatrix{<:Real}, noiseRatio::Real, seed::Union{Nothing, Int}, isotropic::Bool, ::Val{LogNormal})
+    @assert noiseRatio > 0 "Noise ratio must be possitive"
+    if noiseRatio == 0 
+        Mp1 = size(U_exact,2)
+        return U_exact, Matrix{Float64}(I,Mp1,Mp1), zeros(size(U_exact,1))
+    end
+    # seed if asked
+    _seed(seed)
+    # corrupt data with noise
+    U = similar(U_exact)
+    noise = similar(U_exact)
+    D = size(U,1)
+    σ = zeros(D)
+    σ .= noiseRatio
+    for d in 1:D
+        dist = LogNormal(0,σ[d]) # lognormal with logmean of 0, and 
+        noise[d,:] = rand(dist,size(U_exact,2))
+        U[d,:] = U_exact[d,:].*noise[d,:]
+    end
+    return U,noise,σ
+end
+## Convience function for calling with SimParams struct
+function generateNoise(U_exact::AbstractMatrix{<:Real}, simParams::SimulationParameters, ::Val{DistType}) where DistType<:Distribution 
+    generateNoise(U_exact, simParams.noiseRatio, simParams.seed, simParams.isotropic, Val(DistType))
 end
 ## estimate the standard deviation of noise by filtering then computing rmse
 function estimate_std(_Y::AbstractMatrix{<:Real}; k::Int=6) 

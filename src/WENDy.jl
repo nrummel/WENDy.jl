@@ -2,29 +2,26 @@ module WENDy
     ## external dependencies
     # optimization algorithms
     using NonlinearSolve # high performance nonlinear solver
-    using Optimization, OptimizationOptimJL, Optim # Trust Region Solver
-    using JSOSolvers, ManualNLPModels, AdaptiveRegularization
-    using SFN # ARC and SFN solvers
+    using Optim # Trust Region Solver
+    using ManualNLPModels: NLPModel # necessary for ARC_qK
+    using AdaptiveRegularization: ARCqKOp # ARC_qK
     # For solving and symbolicly representing diff eq 
-    using OrdinaryDiffEq, ModelingToolkit, Symbolics
-    using OrdinaryDiffEq: ODESolution, OrdinaryDiffEqAlgorithm
+    using OrdinaryDiffEq, Symbolics
+    using OrdinaryDiffEq: ODESolution, OrdinaryDiffEqAlgorithm, solve
     using Symbolics: jacobian
-    using ModelingToolkit: build_function, modelingtoolkitize, @mtkbuild
-    import ModelingToolkit: equations, parameters, unknowns, D_nounits, t_nounits
-    using Symbolics: @variables
     # Other Necessities
     using BSON, MAT
     using Distributions: Normal, LogNormal, Distribution
     using ImageFiltering: imfilter, Inner # Convolution in Julia
-    using FFTW: fft, ifft
+    using FFTW: fft
     using Tullio: @tullio
     using ProgressMeter: @showprogress
     # stdlib
     using LinearAlgebra, Statistics, Random, Logging, Printf
     using Logging: Info, Warn, LogLevel
     ##
-    include("wendyTestFunctions.jl")
     include("wendyData.jl")
+    include("wendyTestFunctions.jl")
     include("wendyNoise.jl")
     include("wendySymbolics.jl")
     include("wendyProblems.jl")
@@ -37,8 +34,8 @@ module WENDy
     include("wendyLinearMethods.jl")
     include("wendyNonlinearMethods.jl")
     include("wendyOptim.jl")
-    export WENDyProblem, WENDyParameters, WENDyData, CostFunction, SimulatedWENDyData, EmpricalWENDyData, SimulationParameters
+    export WENDyProblem, WENDyParameters, WENDyData, CostFunction, SimulatedWENDyData, SimulationParameters
     export WeakNLL, GradientWeakNLL, HesianWeakNLL
     export simulate!, buildCostFunctions, forwardSolveRelErr, forwardSolve
-    export IRWLS, bfgs_Optim, tr_Optim, arc_SFN, tr_JSO, arc_JSO, hybrid, nonlinearLeastSquares
+    export IRWLS, bfgs, trustRegion, arcqk, hybrid, nonlinearLeastSquares
 end # module WENDy

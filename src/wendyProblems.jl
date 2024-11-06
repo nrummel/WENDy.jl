@@ -46,12 +46,6 @@ function _unpackData(data::SimulatedWENDyData{lip, DistType}, params::WENDyParam
         data.tt[], data.U[], data.sigTrue[], data.noise[], Float64.(data.wTrue), data.paramRng, data.U_exact[]
     )
 end
-## helper function that unpacks data and fill in NaN for truth
-function _unpackData(data::EmpricalWENDyData, params::WENDyParameters)
-    @info "Using EmpricalWENDyData"
-    J = length(data.odeprob.p)
-    data.tt_full, data.U_full, NaN*ones(size(data.U_full,1)), NaN*ones(size(data.U_full)), NaN*ones(J), NaN*ones(size(data.U_full))
-end
 ## helper function to build G matrix
 function _buildGmat(f!::Function, tt::AbstractVector{<:Real}, U::AbstractMatrix{<:Real}, V::AbstractMatrix{<:Real}, J::Int)
     D, Mp1 = size(U)
@@ -70,7 +64,7 @@ function _buildGmat(f!::Function, tt::AbstractVector{<:Real}, U::AbstractMatrix{
     end
     G
 end
-## Helper function to throw error when linear problem tries to call nonlinear functions that dont exist
+## Helper function to throw error when function should not exist
 function _foo!(::Any, ::Any, ::Any) 
     @assert false "This function is not implemented of linear problems"
 end
@@ -116,7 +110,7 @@ function WENDyProblem(data::WENDyData{lip, DistType}, params::WENDyParameters; l
         sig = estimate_std(_Y)
         noiseEstRelErr = norm(sigTrue - sig) / norm(sigTrue)
         @debug "  Relative Error in noise estimate $noiseEstRelErr"
-        V,Vp,_ = isnothing(matlab_data) ? params.pruneMeth(tt,_Y,params.ϕ,J,params.Kmax,params.testFuctionRadii) : (matlab_data["V"], matlab_data["Vp"], nothing)
+        V, Vp = getTestFunctionMatrices(tt, U, params)
         K, _ = size(V)
         @info " Building the LHS to the residual"
         b₀ = reshape(-Vp * _Y', K*D);

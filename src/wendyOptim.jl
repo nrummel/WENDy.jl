@@ -190,7 +190,7 @@ struct LeastSquaresCostFunction <: CostFunction
 end 
 
 ##
-function bfgs_Optim(
+function bfgs(
     costFun::CostFunction, w0::AbstractVector{<:Real}, params::WENDyParameters; 
     return_wits::Bool=false, kwargs...
 )
@@ -207,10 +207,10 @@ function bfgs_Optim(
     )
     what = res.minimizer
     iter = res.iterations
-    return return_wits ? (what, iter, reduce(hcat, t.metadata["x"] for t in res.trace)) : (what, iter) 
+    return return_wits ? (what, iter, reduce(hcat, t.metadata["x"] for t in res.trace)) : what
 end
 ##
-function tr_Optim(
+function trustRegion(
     costFun::SecondOrderCostFunction, w0::AbstractVector{<:Real}, params::WENDyParameters; 
     return_wits::Bool=false, kwargs...
 )
@@ -230,87 +230,10 @@ function tr_Optim(
     # unpack results
     what = res.minimizer
     iter = res.iterations
-    return return_wits ? (what, iter, reduce(hcat, t.metadata["x"] for t in res.trace)) : (what, iter) 
-end
-## 
-function arc_SFN(
-    costFun::SecondOrderCostFunction, w0::AbstractVector{<:Real}, params::WENDyParameters; 
-    return_wits::Bool=false, kwargs...
-)
-    maxIt,reltol,abstol,timelimit = params.optimMaxiters, params.optimReltol, params.optimAbstol, params.optimTimelimit
-    function fg!(grads, w)
-        costFun.∇f!(grads, w)
-        costFun.f(w)
-    end
-    function Hm(w)
-        costFun.Hf!(w)
-        costFun.Hf!.H
-    end
-    ##
-    opt = SFN.ARCOptimizer(
-        length(w0);
-        atol=abstol, 
-        rtol=reltol
-    )
-    stats, what, wits = SFN.minimize!(
-        opt, copy(w0), costFun.f, fg!, Hm;
-        itmax=maxIt, time_limit=timelimit,
-        kwargs...
-    )
-
-    return return_wits ? (what, size(wits,2), wits) : (what, size(wits,2))
+    return return_wits ? (what, iter, reduce(hcat, t.metadata["x"] for t in res.trace)) : what
 end
 ##
-function tr_JSO(
-    costFun::SecondOrderCostFunction, w0::AbstractVector{<:Real}, params::WENDyParameters; 
-    return_wits::Bool=false,kwargs...
-)
-    J = length(w0)
-    # this solver expects the an explicit gradient in this form
-    function fg!(g, w)
-        costFun.∇f!(g, w)
-        costFun.f(w), g
-    end
-    # This solver accepts Hvp operator, so we build one with memory
-    mem_w = zeros(J)
-    _H = zeros(J,J)
-    function Hv!(h, w, v; obj_weight=1.0)
-        if !all(mem_w .== w)
-            # @show norm(w - mem_w)
-            costFun.Hf!(_H, w)
-            mem_w .= w
-        end
-        h .= _H*v * obj_weight
-        h
-    end
-    # store iteratios in a callback
-    wits_tr = zeros(J, 0)
-    function _clbk(nlp, slvr::JSOSolvers.TrunkSolver, stats)
-        wits_tr
-        wits_tr = hcat(wits_tr, slvr.x)
-        nothing
-    end 
-    # build the model to optimize then call solver
-    nlp = NLPModel(
-        w0,
-        costFun.f;
-        objgrad = fg!,
-        hprod = Hv!
-    )
-    verbose = :show_trace in keys(kwargs) ? 1 : 0
-    out = trunk(
-        nlp,
-        verbose=verbose,
-        callback= return_wits ? _clbk : (::Any, ::Any,::Any) -> nothing,
-        atol=params.optimAbstol,
-        rtol=params.optimReltol,
-        max_iter=params.optimMaxiters,
-        max_time=params.optimTimelimit
-    )
-
-    return return_wits ? (out.solution, out.iter, wits_tr) : (out.solution, out.iter) 
-end
-function arc_JSO(
+function arcqk(
     costFun::SecondOrderCostFunction, w0::AbstractVector{<:Real}, params::WENDyParameters; 
     return_wits::Bool=false, kwargs...
 )
@@ -355,7 +278,7 @@ function arc_JSO(
         max_iter=params.optimMaxiters,
         max_time=params.optimTimelimit,
     )
-    return return_wits ? (out.solution, out.iter, wits_arc) : (out.solution, out.iter) 
+    return return_wits ? (out.solution, out.iter, wits_arc) : out.solution
 end
 
 function nonlinearLeastSquares(costFun::LeastSquaresCostFunction,
@@ -384,7 +307,7 @@ function nonlinearLeastSquares(costFun::LeastSquaresCostFunction,
     )
     what = sol.u
     iter = sol.stats.nsteps
-    return return_wits ? (what, iter, hcat(w0, what)) : (what, iter) 
+    return return_wits ? (what, iter, hcat(w0, what)) : what
 end
 
 function hybrid(
@@ -392,9 +315,9 @@ function hybrid(
     return_wits::Bool=false, kwargs...
 )
     what_wendy, iter_wendy, wits_wendy = if return_wits
-        tr_Optim(wnll, w0, params, return_wits=true)
+        trustRegion(wnll, w0, params, return_wits=true)
     else 
-        what_wendy, iter_wendy = tr_Optim(wnll, w0, params, return_wits=false)
+        what_wendy, iter_wendy = trustRegion(wnll, w0, params, return_wits=false)
         what_wendy, iter_wendy, nothing
     end 
 
@@ -404,5 +327,5 @@ function hybrid(
         what_fslsq, iter_fslsq = nonlinearLeastSquares(fslsq, what_wendy, params, return_wits=false)
         what_fslsq, iter_fslsq, nothing
     end 
-    return return_wits ?  (what_fslsq, iter_wendy+iter_fslsq, hcat(wits_wendy, wits_fslsq )) : (what_fslsq, iter_wendy+iter_fslsq)
+    return return_wits ?  (what_fslsq, iter_wendy+iter_fslsq, hcat(wits_wendy, wits_fslsq )) : what_fslsq
 end
