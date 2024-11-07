@@ -57,7 +57,7 @@ function _buildGmat(f!::Function, tt::AbstractVector{<:Real}, U::AbstractMatrix{
         eⱼ .= 0
         eⱼ[j] = 1
         for m in 1:Mp1 
-            @views f!(F[:,m], U[:,m],eⱼ,tt[m])
+            @views f!(F[:,m], U[:,m], eⱼ, tt[m])
         end 
         gⱼ = V * F'
         @views G[:,j] .= reshape(gⱼ,K*D)
@@ -100,21 +100,20 @@ end
 ## constructor
 function WENDyProblem(data::WENDyData{lip, DistType}, params::WENDyParameters; ll::LogLevel=Warn, matlab_data::Union{Dict,Nothing}=nothing) where {lip,DistType<:Distribution}
     with_logger(ConsoleLogger(stderr, ll)) do
+        @info "Building WENDyProblem"
         J = length(data.odeprob.p)
         tt, U, sigTrue, noise, wTrue, paramRng, U_exact = _unpackData(data, params)
         D, Mp1 = size(U)
-        @info "============================="
-        @info "Start of Algo"
-        @info " Estimate the noise in each dimension"
+        @info "  Estimate the noise in each dimension"
         _Y = DistType == Normal ? U : log.(U)
         sig = estimate_std(_Y)
         noiseEstRelErr = norm(sigTrue - sig) / norm(sigTrue)
         @debug "  Relative Error in noise estimate $noiseEstRelErr"
         V, Vp = getTestFunctionMatrices(tt, U, params)
         K, _ = size(V)
-        @info " Building the LHS to the residual"
+        @info "  Building the LHS to the residual"
         b₀ = reshape(-Vp * _Y', K*D);
-        @info " Build julia functions from symbolic expressions of ODE"
+        @info "  Build julia functions from symbolic expressions of ODE"
         (
             f!,jacuf!,
             G,

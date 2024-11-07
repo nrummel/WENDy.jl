@@ -1,20 +1,21 @@
 ##
 @kwdef struct WENDyParameters   
-    diagReg::Real = 1.0e-10
-    radiusMinTime::Real = 0.01
-    radiusMaxTime::Real = 2.0    
-    numRadii::Int = 100    
+    diagReg::Real                       = 1.0e-10
+    radiusMinTime::Real                 = 0.01
+    radiusMaxTime::Real                 = 2.0
+    numRadii::Int                       = 100
     radiiParams::AbstractVector{<:Real} = 2 .^(0:3)
-    testFunSubRate::Real = 2.0
-    maxTestFunCondNum::Real = 1e3
-    Kᵣ::Union{Nothing,Int} = nothing
-    nlsAbstol::Real = 1e-8
-    nlsReltol::Real = 1e-8
-    nlsMaxiters::Int = 1000
-    optimAbstol::Real = 1e-8
-    optimReltol::Real = 1e-8
-    optimMaxiters::Int = 200
-    optimTimelimit::Real = 200.0
+    testFunSubRate::Real                = 2.0
+    maxTestFunCondNum::Real             = 1e2
+    Kmax::Int                           = 200
+    Kᵣ::Union{Nothing,Int}              = 100
+    nlsAbstol::Real                     = 1e-8
+    nlsReltol::Real                     = 1e-8
+    nlsMaxiters::Int                    = 1000
+    optimAbstol::Real                   = 1e-8
+    optimReltol::Real                   = 1e-8
+    optimMaxiters::Int                  = 200
+    optimTimelimit::Real                = 200.0
 end 
 
 ##
@@ -116,14 +117,16 @@ end
     isotropic::Bool = true
 end
 ## add noise and subsample data
-function simulate!(data::SimulatedWENDyData{lip,DistType}, params::SimulationParameters; ll::LogLevel=Warn) where {lip, DistType<:Distribution}
+function simulate!(data::SimulatedWENDyData{lip,DistType}, params::SimulationParameters; ll::LogLevel=Debug) where {lip, DistType<:Distribution}
     with_logger(ConsoleLogger(stdout,ll)) do 
         @info "Simulating ..."
-        @info "  Subsample data "
+        @info "  Subsample data with rate $(params.timeSubsampleRate)"
         tt = data.tt_full[1:params.timeSubsampleRate:end]
         U_exact = data.U_full[:,1:params.timeSubsampleRate:end]
+        @info "  D,Mp1_full = $(size(data.U_full))"
         D, Mp1 = size(U_exact)
-        @info "  Adding noise from Distribution $DistType"
+        @info "  D,Mp1 = $(size(U_exact))"
+        @info "  Adding noise from Distribution $DistType and noise ratio $(params.noiseRatio)"
         U, noise, sigTrue = generateNoise(U_exact, params, Val(DistType))
         data.tt[] = tt
         data.U[] = U

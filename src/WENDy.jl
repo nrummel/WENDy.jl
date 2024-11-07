@@ -10,12 +10,11 @@ module WENDy
     using OrdinaryDiffEq: ODESolution, OrdinaryDiffEqAlgorithm, solve
     using Symbolics: jacobian
     # Other Necessities
-    using BSON, MAT
+    using BSON
     using Distributions: Normal, LogNormal, Distribution
     using ImageFiltering: imfilter, Inner # Convolution in Julia
-    using FFTW: fft
+    using FFTW: fft, ifft
     using Tullio: @tullio
-    using ProgressMeter: @showprogress
     # stdlib
     using LinearAlgebra, Statistics, Random, Logging, Printf
     using Logging: Info, Warn, LogLevel

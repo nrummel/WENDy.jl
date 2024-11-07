@@ -2,9 +2,9 @@
 function _seed(seed::Union{Nothing,Int})
     if (!isnothing(seed) && seed > 0) 
         Random.seed!(seed)
-        @info "Seeeding the noise with value $(seed)"
+        @info "  Seeeding the noise with value $(seed)"
     else 
-        @info "no seeding"
+        @info "  no seeding"
     end
 end
 ## Normal

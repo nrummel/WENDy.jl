@@ -186,7 +186,7 @@ function (m::NonlinearResidual)(b::AbstractVector{<:Real}, w::AbstractVector{T};
             ll=ll 
         )
     end
-    nothing
+    return m.r
 end
 ## ∇r & Rᵀ∇r
 # struct

@@ -32,7 +32,7 @@ end
 """
 function _minRadius(
     U::AbstractMatrix, dt::Real, 
-    radiusMin::Int, numRadii::Int, testFunSubRate::Real; 
+    radiusMin::Int, numRadii::Int, testFunSubRate::Real, Kᵣ::Union{Nothing,Int}; 
     debug::Bool=false
 )
     @assert 2 <= testFunSubRate < 4 "We only suppport scaling between 2 and 4"
@@ -45,7 +45,7 @@ function _minRadius(
     # we want the F[M/2]
     
     for (r,radius) in enumerate(radii)
-        VV = _buildV(radius, Mp1, dt)
+        VV = _buildV(radius, Mp1, dt, Kᵣ)
         V = VV[:,:,1]
         K = size(V,1)
         @tullio ΦU[k,d,m] := V[k,m]*U[d,m]
@@ -53,7 +53,7 @@ function _minRadius(
         Fhat_ΦU = fft(ΦU, (2,))
         errs[r] = norm(imag(Fhat_ΦU[:,IX]))
     end
-    @show ix = _getcorner(log.(errs), radii) 
+    ix = _getcorner(log.(errs), radii) 
     
     return debug ? (radii[ix], ix, radii, errs) : radii[ix]
 end
@@ -75,7 +75,7 @@ function _buildChunks(Mp1::Int, radius::Int, Kᵣ::Union{Int,Nothing}=nothing)
     # If we dont want to manual set how many test functions 
     # there are, we can just add as many as possible. 
     # This is equivalent to making the gap=1 ↔ Kᵣ = I
-    gap = isnothing(Kᵣ) ? 1 : Int(floor(interiorLength / Kᵣ))
+    gap = isnothing(Kᵣ) ? 1 : max(Int(floor(interiorLength / Kᵣ)),1)
     # @assert isnothing(Kᵣ) || Kᵣ == Int(floor(interiorLength / gap))
     Kᵣ = Int(floor(interiorLength / gap))
     chunks = [(1:diam).+1 .+ k*gap for k in 0:(Kᵣ-1)] 
@@ -113,35 +113,65 @@ function _buildV(radius::Int, Mp1::Int, dt::Real, Kᵣ::Union{Int, Nothing}=noth
     end 
     return Vr
 end
+""" """ 
+function _computeDerivative_analytic(Vp_full::AbstractMatrix, fact::SVD, K::Int)
+    @info "    Computing Vp with analytic Vp_full and svd(V_full)"
+    (diagm(1 ./ fact.S) * fact.U' *  Vp_full)[1:K,:]
+end
+""" """
+function _computeDerivative_fft(V::AbstractMatrix, dt::Real)
+    @info "    Computing Vp with the fft"
+    _, Mp1 = size(V)
+    Vp_fft = zeros(size(V))
+    _Vp_fft = fft(V', (1, ))
+    k = mod(Mp1,2)==0 ? 
+        vcat(0:Mp1/2, -Mp1/2+1:-1) : 
+        vcat(0:floor(Mp1/2), -floor(Mp1/2):-1)
+    Vp_fft = imag(ifft((-2*pi/(Mp1*dt))*k .* _Vp_fft, (1,)))'
+end
 """
 """
-function getTestFunctionMatrices(tt::AbstractVector{<:Real}, U::AbstractMatrix{<:Real}, radiusMinTime::Real, radiusMaxTime::Real, numRadii::Int, testFunSubRate::Real, radiiParams::AbstractVector{<:Int}, maxTestFunCondNum::Real, Kᵣ::Union{Nothing,Int}; debug::Bool=false)
-    @assert all(diff(tt) .- (tt[2] - tt[1]) .< 1e-6) "Must use uniform time grid"
-    dt = mean(diff(tt))
-    _, Mp1= size(U)
-    # dont let the radius be larger than the radius of the interior of the domain
-    @show radiusMin = Int(max(ceil(radiusMinTime/dt), 2))
-    @show radiusMax = Int(min(floor((Mp1-2)/2), floor(radiusMaxTime/dt))) 
-    # select min radius by looking that M/testFunSubRate fourier mode of Φ∘U
-    @show radiusMin = _minRadius(U, dt, radiusMin, numRadii, testFunSubRate)
-    radii = filter(r->r < radiusMax, radiiParams*radiusMin)
-    V_full = reduce(vcat, _buildV(r, Mp1,dt, Kᵣ) for r in radii)
-    Vp_full = reduce(vcat, _buildV(r, Mp1,dt, Kᵣ; derivativeOrder=1) for r in radii)
-    @show size(V_full)
-    fact = svd(V_full)
-    # Choose K off how quickly the singular values decay wrt to the max
-    condNumbers = fact.S[1] ./ fact.S
-    K = Int(max(
-        round(Mp1/5), # TODO check that this makes sense
-        findfirst(condNumbers .> maxTestFunCondNum)- 1
-    ))
-    @show K
-    V = fact.Vt[1:K,:]
-    Vp = (diagm(1 ./ fact.S) * fact.U' *  Vp_full)[1:K,:]
-    @assert size(V,2) == Mp1 && size(Vp,2) == Mp1
-    return debug ? (radii, V_full, Vp_full, V, Vp) : (V, Vp)
+function getTestFunctionMatrices(
+    tt::AbstractVector{<:Real}, U::AbstractMatrix{<:Real}, radiusMinTime::Real, radiusMaxTime::Real, numRadii::Int, testFunSubRate::Real, radiiParams::AbstractVector{<:Int}, maxTestFunCondNum::Real, Kmax::Int, Kᵣ::Union{Nothing,Int}; 
+    analyticVp::Bool=true, noSVD::Bool=false, ll::LogLevel=Info, debug::Bool=false
+)
+    with_logger(ConsoleLogger(stderr, ll)) do 
+        @info "  Getting Test Function Matrices"
+        @assert all(diff(tt) .- (tt[2] - tt[1]) .< 1e-6) "Must use uniform time grid"
+        dt = mean(diff(tt))
+        _, Mp1= size(U)
+        @info "    Mp1 = $Mp1"
+        # dont let the radius be larger than the radius of the interior of the domain
+        radiusMin = Int(max(ceil(radiusMinTime/dt), 2))
+        radiusMax = Int(min(floor((Mp1-2)/2), floor(radiusMaxTime/dt))) 
+        @info "    pre-radiusMin=$radiusMin, radiusMax=$radiusMax"
+        # select min radius by looking that M/testFunSubRate fourier mode of Φ∘U
+        radiusMin = _minRadius(U, dt, radiusMin, numRadii, testFunSubRate, Kᵣ)
+        @info "    radiusMin=$radiusMin"
+        radii = filter(r->r < radiusMax, radiiParams*radiusMin)
+        V_full = reduce(vcat, _buildV(r, Mp1, dt, Kᵣ) for r in radii)
+        Vp_full = reduce(vcat, _buildV(r, Mp1, dt, Kᵣ; derivativeOrder=1) for r in radii)
+        @info "    K_full=$(size(V_full,1))"
+        if noSVD
+            @info "    Returning the V_full, Vp_full"
+            return V_full, Vp_full 
+        end
+        fact = svd(V_full)
+        # Choose K off how quickly the singular values decay wrt to the max
+        condNumbers = fact.S[1] ./ fact.S
+        K = findfirst(condNumbers .> maxTestFunCondNum) - 1
+        if K > min(Mp1, Kmax)
+            @info "    K=$K, but Kmax=$Kmax and Mp1=$Mp1"
+            K = min(Mp1,Kmax)
+        end
+        @info "    K=$(K)"
+        V = fact.Vt[1:K,:]
+        Vp = analyticVp ? _computeDerivative_analytic(Vp_full, fact, K) : _computeDerivative_fft(V, dt)
+        @assert size(V,2) == Mp1 && size(Vp,2) == Mp1
+        return debug ? (radii, V_full, Vp_full, V, Vp) : (V, Vp)
+    end
 end
 ## Convience wrapper to get testfunctions with the parameter struct
 function getTestFunctionMatrices(tt::AbstractVector{<:Real}, U::AbstractMatrix{<:Real}, params::WENDyParameters; kwargs...)
-    getTestFunctionMatrices(tt, U, params.radiusMinTime,params.radiusMaxTime, params.numRadii, params.testFunSubRate,params.radiiParams,params.maxTestFunCondNum,params.Kᵣ; kwargs...)
+    getTestFunctionMatrices(tt, U, params.radiusMinTime,params.radiusMaxTime, params.numRadii, params.testFunSubRate,params.radiiParams,params.maxTestFunCondNum,params.Kmax, params.Kᵣ; kwargs...)
 end
