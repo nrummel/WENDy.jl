@@ -5,6 +5,7 @@ function _L₀!(
     Vp::AbstractMatrix, sig::AbstractVector, # data
     __L₀::AbstractArray{<:Real,4}, _L₀::AbstractArray{<:Real,4} # buffers
 )
+    # TODO should we just use _L₀[k,d,m,d]?
     @tullio __L₀[k,d,d,m] = Vp[k,m]*sig[d]
     permutedims!(_L₀,__L₀,(1,2,4,3))
     K,D,Mp1,_ = size(_L₀)

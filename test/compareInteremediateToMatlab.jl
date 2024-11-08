@@ -16,7 +16,7 @@ nothing
 ex = HINDMARSH_ROSE
 params = WENDyParameters(;noiseRatio=0.05)
 wendyProb = _MATLAB_WENDyProblem(ex, params;ll=Info)
-wTrue = wendyProb.wTrue
+wTrue = ex.wTrue
 J = length(wTrue)
 w0 = wendyProb._matdata["w0"][:]
 K,Mp1,D = wendyProb.K, wendyProb.Mp1, wendyProb.D

@@ -6,13 +6,16 @@ function _L₁!(
     jacuf!::Function, 
     JuF::AbstractArray{<:Real, 3}, _∂Lⱼ::AbstractArray{<:Real, 4}, ∂Lⱼ::AbstractArray{<:Real, 4},  eⱼ::AbstractVector{<:Real}
 )
-    KD,MD,J = size(L₁)
-    _,_,Mp1 = size(JuF)
+    Mp1,D = size(U)
+    K,_ = size(V)
+    J = length(eⱼ)
+    KD = K*D
+    MD = Mp1*D
     for j = 1:J 
         eⱼ .= 0
         eⱼ[j] = 1
         @inbounds for m in 1:Mp1
-            jacuf!(view(JuF,:,:,m), view(U,:,m), eⱼ, tt[m])
+            @views jacuf!(JuF[:,:,m], U[m,:], eⱼ, tt[m])
         end
         @tullio _∂Lⱼ[k,d2,d1,m] = JuF[d2,d1,m] * V[k,m]* sig[d1] # increases allocation from 4 to 45 
         permutedims!(∂Lⱼ,_∂Lⱼ,(1,2,4,3))

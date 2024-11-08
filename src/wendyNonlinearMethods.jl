@@ -18,7 +18,7 @@ struct NonlinearCovarianceFactor<:CovarianceFactor
 end 
 # constructor
 function NonlinearCovarianceFactor(prob::WENDyProblem{false}, params::Union{WENDyParameters,Nothing}=nothing, ::Val{T}=Val(Float64)) where T<:Real
-    D, Mp1 = size(prob.U)
+    Mp1, D = size(prob.U)
     K, _ = size(prob.V)
     # preallocate output
     L = zeros(T,K*D,Mp1*D)
@@ -63,7 +63,7 @@ function (m::NonlinearCovarianceFactor)(w::AbstractVector{<:Real}; ll::LogLevel=
         m.JuF,m.__L₁,m._L₁;
         ll=ll
     )
-    nothing
+    return m.L
 end
 ##
 struct NonlinearGradientCovarianceFactor<:GradientCovarianceFactor 
@@ -131,12 +131,12 @@ struct NonlinearResidual<:Residual
 end
 # constructors 
 function NonlinearResidual(prob::WENDyProblem{false}, params::Union{WENDyParameters, Nothing}=nothing, ::Val{T}=Val(Float64)) where T<:Real
-    D, Mp1 = size(prob.U)
+    Mp1, D = size(prob.U)
     K, _ = size(prob.V)
     # ouput
     r = zeros(T,K*D)
     # buffers
-    F = zeros(T, D, Mp1)
+    F = zeros(T, Mp1, D)
     G = zeros(T, K, D)
     g = zeros(T, K*D)
     NonlinearResidual(
@@ -208,7 +208,7 @@ end
 # constructors
 function NonlinearJacobianResidual(prob::WENDyProblem{false}, params::Union{WENDyParameters, Nothing}=nothing, ::Val{T}=Val(Float64)) where T<:Real 
     J = prob.J
-    D, Mp1 = size(prob.U)
+    Mp1, D = size(prob.U)
     K, _ = size(prob.V)
     Rᵀ⁻¹∇r = zeros(K*D,J)
     JwF = zeros(T,D,J,Mp1)
@@ -253,7 +253,7 @@ function (m::NonlinearJacobianResidual)(w::AbstractVector{<:Real}; ll::LogLevel=
             m.JwF,m.__∇r,m._∇r;
             ll=ll
         )
-        return nothing
+        return m.∇r
     end
     _Rᵀ⁻¹∇r!(
         m.Rᵀ⁻¹∇r,w,
@@ -262,7 +262,7 @@ function (m::NonlinearJacobianResidual)(w::AbstractVector{<:Real}; ll::LogLevel=
         m.JwF,m.__∇r,m._∇r,m.∇r;
         ll=ll
     )
-    nothing
+    return m.Rᵀ⁻¹∇r
 end 
 ##
 ## Hm(w) - Hessian of Maholinobis Distance
@@ -364,4 +364,5 @@ function (m::NonlinearHesianWeakNLL)(w::AbstractVector{<:Real}; ll::LogLevel=War
         m.heswf!, m.heswjacuf!,  
         m.S⁻¹r, m.S⁻¹∇r, m.∂ⱼLLᵀ, m.∇S, m.HwF, m._∇²r, m.∇²r, m.HwJuF, m.__∇²L, m._∇²L, m.∇²L, m.∂ⱼL∂ᵢLᵀ, m.∂ᵢⱼLLᵀ, m.∂ᵢⱼS, m.S⁻¹∂ⱼS, m.∂ᵢSS⁻¹∂ⱼS
     )
+    return m.H
 end

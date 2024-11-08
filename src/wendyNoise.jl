@@ -18,14 +18,14 @@ function generateNoise(U_exact::AbstractMatrix{<:Real}, noiseRatio::Real, seed::
     # corrupt data with noise
     U = similar(U_exact)
     noise = similar(U_exact)
-    D = size(U,1)
+    Mp1, D = size(U)
     σ = zeros(D)
     mean_signals = isotropic ? mean(U_exact .^2) .* ones(size(σ)) : mean(U_exact .^2, dims=2) 
     for (d,signal) in enumerate(mean_signals)
-        σ[d] = noiseRatio*sqrt(signal) # TODO: HERE
+        σ[d] = noiseRatio*sqrt(signal) 
         dist = Normal(0, σ[d])
-        noise[d,:] = rand(dist,size(U_exact,2))
-        U[d,:] = U_exact[d,:] + noise[d,:]
+        noise[:,d] .= rand(dist, Mp1)
+        U[:,d] .= U_exact[:,d] + noise[:,d]
     end
     return U,noise,σ
 end
@@ -33,21 +33,21 @@ end
 function generateNoise(U_exact::AbstractMatrix{<:Real}, noiseRatio::Real, seed::Union{Nothing, Int}, isotropic::Bool, ::Val{LogNormal})
     @assert noiseRatio > 0 "Noise ratio must be possitive"
     if noiseRatio == 0 
-        Mp1 = size(U_exact,2)
-        return U_exact, Matrix{Float64}(I,Mp1,Mp1), zeros(size(U_exact,1))
+        Mp1,D = size(U_exact)
+        return U_exact, Matrix{Float64}(I,Mp1,Mp1), zeros(D)
     end
     # seed if asked
     _seed(seed)
     # corrupt data with noise
     U = similar(U_exact)
     noise = similar(U_exact)
-    D = size(U,1)
+    Mp1, D = size(U)
     σ = zeros(D)
     σ .= noiseRatio
     for d in 1:D
-        dist = LogNormal(0,σ[d]) # lognormal with logmean of 0, and 
-        noise[d,:] = rand(dist,size(U_exact,2))
-        U[d,:] = U_exact[d,:].*noise[d,:]
+        dist = LogNormal(0,σ[d]) # lognormal with logmean of 0, and variance of σ_d
+        noise[:,d] .= rand(dist,Mp1)
+        U[:,d] .= U_exact[:,d] .* noise[:,d]
     end
     return U,noise,σ
 end
@@ -57,10 +57,10 @@ function generateNoise(U_exact::AbstractMatrix{<:Real}, simParams::SimulationPar
 end
 ## estimate the standard deviation of noise by filtering then computing rmse
 function estimate_std(_Y::AbstractMatrix{<:Real}; k::Int=6) 
-    D,Mp1 = size(_Y) 
+    _, D = size(_Y) 
     std = zeros(D)
     for d = 1:D
-        f = _Y[d,:]
+        f = _Y[:,d]
         C = fdcoeffF(k,0,-k-2:k+2)
         filter = C[:,end]
         filter = filter / norm(filter,2)

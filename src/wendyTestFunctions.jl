@@ -36,7 +36,7 @@ function _minRadius(
     debug::Bool=false
 )
     @assert 2 <= testFunSubRate < 4 "We only suppport scaling between 2 and 4"
-    D, Mp1 = size(U)
+    Mp1, D = size(U)
     radii = radiusMin:radiusMin+numRadii
     errs = zeros(length(radii))
     # Select the fourier modes from just the where roots of unit would hit on the subsampled grid
@@ -48,7 +48,7 @@ function _minRadius(
         VV = _buildV(radius, Mp1, dt, Kᵣ)
         V = VV[:,:,1]
         K = size(V,1)
-        @tullio ΦU[k,d,m] := V[k,m]*U[d,m]
+        @tullio ΦU[k,d,m] := V[k,m]*U[m,d]
         ΦU = reshape(ΦU, K*D, Mp1)
         Fhat_ΦU = fft(ΦU, (2,))
         errs[r] = norm(imag(Fhat_ΦU[:,IX]))
@@ -139,7 +139,7 @@ function getTestFunctionMatrices(
         @info "  Getting Test Function Matrices"
         @assert all(diff(tt) .- (tt[2] - tt[1]) .< 1e-6) "Must use uniform time grid"
         dt = mean(diff(tt))
-        _, Mp1= size(U)
+        Mp1, _ = size(U)
         @info "    Mp1 = $Mp1"
         # dont let the radius be larger than the radius of the interior of the domain
         radiusMin = Int(max(ceil(radiusMinTime/dt), 2))
@@ -149,8 +149,8 @@ function getTestFunctionMatrices(
         radiusMin = _minRadius(U, dt, radiusMin, numRadii, testFunSubRate, Kᵣ)
         @info "    radiusMin=$radiusMin"
         radii = filter(r->r < radiusMax, radiiParams*radiusMin)
-        V_full = reduce(vcat, _buildV(r, Mp1, dt, Kᵣ) for r in radii)
-        Vp_full = reduce(vcat, _buildV(r, Mp1, dt, Kᵣ; derivativeOrder=1) for r in radii)
+        V_full = reduce(vcat, _buildV(r, Mp1, dt) for r in radii)
+        Vp_full = reduce(vcat, _buildV(r, Mp1, dt; derivativeOrder=1) for r in radii)
         @info "    K_full=$(size(V_full,1))"
         if noSVD
             @info "    Returning the V_full, Vp_full"
@@ -159,7 +159,7 @@ function getTestFunctionMatrices(
         fact = svd(V_full)
         # Choose K off how quickly the singular values decay wrt to the max
         condNumbers = fact.S[1] ./ fact.S
-        K = findfirst(condNumbers .> maxTestFunCondNum) - 1
+        K = findlast(condNumbers .<= maxTestFunCondNum) 
         if K > min(Mp1, Kmax)
             @info "    K=$K, but Kmax=$Kmax and Mp1=$Mp1"
             K = min(Mp1,Kmax)

@@ -19,46 +19,8 @@ function _solve_ode(
         verbose=verbose, kwargs...
     )
 end
-
 ##
 function forwardSolve(prob::WENDyProblem, w::AbstractVector{<:Real}; kwargs...)
-    sol = _solve_ode(prob.data.f!, prob.data.tRng, prob.Mp1, w, prob.data.initCond; kwargs...)
-    return reduce(hcat, sol.u)
+    sol = _solve_ode(prob.f!, (prob.tt[1], prob.tt[end]), prob.Mp1, w, prob.U[1,:]; kwargs...)
+    return reduce(vcat, sol.u')
 end
-## compute forward solve relative error
-function forwardSolveRelErr(prob::WENDyProblem, w::AbstractVector{<:Real}; kwargs...)
-    Uhat = forwardSolve(prob, w; kwargs...)
-    # norm(Uhat-prob.U_exact) / norm(prob.U_exact)
-    Ustar = prob.U_exact
-    _, Mp1 = size(Ustar)
-    @views avg_rel_err = sum(norm(Uhat[:,m] - Ustar[:,m]) for m in 1:Mp1) / sum(norm(Ustar[:,m]) for m in 1:Mp1)
-    @views final_rel_err = norm(Uhat[:,end] - Ustar[:,end]) / norm(Ustar[:,end])
-    avg_rel_err, final_rel_err
-end
-## 
-function _l2(w::AbstractVector{<:Real}, U::AbstractMatrix, ex::WENDyData)
-    try 
-        odeprob = ODEProblem{true, SciMLBase.FullSpecialize}(
-            ex.f!, 
-            ex.initCond,
-            ex.tRng,
-            w
-        )
-        Mp1 = size(U,2)
-        t_step = abs(ex.tRng[end] - ex.tRng[1]) / (Mp1-1)
-        sol = solve(
-            odeprob,
-            Rosenbrock23(); 
-            # reltol=1e-12, abstol=1e-12, 
-            # saveat=t_step, 
-            saveat=ex.tRng[1]:t_step:ex.tRng[end], 
-            verbose=false
-        )
-        Uhat = reduce(hcat, sol.u)
-        _, Mp1 = size(U)
-        @views sum(norm(Uhat[:,m] - U[:,m]) for m in 1:Mp1)
-    catch
-        NaN
-    end
-end
-

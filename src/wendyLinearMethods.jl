@@ -12,8 +12,8 @@ function LinearCovarianceFactor(prob::WENDyProblem{true}, params::Union{Nothing,
     ::Val{T}=Val(Float64) #optional type
 ) where T<:Real
     U, V, Vp, sig, jacuf! = prob.U, prob.V, prob.Vp, prob.sig, prob.jacuf!
-    D, Mp1 = size(U)
-    K, _ = size(V)
+    Mp1, D = size(U)
+    K, Mp1 = size(V)
     J = prob.J
     # preallocate output
     L = zeros(T,K*D,Mp1*D)
@@ -60,7 +60,7 @@ function (m::LinearCovarianceFactor)(w::AbstractVector{<:Real}; ll::LogLevel=Inf
         m.L₁,m.L₀;
         ll=ll
     )
-    nothing
+    return m.L
 end
 ## ∇L(w)
 struct LinearGradientCovarianceFactor<:GradientCovarianceFactor 
@@ -85,7 +85,7 @@ function LinearGradientCovarianceFactor(prob, params, ::Val{T}=Val(Float64)) whe
 end
 # method inplace 
 function (m::LinearGradientCovarianceFactor)(∇L::AbstractArray{3, <:Real}, ::AbstractVector{<:Real}; ll::LogLevel=Warn)
-    @views ∇L .= m.∇L
+    s∇L .= m.∇L
 end
 (m::LinearGradientCovarianceFactor)(::AbstractVector{<:Real}; ll::LogLevel=Warn) = nothing
 ## r(w) - Residual
@@ -100,12 +100,13 @@ struct LinearResidual<:Residual
 end
 # constructors 
 function LinearResidual(prob::WENDyProblem{true}, params::Union{WENDyParameters, Nothing}=nothing, ::Val{T}=Val(Float64)) where T<:Real 
-    D, Mp1 = size(prob.U)
+    Mp1, D = size(prob.U)
     K, _ = size(prob.V)
+    KD = K*D
     # ouput
-    r = zeros(T,K*D)
+    r = zeros(T,KD)
     # buffers
-    g = zeros(T, K*D)
+    g = zeros(T, KD)
     LinearResidual(r,prob.G,g)
 end
 # method inplace 
@@ -166,11 +167,11 @@ end
 # method mutate internal data and return
 function (m::LinearJacobianResidual)(w::AbstractVector{<:Real}; ll::LogLevel=Warn, Rᵀ::Union{Nothing,AbstractMatrix{<:Real}}=nothing)
     if isnothing(Rᵀ)
-        @views m.∇r .= m.G
-        return nothing
+        m.∇r .= m.G
+        return m.∇r
     end
     ldiv!(m.Rᵀ⁻¹∇r, LowerTriangular(Rᵀ), m.G)
-    m.Rᵀ⁻¹∇r
+    return m.Rᵀ⁻¹∇r
 end 
 ## Hm(w) - Hessian of Maholinobis Distance
 struct LinearHesianWeakNLL<:HesianWeakNLL
@@ -246,4 +247,5 @@ function (m::LinearHesianWeakNLL)(w::AbstractVector{<:Real}; ll::LogLevel=Warn)
         m.r!.r,  
         m.S⁻¹r, m.S⁻¹∇r, m.∂ⱼLLᵀ, m.∇S, m.∂ⱼL∂ᵢLᵀ, m.∂ᵢⱼS, m.S⁻¹∂ⱼS, m.∂ᵢSS⁻¹∂ⱼS
     )
+    return m.H
 end

@@ -56,7 +56,7 @@ function SimulatedWENDyData(
     linearInParameters::Val{lip}=Val(false), #linearInParameters
     file::Union{String, Nothing}=nothing,
     noiseDist::Val{DistType}=Val(Normal), #distributionType
-    forceOdeSolve::Bool=false,
+    forceOdeSolve::Bool=true,
     ll::LogLevel=Warn
 ) where {lip, DistType<:Distribution}
     with_logger(ConsoleLogger(stderr, ll)) do 
@@ -71,20 +71,21 @@ function SimulatedWENDyData(
             @info "  Generating data for $file by solving ode"
             sol = _solve_ode(f!, tRng, Mp1, wTrue, initCond)
             t = sol.t
-            u = reduce(hcat, sol.u)
+            U = reduce(vcat, sol.u')
+            @assert !any(isnan.(U))
             mkpath(dirname(file))
-            BSON.@save file t u
-            t, u
+            BSON.@save file t U
+            t, U
         else
             @info "Loading from file"
             data = BSON.load(file) 
             tt_full= data[:t] 
-            U_full = data[:u] 
+            U_full = data[:U] 
             tt_full, U_full 
         end
         ## handle the case for LogNormal Noise by removing any data where the value is zero or neg
         if DistType == LogNormal && any(U_full .<= 0)
-            ix = findall( all(U_full[:,m] .> 0) for m in 1:size(U_full,2))
+            ix = findall( all(U_full[m,:] .> 0) for m in 1:size(U_full,2))
             @info " Removing data that is zero so that logrithms are well defined: $(length(tt_full) - length(ix)) data point(s) are invalid"
             tt_full = tt_full[ix]
             U_full = U_full[:,ix]
@@ -122,12 +123,12 @@ function simulate!(data::SimulatedWENDyData{lip,DistType}, params::SimulationPar
         @info "Simulating ..."
         @info "  Subsample data with rate $(params.timeSubsampleRate)"
         tt = data.tt_full[1:params.timeSubsampleRate:end]
-        U_exact = data.U_full[:,1:params.timeSubsampleRate:end]
-        @info "  D,Mp1_full = $(size(data.U_full))"
-        D, Mp1 = size(U_exact)
-        @info "  D,Mp1 = $(size(U_exact))"
+        U_exact = data.U_full[1:params.timeSubsampleRate:end,:]
+        @info "  Mp1_full,D = $(size(data.U_full))"
+        @info "  Mp1,D = $(size(U_exact))"
         @info "  Adding noise from Distribution $DistType and noise ratio $(params.noiseRatio)"
         U, noise, sigTrue = generateNoise(U_exact, params, Val(DistType))
+        @assert !any(isnan.(U))
         data.tt[] = tt
         data.U[] = U
         data.U_exact[] = U_exact
