@@ -68,14 +68,14 @@ function (m::NLS_iter)(wnm1::AbstractVector{<:AbstractFloat};ll::LogLevel=Warn, 
             w::AbstractVector, 
             ::Any; 
             ll::LogLevel=_ll
-        ) = m.r!(r, b, w; ll=ll, Rᵀ=m.Rᵀ!.R,) 
+        ) = m.r!(r, w, b, m.Rᵀ!.R; ll=ll) 
 
         jacn!(
             jac::AbstractMatrix, 
             w::AbstractVector, 
             ::Any; 
             ll::LogLevel=_ll
-        ) = m.∇r!(jac, w; ll=ll, Rᵀ=m.Rᵀ!.R,)
+        ) = m.∇r!(jac, w, m.Rᵀ!.R; ll=ll)
         # Solve nonlinear Least squares problem         
         prob = NonlinearLeastSquaresProblem(
             NonlinearFunction(
@@ -188,27 +188,6 @@ struct LeastSquaresCostFunction <: CostFunction
     J!::Function 
     KD::Int
 end 
-
-##
-function bfgs(
-    costFun::CostFunction, w0::AbstractVector{<:Real}, params::WENDyParameters; 
-    return_wits::Bool=false, kwargs...
-)
-
-    maxIt,reltol,abstol,timelimit = params.optimMaxiters, params.optimReltol, params.optimAbstol, params.optimTimelimit
-    
-    res = Optim.optimize(
-        costFun.f, costFun.∇f!, w0, Optim.BFGS(),
-        Optim.Options(
-            x_reltol=reltol, x_abstol=abstol, iterations=maxIt, time_limit=timelimit, 
-            store_trace=return_wits, extended_trace=return_wits,
-            kwargs...
-        )
-    )
-    what = res.minimizer
-    iter = res.iterations
-    return return_wits ? (what, iter, reduce(hcat, t.metadata["x"] for t in res.trace)) : what
-end
 ##
 function trustRegion(
     costFun::SecondOrderCostFunction, w0::AbstractVector{<:Real}, params::WENDyParameters; 
@@ -221,7 +200,7 @@ function trustRegion(
     res = Optim.optimize(
         costFun.f, costFun.∇f!, costFun.Hf!, # f, g, h
         zeros(J), Inf*ones(J), # box constraints 
-        w0, Optim.IPNewton(), # x0, algo
+        w0, Optim.NewtonTrustRegion(), # x0, algo
         Optim.Options(
             x_reltol=reltol, x_abstol=abstol, iterations=maxIt, time_limit=timelimit, 
             store_trace=return_wits, extended_trace=return_wits
@@ -328,4 +307,23 @@ function hybrid(
         what_fslsq, iter_fslsq, nothing
     end 
     return return_wits ?  (what_fslsq, iter_wendy+iter_fslsq, hcat(wits_wendy, wits_fslsq )) : what_fslsq
+end
+""" Wrapper function to call specific solvers """
+function solve!(wendyProb::WENDyProblem, w0::AbstractVector{<:Real}, params::WENDyParameters=WENDyParameters(), alg::Symbol=:trustRegion; kwargs...)
+    if alg == :trustRegion 
+        return trustRegion(wendyProb.wnll, w0, params, kwargs... )
+    elseif alg == :arcqk 
+        return arcqk(wendyProb.wnll, w0, params, kwargs... )
+    elseif alg == :hybrid
+        return hybrid(wendyProb.wnll, wendyProb.fslsq, w0, params, kwargs...)
+    elseif alg == :fslsq 
+        return nonlinearLeastSquares(wendyProb.fslsq, w0, params, kwargs...)
+    elseif alg == :wlsq 
+        return nonlinearLeastSquares(wendyProb.wlsq, w0, params, kwargs...)
+    elseif alg == :irwls 
+        return nonlinearLeastSquares(wendyProb.wlsq, w0, params, kwargs...)
+    end
+    @assert false """$alg is not recognized as an implemented algorithm consider: 
+    :trustRegion, :arcqk, :hybrid, :fslsq, :wlsq, :irwls
+    """
 end

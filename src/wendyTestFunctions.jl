@@ -32,12 +32,12 @@ end
 """
 function _minRadius(
     U::AbstractMatrix, dt::Real, 
-    radiusMin::Int, numRadii::Int, testFunSubRate::Real, Kᵣ::Union{Nothing,Int}; 
+    radiusMin::Int, numRadii::Int, radiusMax::Int, testFunSubRate::Real, Kᵣ::Union{Nothing,Int}; 
     debug::Bool=false
 )
     @assert 2 <= testFunSubRate < 4 "We only suppport scaling between 2 and 4"
     Mp1, D = size(U)
-    radii = radiusMin:radiusMin+numRadii
+    radii = radiusMin:min(radiusMin+numRadii, radiusMax)
     errs = zeros(length(radii))
     # Select the fourier modes from just the where roots of unit would hit on the subsampled grid
     IX = Int(floor((Mp1-1)/testFunSubRate)) 
@@ -132,7 +132,7 @@ end
 """
 """
 function getTestFunctionMatrices(
-    tt::AbstractVector{<:Real}, U::AbstractMatrix{<:Real}, radiusMinTime::Real, radiusMaxTime::Real, numRadii::Int, testFunSubRate::Real, radiiParams::AbstractVector{<:Int}, maxTestFunCondNum::Real, Kmax::Int, Kᵣ::Union{Nothing,Int}; 
+    tt::AbstractVector{<:Real}, U::AbstractMatrix{<:Real}, radiusMinTime::Real, radiusMaxTime::Real, numRadii::Int, testFunSubRate::Real, radiiParams::AbstractVector{<:Real}, maxTestFunCondNum::Real, Kmax::Int, Kᵣ::Union{Nothing,Int}; 
     analyticVp::Bool=true, noSVD::Bool=false, ll::LogLevel=Info, debug::Bool=false
 )
     with_logger(ConsoleLogger(stderr, ll)) do 
@@ -140,15 +140,24 @@ function getTestFunctionMatrices(
         @assert all(diff(tt) .- (tt[2] - tt[1]) .< 1e-6) "Must use uniform time grid"
         dt = mean(diff(tt))
         Mp1, _ = size(U)
-        @info "    Mp1 = $Mp1"
+        @info "    Mp1 = $Mp1, dt = $dt"
         # dont let the radius be larger than the radius of the interior of the domain
+        @info "    radiusMinTime = $radiusMinTime, radiusMaxTime = $radiusMaxTime"
         radiusMin = Int(max(ceil(radiusMinTime/dt), 2))
-        radiusMax = Int(min(floor((Mp1-2)/2), floor(radiusMaxTime/dt))) 
+        radiusMax = Int(floor(radiusMaxTime/dt))
+        _radiusMax = Int(floor((Mp1-2)/2))
+        if radiusMax > _radiusMax
+            @info "    We need to decrease the max radius for the time domain available"
+            radiusMax = _radiusMax 
+        end 
         @info "    pre-radiusMin=$radiusMin, radiusMax=$radiusMax"
         # select min radius by looking that M/testFunSubRate fourier mode of Φ∘U
-        radiusMin = _minRadius(U, dt, radiusMin, numRadii, testFunSubRate, Kᵣ)
+        radiusMin = _minRadius(U, dt, radiusMin, numRadii, radiusMax, testFunSubRate, Kᵣ)
         @info "    radiusMin=$radiusMin"
-        radii = filter(r->r < radiusMax, radiiParams*radiusMin)
+        radii = filter(r->r < radiusMax, Int.(floor.(radiiParams*radiusMin)))
+        if length(radii) == 0 
+            radii = [radiusMax]
+        end
         V_full = reduce(vcat, _buildV(r, Mp1, dt) for r in radii)
         Vp_full = reduce(vcat, _buildV(r, Mp1, dt; derivativeOrder=1) for r in radii)
         @info "    K_full=$(size(V_full,1))"

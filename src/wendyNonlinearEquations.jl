@@ -101,24 +101,6 @@ function _∇r!(
     @views ∇r .= reshape(_∇r, K*D, J)
     nothing
 end
-# (Rᵀ)⁻¹∇r = (Rᵀ)⁻¹∇G
-function _Rᵀ⁻¹∇r!(
-    Rᵀ⁻¹∇r::AbstractMatrix{<:Real}, w::AbstractVector{<:Real}, # output/input
-    tt::AbstractVector{<:Real}, U::AbstractMatrix{<:Real}, V::AbstractMatrix{<:Real}, Rᵀ::AbstractMatrix{<:Real}, # data
-    jacwf!::Function, # functions
-    JwF::AbstractArray{<:Real, 3}, __∇r::AbstractArray{<:Real, 3}, _∇r::AbstractArray{<:Real, 3}, ∇r::AbstractMatrix{<:Real}; # buffers
-    ll::LogLevel=Warn # kwargs
-) 
-    _∇r!(
-        ∇r,w,
-        tt, U,V,
-        jacwf!,
-        JwF,__∇r,_∇r;
-        ll=ll
-    )
-    ldiv!(Rᵀ⁻¹∇r, LowerTriangular(Rᵀ), ∇r)
-    nothing
-end
 function _Hm!(
     H::AbstractMatrix{<:Real}, w::AbstractVector{<:Real},
     ∇L::AbstractArray{<:Real, 3}, tt::AbstractVector{<:Real}, U::AbstractMatrix{<:Real}, _Y::AbstractMatrix{<:Real}, V::AbstractMatrix{<:Real}, L::AbstractMatrix{<:Real}, S::AbstractMatrix{<:Real}, ∇r::AbstractMatrix{<:Real}, b₀::AbstractVector{<:Real}, sig::AbstractVector{<:Real},

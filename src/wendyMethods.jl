@@ -1,12 +1,12 @@
 ## L(w)
 abstract type CovarianceFactor<:Function end 
-function CovarianceFactor(prob::WENDyProblem{lip}, params::WENDyParameters) where lip
-    return lip ? LinearCovarianceFactor(prob, params) : NonlinearCovarianceFactor(prob, params)
+function CovarianceFactor(data::WENDyInternals{lip, <:Distribution}, params::WENDyParameters) where lip
+    return lip ? LinearCovarianceFactor(data, params) : NonlinearCovarianceFactor(data, params)
 end
 ## ∇L(w)
 abstract type GradientCovarianceFactor<:Function end 
-function GradientCovarianceFactor(prob::WENDyProblem{lip}, params::WENDyParameters, ::Val{T}=Val(Float64)) where {lip, T<:Real}
-    return lip ? LinearGradientCovarianceFactor(prob, params, Val(T)) : NonlinearGradientCovarianceFactor(prob, params, Val(T))
+function GradientCovarianceFactor(data::WENDyInternals{lip, <:Distribution}, params::WENDyParameters, ::Val{T}=Val(Float64)) where {lip, T<:Real}
+    return lip ? LinearGradientCovarianceFactor(data, params, Val(T)) : NonlinearGradientCovarianceFactor(data, params, Val(T))
 end
 ## R(w)
 # struct/method
@@ -33,9 +33,9 @@ function Covariance(diagReg::AbstractFloat, L!::CovarianceFactor, K::Int, D::Int
     Sreg = zeros(T, KD, KD)
     Covariance(R, diagReg, L!, thisI, S, Sreg)
 end
-function Covariance(prob::WENDyProblem, params::WENDyParameters, ::Val{T}=Val(Float64)) where T<:Real
-    L! = CovarianceFactor(prob, params)
-    Covariance(params.diagReg, L!, prob.K, prob.D, Val(T))
+function Covariance(data::WENDydatalem, params::WENDyParameters, ::Val{T}=Val(Float64)) where T<:Real
+    L! = CovarianceFactor(data, params)
+    Covariance(params.diagReg, L!, data.K, data.D, Val(T))
 end
 # method inplace 
 function (m::Covariance)(R::AbstractMatrix{<:Real}, w::AbstractVector{W};ll::LogLevel=Warn, transpose::Bool=true, doChol::Bool=true) where W<:Real
@@ -67,17 +67,16 @@ function (m::Covariance)(w::AbstractVector{W}; ll::LogLevel=Warn, transpose::Boo
 end
 ## G(w) - b / G*w - b 
 abstract type Residual<:Function end 
-function Residual(prob::WENDyProblem{lip}, params::WENDyParameters, ::Val{T}=Val(Float64)) where {lip,T<:Real} 
-    return lip ? LinearResidual(prob, params, Val(T)) :  NonlinearResidual(prob, params, Val(T))
+function Residual(data::WENDyInternals{lip, <:Distribution}, params::WENDyParameters, ::Val{T}=Val(Float64)) where {lip,T<:Real} 
+    return lip ? LinearResidual(data, params, Val(T)) :  NonlinearResidual(data, params, Val(T))
 end
 abstract type JacobianResidual<:Function end
-function JacobianResidual(prob::WENDyProblem{lip}, params::WENDyParameters, ::Val{T}=Val(Float64)) where {lip,T<:Real}
-    return lip ? LinearJacobianResidual(prob, params, Val(T)) : NonlinearJacobianResidual(prob, params, Val(T))
+function JacobianResidual(data::WENDyInternals{lip, <:Distribution}, params::WENDyParameters, ::Val{T}=Val(Float64)) where {lip,T<:Real}
+    return lip ? LinearJacobianResidual(data, params, Val(T)) : NonlinearJacobianResidual(data, params, Val(T))
 end
 ## Maholinobis distance 
 # struct
 struct WeakNLL<:Function
-    b₀::AbstractVector{<:Real}
     # functions
     R!::Covariance
     r!::Residual
@@ -89,43 +88,27 @@ struct WeakNLL<:Function
     Rᵀ⁻¹r::AbstractVector{<:Real}
 end
 # constructor
-function WeakNLL(prob::WENDyProblem, params::WENDyParameters, ::Val{T}=Val(Float64)) where T<:Real
+function WeakNLL(data::WENDydatalem, params::WENDyParameters, ::Val{T}=Val(Float64)) where T<:Real
     # functions
-    R! = Covariance(prob, params, Val(T))
-    r! = Residual(prob, params, Val(T))
+    R! = Covariance(data, params, Val(T))
+    r! = Residual(data, params, Val(T))
     # buffer
-    K,D = prob.K,prob.D
+    K,D = data.K,data.D
     S = zeros(T, K*D, K*D)
     Rᵀ= zeros(T, K*D, K*D)
     r = zeros(T, K*D)
     S⁻¹r = zeros(T, K*D)
     Rᵀ⁻¹r = zeros(T, K*D)
     WeakNLL(
-        prob.b₀, 
         R!, r!, 
         S, Rᵀ, r, S⁻¹r,Rᵀ⁻¹r
     )
 end
 # method
-function (m::WeakNLL)(w::AbstractVector{T}; ll::LogLevel=Warn, efficient::Bool=false) where T<:Real
-    # if efficient
-    #     # Can be unstable because in worst case S(w) ⊁ 0
-    #     # m(w) = r(w)ᵀS⁻¹r(w) = ((Rᵀ)⁻¹r)ᵀ((Rᵀ)⁻¹r)
-    #     m.R!(
-    #         m.Rᵀ,w;
-    #         ll=ll
-    #     )
-    #     b = similar(m.b₀)
-    #     ldiv!(b, LowerTriangular(m.Rᵀ), m.b₀) # b = (Rᵀ)⁻¹b₀
-    #     m.r!(
-    #         m.Rᵀ⁻¹r, b, w; 
-    #         ll=ll, Rᵀ=m.Rᵀ
-    #     ) # b = (Rᵀ)⁻¹G(w)
-    #     return _m(m.Rᵀ⁻¹r) # ((Rᵀ)⁻¹r)^T(Rᵀ)⁻¹r
-    # end 
+function (m::WeakNLL)(w::AbstractVector{T}; ll::LogLevel=Warn) where T<:Real
     KD,_ = size(m.S) 
     constTerm = KD/2*log(2*pi)
-    m.r!(m.r,m.b₀,w;ll=ll)
+    m.r!(m.r,w;ll=ll)
     m.R!(m.S,w;ll=ll, doChol=false)
     return _m(m.S, m.r, m.S⁻¹r, constTerm)
 end
@@ -133,8 +116,6 @@ end
 struct GradientWeakNLL<:Function
     # output
     ∇m::AbstractVector{<:Real}
-    # data 
-    b₀::AbstractVector{<:Real}
     # functions
     R!::Covariance
     r!::Residual
@@ -146,22 +127,21 @@ struct GradientWeakNLL<:Function
     ∇S::AbstractArray{<:Real,3}
 end
 # constructor
-function GradientWeakNLL(prob::WENDyProblem, params::WENDyParameters, ::Val{T}=Val(Float64)) where T
-    K,D,J  = prob.K, prob.D, prob.J
+function GradientWeakNLL(data::WENDydatalem, params::WENDyParameters, ::Val{T}=Val(Float64)) where T
+    K,D,J  = data.K, data.D, data.J
     # output
     ∇m = zeros(T,J)
     # methods 
-    R!  = Covariance(prob, params, Val(T))
-    r!  = Residual(prob, params, Val(T))
-    ∇r! = JacobianResidual(prob, params, Val(T))
-    ∇L! = GradientCovarianceFactor(prob, params, Val(T))
+    R!  = Covariance(data, params, Val(T))
+    r!  = Residual(data, params, Val(T))
+    ∇r! = JacobianResidual(data, params, Val(T))
+    ∇L! = GradientCovarianceFactor(data, params, Val(T))
     # preallocate buffers
     S⁻¹r = zeros(T, K*D)
     ∂ⱼLLᵀ = zeros(T, K*D,K*D)
     ∇S = zeros(T,K*D,K*D,J)
     GradientWeakNLL(
         ∇m,
-        prob.b₀,
         R!, r!, ∇r!, ∇L!,
         S⁻¹r, ∂ⱼLLᵀ, ∇S
     )
@@ -171,7 +151,7 @@ function (m::GradientWeakNLL)(∇m::AbstractVector{<:Real}, w::AbstractVector{W}
     # Compute L(w) & S(w)
     m.R!(w; ll=ll, transpose=false, doChol=false) 
     # Compute residal
-    m.r!(m.b₀, w; ll=ll)
+    m.r!(w; ll=ll)
     # Compute jacobian of residual
     m.∇r!(w; ll=ll)
     # Compute jacobian of covariance factor
@@ -189,7 +169,7 @@ function (m::GradientWeakNLL)(w::AbstractVector{W}; ll::LogLevel=Warn) where W<:
     # Compute L(w) & S(w)
     m.R!(w; ll=ll, transpose=false, doChol=false) 
     # Compute residal
-    m.r!(m.b₀, w; ll=ll)
+    m.r!(w; ll=ll)
     # Compute jacobian of residual
     m.∇r!(w; ll=ll)
     # Compute jacobian of covariance factor
@@ -203,6 +183,6 @@ function (m::GradientWeakNLL)(w::AbstractVector{W}; ll::LogLevel=Warn) where W<:
 end
 ## Because of the complications we separate these into separate types
 abstract type HesianWeakNLL<:Function end
-function HesianWeakNLL(prob::WENDyProblem{lip}, params::WENDyParameters) where lip
-    return lip ? LinearHesianWeakNLL(prob, params) : NonlinearHesianWeakNLL(prob, params)
+function HesianWeakNLL(data::WENDyInternals{lip, <:Distribution}, params::WENDyParameters) where lip
+    return lip ? LinearHesianWeakNLL(data, params) : NonlinearHesianWeakNLL(data, params)
 end
