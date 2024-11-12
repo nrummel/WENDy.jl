@@ -33,9 +33,11 @@ function Covariance(diagReg::AbstractFloat, L!::CovarianceFactor, K::Int, D::Int
     Sreg = zeros(T, KD, KD)
     Covariance(R, diagReg, L!, thisI, S, Sreg)
 end
-function Covariance(data::WENDydatalem, params::WENDyParameters, ::Val{T}=Val(Float64)) where T<:Real
+function Covariance(data::WENDyInternals, params::WENDyParameters, ::Val{T}=Val(Float64)) where T<:Real
     L! = CovarianceFactor(data, params)
-    Covariance(params.diagReg, L!, data.K, data.D, Val(T))
+    _, D = size(data.X)
+    K, _ = size(data.V)
+    Covariance(params.diagReg, L!, K, D, Val(T))
 end
 # method inplace 
 function (m::Covariance)(R::AbstractMatrix{<:Real}, w::AbstractVector{W};ll::LogLevel=Warn, transpose::Bool=true, doChol::Bool=true) where W<:Real
@@ -88,12 +90,13 @@ struct WeakNLL<:Function
     Rᵀ⁻¹r::AbstractVector{<:Real}
 end
 # constructor
-function WeakNLL(data::WENDydatalem, params::WENDyParameters, ::Val{T}=Val(Float64)) where T<:Real
+function WeakNLL(data::WENDyInternals, params::WENDyParameters, ::Val{T}=Val(Float64)) where T<:Real
     # functions
     R! = Covariance(data, params, Val(T))
     r! = Residual(data, params, Val(T))
     # buffer
-    K,D = data.K,data.D
+    _, D = size(data.X)
+    K, _ = size(data.V)
     S = zeros(T, K*D, K*D)
     Rᵀ= zeros(T, K*D, K*D)
     r = zeros(T, K*D)
@@ -110,7 +113,7 @@ function (m::WeakNLL)(w::AbstractVector{T}; ll::LogLevel=Warn) where T<:Real
     constTerm = KD/2*log(2*pi)
     m.r!(m.r,w;ll=ll)
     m.R!(m.S,w;ll=ll, doChol=false)
-    return _m(m.S, m.r, m.S⁻¹r, constTerm)
+    return _wnll(m.S, m.r, m.S⁻¹r, constTerm)
 end
 ## ∇m(w) - gradient of Maholinobis distance
 struct GradientWeakNLL<:Function
@@ -127,8 +130,10 @@ struct GradientWeakNLL<:Function
     ∇S::AbstractArray{<:Real,3}
 end
 # constructor
-function GradientWeakNLL(data::WENDydatalem, params::WENDyParameters, ::Val{T}=Val(Float64)) where T
-    K,D,J  = data.K, data.D, data.J
+function GradientWeakNLL(data::WENDyInternals, params::WENDyParameters, ::Val{T}=Val(Float64)) where T
+    _, D = size(data.X)
+    K, _ = size(data.V)
+    J = data.J
     # output
     ∇m = zeros(T,J)
     # methods 
@@ -157,7 +162,7 @@ function (m::GradientWeakNLL)(∇m::AbstractVector{<:Real}, w::AbstractVector{W}
     # Compute jacobian of covariance factor
     m.∇L!(w; ll=ll)
     
-    _∇m!(
+    _∇wnll!(
         ∇m, w, # ouput, input
         m.∇L!.∇L, m.R!.L!.L, m.R!.Sreg, m.∇r!.∇r, m.r!.r, # data
         m.S⁻¹r,  m.∂ⱼLLᵀ, m.∇S; # buffers
@@ -174,7 +179,7 @@ function (m::GradientWeakNLL)(w::AbstractVector{W}; ll::LogLevel=Warn) where W<:
     m.∇r!(w; ll=ll)
     # Compute jacobian of covariance factor
     m.∇L!(w; ll=ll)
-    _∇m!(
+    _∇wnll!(
         m.∇m, w, # ouput, input
         m.∇L!.∇L, m.R!.L!.L, m.R!.Sreg, m.∇r!.∇r, m.r!.r, # data
         m.S⁻¹r,  m.∂ⱼLLᵀ, m.∇S; # buffers

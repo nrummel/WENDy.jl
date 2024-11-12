@@ -1,80 +1,71 @@
-## rhs of ode changes to f(u) ./ u for lognormal noise
-function _getRHS_sym(f!::Function, D::Int, J::Int, ::Val{LogNormal})
-    @variables w[1:J] u[1:D] t
-    du = Vector(undef, D)
-    f!(du, u, w, t)
-    return [eq / u  for (u,eq) in zip(u,du)]
+"""
+(private) Build a function for the the rhs specialized to 
+the case of lognormal noise. This means the original rhs changes to 
+    f̃(x) = f(x) ./ x 
+"""
+function _getf_sym(f!::Function, D::Int, J::Int, ::Val{LogNormal})
+    @variables w[1:J] x[1:D] t
+    dx = Vector(undef, D)
+    f!(dx, x, w, t)
+    mymap = Dict([xd =>exp(xd) for xd in x])
+    fu =[eq / x  for (x,eq) in zip(x,dx)]
+    return [simplify(substitute(fud, mymap)) for fud in fu]
 end
-
-function _getRHS_sym(f!::Function, D::Int, J::Int, ::Val{Normal})
-    @variables w[1:J] u[1:D] t
-    du = Vector(undef, D)
-    f!(du, u, w, t)
-    return du
+""" (private) Build a function for the the rhs specialized to normal noise """
+function _getf_sym(f!::Function, D::Int, J::Int, ::Val{Normal})
+    @variables w[1:J] x[1:D] t
+    dx = Vector(undef, D)
+    f!(dx, x, w, t)
+    return dx
 end
-
-function getRHS(f!::Function, D::Int, J::Int, ::Val{DistType}) where {DistType<:Distribution}
-    @variables w[1:J] u[1:D] t
-    rhs_sym = _getRHS_sym(f!, D, J, Val(DistType))
-    f,f! = build_function(rhs_sym, u, w, t;expression=false)
-    return f, f!
+""" Build a function for the the rhs """ 
+function _getf(f!::Function, D::Int, J::Int, ::Val{DistType}) where {DistType<:Distribution}
+    @variables w[1:J] x[1:D] t
+    f_sym = _getf_sym(f!, D, J, Val(DistType))
+    _,f! = build_function(f_sym, x, w, t;expression=false)
+    return f!
 end
-
-function _getJacw_sym(f!::Function, D::Int, J::Int, ::Val{DistType}) where {DistType<:Distribution}
-    @variables w[1:J]
-    rhs_sym = _getRHS_sym(f!, D, J, Val(DistType))
-    return jacobian(rhs_sym, w)
+""" Build a function for the jacobian wrt to the parameters of the rhs """ 
+function _get∇ₚf(f!::Function, D::Int, J::Int) 
+    @variables w[1:J] x[1:D] t
+    dx = Vector(undef, D)
+    f!(dx, x, w, t)
+    ∇ₚf = jacobian(dx, w)
+    return build_function(∇ₚf, x, w, t; expression=false)[end]
 end
-
-function getJacw(f!::Function, D::Int, J::Int, ::Val{DistType}) where {DistType<:Distribution}
-    @variables w[1:J] u[1:D] t
-    jac_sym = _getJacw_sym(f!, D, J, Val(DistType))
-    jac,jac! = build_function(jac_sym, u,w,t; expression=false)
-    return jac, jac!
+""" Build a function for the jacobian wrt to the state of the rhs"""
+function _get∇ₓf(f!::Function, D::Int, J::Int) 
+    @variables w[1:J] x[1:D] t
+    dx = Vector(undef, D)
+    f!(dx, x, w, t)
+    ∇ₓf = jacobian(dx, x)
+    return build_function(∇ₓf, x,w,t; expression=false)[end]
 end
-## for normal noise ∇ᵤf 
-function _getJacu_sym(f!::Function, D::Int, J::Int, ::Val{Normal})
-    @variables u[1:D] 
-    rhs_sym = _getRHS_sym(f!, D, J, Val(Normal))
-    return jacobian(rhs_sym, u)
+""" Build a function for the jacobian wrt to the parameters of the jacobian wrt to the state of the rhs"""
+function _get∇ₚ∇ₓf(f!::Function, D::Int, J::Int)
+    @variables w[1:J] x[1:D] t
+    dx = Vector(undef, D)
+    f!(dx, x, w, t)
+    ∇ₓf = jacobian(dx, x)
+    ∇ₚ∇ₓf = jacobian(∇ₓf, w)
+    build_function(∇ₚ∇ₓf, x,w,t; expression=false)[end]
 end
-## for normal noise ∇_yf(u)/u where y = log(u)  
-function _getJacu_sym(f!::Function, D::Int, J::Int, ::Val{LogNormal})
-    @variables u[1:D] 
-    rhs = _getRHS_sym(f!, D, J, Val(LogNormal))
-    mymap = Dict([ud =>exp(ud) for ud in u])
-    rhs_sym = [simplify(substitute(rhs_d, mymap)) for rhs_d in rhs]
-    return jacobian(rhs_sym, u)
+""" Build a function for the hessian wrt the parameters of the rhs """
+function _getHₚf(f!::Function, D::Int, J::Int)
+    @variables w[1:J] x[1:D] t
+    dx = Vector(undef, D)
+    f!(dx, x, w, t)
+    ∇ₚf = jacobian(dx, w)
+    Hₚf = jacobian(∇ₚf, w)
+    return build_function(Hₚf, x,w,t; expression=false)[end]
 end
-
-function getJacu(f!::Function, D::Int, J::Int, ::Val{DistType}) where {DistType<:Distribution}
-    @variables w[1:J] u[1:D] t
-    jac_sym = _getJacu_sym(f!, D, J, Val(DistType))
-    jac,jac! = build_function(jac_sym, u,w,t; expression=false)
-    return jac, jac!
-end
-
-function getJacwJacu(f!::Function, D::Int, J::Int, ::Val{DistType}) where {DistType<:Distribution}
-    @variables w[1:J] u[1:D] t
-    jacu_sym = _getJacu_sym(f!, D, J, Val(DistType))
-    jacwjacu_sym = jacobian(jacu_sym, w)
-    jac, jac! = build_function(jacwjacu_sym, u,w,t; expression=false)
-    return jac, jac!
-end
-
-function getHeswJacu(f!::Function, D::Int, J::Int, ::Val{DistType}) where {DistType<:Distribution}
-    @variables w[1:J] u[1:D] t
-    jacu_sym = _getJacu_sym(f!, D, J, Val(DistType))
-    jacwjacu_sym = jacobian(jacu_sym, w)
-    heswjacu_sym = jacobian(jacwjacu_sym, w)
-    hes, hes! = build_function(heswjacu_sym, u,w,t; expression=false)
-    return hes, hes!
-end
-
-function getHesw(f!::Function, D::Int, J::Int, ::Val{DistType}) where {DistType<:Distribution}
-    @variables w[1:J] u[1:D] t
-    jacw_sym = _getJacw_sym(f!, D, J, Val(DistType))
-    hesw_sym = jacobian(jacw_sym, w)
-    hes, hes! = build_function(hesw_sym, u,w,t; expression=false)
-    return hes, hes!
+""" Build a function for the hessian wrt the parameters of the jacobian wrt to the state of the rhs """
+function _getHₚ∇ₓf(f!::Function, D::Int, J::Int)
+    @variables w[1:J] x[1:D] t
+    dx = Vector(undef, D)
+    f!(dx, x, w, t)
+    ∇ₓf = jacobian(dx, x)
+    ∇ₚ∇ₓf = jacobian(∇ₓf, w)
+    Hₚ∇ₓf = jacobian(∇ₚ∇ₓf, w)
+    return build_function(Hₚ∇ₓf, x,w,t; expression=false)[end]
 end

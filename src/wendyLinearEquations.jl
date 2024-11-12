@@ -2,11 +2,12 @@
 # L₁ - this is the gradient/jacobian of L(w) when L is linear 
 function _L₁!(
     L₁::AbstractArray{<:Real,3}, 
-    tt::AbstractVector{<:Real}, U::AbstractMatrix{<:Real}, V::AbstractMatrix{<:Real}, sig::AbstractVector{<:Real}, 
-    jacuf!::Function, 
-    JuF::AbstractArray{<:Real, 3}, _∂Lⱼ::AbstractArray{<:Real, 4}, ∂Lⱼ::AbstractArray{<:Real, 4},  eⱼ::AbstractVector{<:Real}
+    tt::AbstractVector{<:Real}, X::AbstractMatrix{<:Real}, V::AbstractMatrix{<:Real}, sig::AbstractVector{<:Real}, 
+    ∇ₓf!::Function, 
+    JuF::AbstractArray{<:Real, 3}, _∂ⱼL::AbstractArray{<:Real, 4}, ∂ⱼL::AbstractArray{<:Real, 4}, eⱼ::AbstractVector{<:Real}
 )
-    Mp1,D = size(U)
+∂ⱼL
+    Mp1,D = size(X)
     K,_ = size(V)
     J = length(eⱼ)
     KD = K*D
@@ -15,11 +16,11 @@ function _L₁!(
         eⱼ .= 0
         eⱼ[j] = 1
         @inbounds for m in 1:Mp1
-            @views jacuf!(JuF[:,:,m], U[m,:], eⱼ, tt[m])
+            @views ∇ₓf!(JuF[:,:,m], X[m,:], eⱼ, tt[m])
         end
-        @tullio _∂Lⱼ[k,d2,d1,m] = JuF[d2,d1,m] * V[k,m]* sig[d1] # increases allocation from 4 to 45 
-        permutedims!(∂Lⱼ,_∂Lⱼ,(1,2,4,3))
-        @views L₁[:,:,j] .= reshape(∂Lⱼ,KD,MD) 
+        @tullio _∂ⱼL[k,d2,d1,m] = JuF[d2,d1,m] * V[k,m]* sig[d1] # increases allocation from 4 to 45 
+        permutedims!(∂ⱼL,_∂ⱼL,(1,2,4,3))
+        @views L₁[:,:,j] .= reshape(∂ⱼL,KD,MD) 
     end
     nothing
 end
@@ -63,7 +64,7 @@ function _Rᵀr!(r::AbstractVector, w::AbstractVector, # output/input
     nothing
 end
 ## Hm(w) - hessian of the Maholinobis distance when the ode is linear in parameters ⇒ ∀w  ∂ᵢⱼS = 0 and ∂ᵢⱼr = 0. Also notice that ∇_w[G*w -b₀] = G
-function _Hm!(
+function _Hwnll!(
     H::AbstractMatrix{<:Real}, w::AbstractVector{<:Real},
     ∇L::AbstractArray{<:Real,3}, G::AbstractMatrix{<:Real}, L::AbstractMatrix{<:Real}, S::AbstractMatrix{<:Real}, 
     r::AbstractVector{<:Real}, 

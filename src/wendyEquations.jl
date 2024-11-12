@@ -31,7 +31,7 @@ function _R!(
     nothing
 end
 # m(w) - Maholinobis distance
-function _m(S::AbstractMatrix, r::AbstractVector, S⁻¹r::AbstractVector, constTerm::AbstractFloat)
+function _wnll(S::AbstractMatrix, r::AbstractVector, S⁻¹r::AbstractVector, constTerm::AbstractFloat)
     F = svd(S)
     ldiv!(S⁻¹r, F, r)
     mdist = dot(r, S⁻¹r)
@@ -42,11 +42,11 @@ function _m(S::AbstractMatrix, r::AbstractVector, S⁻¹r::AbstractVector, const
         + logDet 
     ) + constTerm
 end
-# function _m(Rᵀ⁻¹r::AbstractVector, )
+# function _wnll(Rᵀ⁻¹r::AbstractVector, )
 #     1/2*(dot(Rᵀ⁻¹r, Rᵀ⁻¹r) + sum(log.()))
 # end
 # ∇m(w) - Gradient of Maholinobis distance
-function _∇m!(
+function _∇wnll!(
     ∇m::AbstractVector{<:Real},w::AbstractVector{<:Real},
     ∇L::AbstractArray{<:Real,3}, L::AbstractMatrix{<:Real}, S::AbstractMatrix{<:Real}, ∇r::AbstractMatrix{<:Real}, r::AbstractVector{<:Real},
     S⁻¹r::AbstractVector{<:Real}, ∂ⱼLLᵀ::AbstractMatrix{<:Real}, ∇S::AbstractArray{<:Real,3};

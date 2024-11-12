@@ -10,7 +10,7 @@ struct NonlinearCovarianceFactor<:CovarianceFactor
     L₀::AbstractMatrix{<:Real}
     sig::AbstractVector{<:Real}
     # functions
-    jacuf!::Function
+    ∇ₓf!::Function
     # buffers
     JuF::AbstractArray{<:Real, 3}
     __L₁::AbstractArray{<:Real, 4}
@@ -18,7 +18,7 @@ struct NonlinearCovarianceFactor<:CovarianceFactor
 end 
 # constructor
 function NonlinearCovarianceFactor(data::WENDyInternals{false,<:Distribution}, params::Union{WENDyParameters,Nothing}=nothing, ::Val{T}=Val(Float64)) where T<:Real
-    Mp1, D = size(data.U)
+    Mp1, D = size(data.X)
     K, _ = size(data.V)
     # preallocate output
     L = zeros(T,K*D,Mp1*D)
@@ -38,8 +38,8 @@ function NonlinearCovarianceFactor(data::WENDyInternals{false,<:Distribution}, p
 
     return NonlinearCovarianceFactor(
         L,
-        data.tt, data._Y, data.V,L₀,data.sig, 
-        data.jacuf!, 
+        data.tt, data.X, data.V,L₀,data.sig, 
+        data.∇ₓf!, 
         JuF, __L₁, _L₁
     )
 end
@@ -48,7 +48,7 @@ function (m::NonlinearCovarianceFactor)(L::AbstractMatrix, w::AbstractVector{<:R
     _L!(
         L,w,
         m.tt, m._Y,m.V,m.L₀,m.sig,
-        m.jacuf!,
+        m.∇ₓf!,
         m.JuF,m.__L₁,m._L₁;
         ll=ll
     )
@@ -59,7 +59,7 @@ function (m::NonlinearCovarianceFactor)(w::AbstractVector{<:Real}; ll::LogLevel=
     _L!(
         m.L,w,
         m.tt, m._Y,m.V,m.L₀,m.sig,
-        m.jacuf!,
+        m.∇ₓf!,
         m.JuF,m.__L₁,m._L₁;
         ll=ll
     )
@@ -75,14 +75,16 @@ struct NonlinearGradientCovarianceFactor<:GradientCovarianceFactor
     V::AbstractMatrix{<:Real}
     sig::AbstractVector{<:Real}
     # functions
-    jacwjacuf!::Function
+    ∇ₚ∇ₓf!::Function
     # buffers
     JwJuF::AbstractArray{<:Real,4}
     __∇L::AbstractArray{<:Real,5}
     _∇L::AbstractArray{<:Real,5}
 end 
 function NonlinearGradientCovarianceFactor(data, params, ::Val{T}=Val(Float64)) where T<:Real
-    K,Mp1,D,J = data.K, data.Mp1, data.D, data.J
+    Mp1, D = size(data.X)
+    K, _ = size(data.V)
+    J = data.J
     ∇L = zeros(T,K*D,Mp1*D,J)
     JwJuF = zeros(T,D,D,J,Mp1)
     __∇L = zeros(T,K,D,D,J,Mp1)
@@ -90,8 +92,8 @@ function NonlinearGradientCovarianceFactor(data, params, ::Val{T}=Val(Float64)) 
    
     NonlinearGradientCovarianceFactor(
         ∇L,
-        data.tt, data._Y, data.V, data.sig, 
-        data.jacwjacuf!,
+        data.tt, data.X, data.V, data.sig, 
+        data.∇ₚ∇ₓf!,
         JwJuF, __∇L, _∇L
     )
 end
@@ -100,7 +102,7 @@ function (m::NonlinearGradientCovarianceFactor)(∇L::AbstractArray{3, <:Real}, 
     _∇L!(
         ∇L, w,
         m.tt,m._Y,m.V,m.sig,
-        m.jacwjacuf!,
+        m.∇ₚ∇ₓf!,
         m.JwJuF, m.__∇L, m._∇L
     )
 end
@@ -109,7 +111,7 @@ function (m::NonlinearGradientCovarianceFactor)(w::AbstractVector{<:Real};ll::Lo
     _∇L!(
         m.∇L, w,
         m.tt,m._Y,m.V,m.sig,
-        m.jacwjacuf!,
+        m.∇ₚ∇ₓf!,
         m.JwJuF, m.__∇L, m._∇L
     )
 end
@@ -121,7 +123,7 @@ struct NonlinearResidual<:Residual
     # data
     tt::AbstractVector{<:Real}
     b₀::AbstractVector{<:Real}
-    U::AbstractMatrix{<:Real}
+    X::AbstractMatrix{<:Real}
     V::AbstractMatrix{<:Real} 
     # functions
     f!::Function
@@ -132,7 +134,7 @@ struct NonlinearResidual<:Residual
 end
 # constructors 
 function NonlinearResidual(data::WENDyInternals{false,<:Distribution}, params::Union{WENDyParameters, Nothing}=nothing, ::Val{T}=Val(Float64)) where T<:Real
-    Mp1, D = size(data.U)
+    Mp1, D = size(data.X)
     K, _ = size(data.V)
     # ouput
     r = zeros(T,K*D)
@@ -142,7 +144,7 @@ function NonlinearResidual(data::WENDyInternals{false,<:Distribution}, params::U
     g = zeros(T, K*D)
     NonlinearResidual(
         r,
-        data.tt,data.b₀,data.U, data.V, 
+        data.tt,data.b₀,data.X, data.V, 
         data.f!,
         F,G,g
     )
@@ -151,7 +153,7 @@ end
 function (m::NonlinearResidual)(r::AbstractVector{<:Real}, w::AbstractVector{<:Real}; ll::LogLevel=Warn) 
     _r!(
         r,w, 
-        m.tt, m.U, m.V, m.b₀, 
+        m.tt, m.X, m.V, m.b₀, 
         m.f!, 
         m.F, m.G; 
         ll=ll
@@ -161,7 +163,7 @@ end
 function (m::NonlinearResidual)(r::AbstractVector{<:Real}, w::AbstractVector{<:Real}, b::AbstractVector{<:Real}, Rᵀ::AbstractMatrix{<:Real}; ll::LogLevel=Warn) 
     _Rᵀr!(
         r, w, 
-        m.tt, m.U, m.V, Rᵀ, b, 
+        m.tt, m.X, m.V, Rᵀ, b, 
         m.f!, 
         m.F, m.G, m.g; 
         ll=ll 
@@ -171,7 +173,7 @@ end
 function (m::NonlinearResidual)(w::AbstractVector{<:Real}; ll::LogLevel=Warn) 
     _r!(
         m.r,w, 
-        m.tt, m.U, m.V, m.b₀, 
+        m.tt, m.X, m.V, m.b₀, 
         m.f!, 
         m.F, m.G; 
         ll=ll
@@ -181,7 +183,7 @@ end
 function (m::NonlinearResidual)(w::AbstractVector{<:Real}, b::AbstractVector{<:Real}, Rᵀ::AbstractMatrix{<:Real}; ll::LogLevel=Warn) 
     _Rᵀr!(
         m.r, w, 
-        m.tt, m.U, m.V, Rᵀ, b, 
+        m.tt, m.X, m.V, Rᵀ, b, 
         m.f!, 
         m.F, m.G, m.g; 
         ll=ll 
@@ -195,10 +197,10 @@ struct NonlinearJacobianResidual<:JacobianResidual
     Rᵀ⁻¹∇r::AbstractMatrix{<:Real}
     # data 
     tt::AbstractVector{<:Real}
-    U::AbstractMatrix{<:Real}
+    X::AbstractMatrix{<:Real}
     V::AbstractMatrix{<:Real}
     # functions 
-    jacwf!::Function
+    ∇ₚf!::Function
     #buffers
     JwF::AbstractArray{<:Real,3}
     __∇r::AbstractArray{<:Real, 3}
@@ -208,7 +210,7 @@ end
 # constructors
 function NonlinearJacobianResidual(data::WENDyInternals{false,<:Distribution}, params::Union{WENDyParameters, Nothing}=nothing, ::Val{T}=Val(Float64)) where T<:Real 
     J = data.J
-    Mp1, D = size(data.U)
+    Mp1, D = size(data.X)
     K, _ = size(data.V)
     Rᵀ⁻¹∇r = zeros(K*D,J)
     JwF = zeros(T,D,J,Mp1)
@@ -217,8 +219,8 @@ function NonlinearJacobianResidual(data::WENDyInternals{false,<:Distribution}, p
     ∇r = zeros(T,K*D, J)
     NonlinearJacobianResidual(
         Rᵀ⁻¹∇r, 
-        data.tt, data.U, data.V, 
-        data.jacwf!, 
+        data.tt, data.X, data.V, 
+        data.∇ₚf!, 
         JwF, __∇r, _∇r, ∇r
     )
 end
@@ -227,8 +229,8 @@ function (m::NonlinearJacobianResidual)(∇r::AbstractMatrix{<:Real}, w::Abstrac
     
     _∇r!(
         ∇r,w, 
-        m.tt,m.U,m.V,
-        m.jacwf!,
+        m.tt,m.X,m.V,
+        m.∇ₚf!,
         m.JwF,m.__∇r,m._∇r;
         ll=ll
     )
@@ -244,8 +246,8 @@ end
 function (m::NonlinearJacobianResidual)(w::AbstractVector{<:Real}; ll::LogLevel=Warn)
     _∇r!(
         m.∇r,w, 
-        m.tt,m.U,m.V,
-        m.jacwf!,
+        m.tt,m.X,m.V,
+        m.∇ₚf!,
         m.JwF,m.__∇r,m._∇r;
         ll=ll
     )
@@ -263,7 +265,7 @@ struct NonlinearHesianWeakNLL<:HesianWeakNLL
     H::AbstractMatrix{<:Real}
     # data 
     tt::AbstractVector{<:Real}
-    U::AbstractMatrix{<:Real}
+    X::AbstractMatrix{<:Real}
     _Y::AbstractMatrix{<:Real}
     V::AbstractMatrix{<:Real}
     b₀::AbstractVector{<:Real}
@@ -273,8 +275,8 @@ struct NonlinearHesianWeakNLL<:HesianWeakNLL
     r!::Residual
     ∇r!::JacobianResidual
     ∇L!::GradientCovarianceFactor
-    heswf!::Function
-    heswjacuf!::Function
+    Hₚf!::Function
+    Hₚ∇ₓf!::Function
     # buffers 
     S⁻¹r::AbstractVector{<:Real}
     S⁻¹∇r::AbstractMatrix{<:Real}
@@ -295,7 +297,7 @@ struct NonlinearHesianWeakNLL<:HesianWeakNLL
 end
 
 function NonlinearHesianWeakNLL(data::WENDyInternals{false,<:Distribution}, params::WENDyParameters, ::Val{T}=Val(Float64)) where T<:Real
-    Mp1, D = size(data._Y)
+    Mp1, D = size(data.X)
     K, _ = size(data.V)
     J =  data.J
 
@@ -325,8 +327,8 @@ function NonlinearHesianWeakNLL(data::WENDyInternals{false,<:Distribution}, para
     ∂ᵢSS⁻¹∂ⱼS = zeros(T, K*D, K*D)
     NonlinearHesianWeakNLL(
         H,
-        data.tt,data.U, data._Y, data.V, data.b₀, data.sig,
-        R!, r!, ∇r!, ∇L!, data.heswf!, data.heswjacuf!,  
+        data.tt,data.X, data.X, data.V, data.b₀, data.sig,
+        R!, r!, ∇r!, ∇L!, data.Hₚf!, data.Hₚ∇ₓf!,  
         S⁻¹r, S⁻¹∇r,  ∂ⱼLLᵀ, ∇S, HwF, _∇²r, ∇²r, HwJuF, __∇²L, _∇²L, ∇²L, ∂ⱼL∂ᵢLᵀ, ∂ⱼᵢLLᵀ, ∂ᵢⱼS, S⁻¹∂ⱼS, ∂ᵢSS⁻¹∂ⱼS
     )
 end
@@ -337,11 +339,11 @@ function (m::NonlinearHesianWeakNLL)(H::AbstractMatrix{<:Real}, w::AbstractVecto
     m.r!(w) 
     m.∇r!(w)
     m.∇L!(w)
-    _Hm!(
+    _Hwnll!(
         H, w,
-        m.∇L!.∇L, m.tt, m.U, m._Y, m.V, m.R!.L!.L, m.R!.Sreg, m.∇r!.∇r, m.b₀, m.sig,
+        m.∇L!.∇L, m.tt, m.X, m._Y, m.V, m.R!.L!.L, m.R!.Sreg, m.∇r!.∇r, m.b₀, m.sig,
         m.r!.r, 
-        m.heswf!, m.heswjacuf!,  
+        m.Hₚf!, m.Hₚ∇ₓf!,  
         m.S⁻¹r, m.S⁻¹∇r, m.∂ⱼLLᵀ, m.∇S, m.HwF, m._∇²r, m.∇²r, m.HwJuF, m.__∇²L, m._∇²L, m.∇²L, m.∂ⱼL∂ᵢLᵀ, m.∂ᵢⱼLLᵀ, m.∂ᵢⱼS, m.S⁻¹∂ⱼS, m.∂ᵢSS⁻¹∂ⱼS
     )
 end
@@ -352,11 +354,11 @@ function (m::NonlinearHesianWeakNLL)(w::AbstractVector{<:Real}; ll::LogLevel=War
     m.r!(w) 
     m.∇r!(w)
     m.∇L!(w)
-    _Hm!(
+    _Hwnll!(
         m.H, w,
-        m.∇L!.∇L, m.tt, m.U, m._Y, m.V, m.R!.L!.L, m.R!.Sreg, m.∇r!.∇r, m.b₀, m.sig,
+        m.∇L!.∇L, m.tt, m.X, m._Y, m.V, m.R!.L!.L, m.R!.Sreg, m.∇r!.∇r, m.b₀, m.sig,
         m.r!.r, 
-        m.heswf!, m.heswjacuf!,  
+        m.Hₚf!, m.Hₚ∇ₓf!,  
         m.S⁻¹r, m.S⁻¹∇r, m.∂ⱼLLᵀ, m.∇S, m.HwF, m._∇²r, m.∇²r, m.HwJuF, m.__∇²L, m._∇²L, m.∇²L, m.∂ⱼL∂ᵢLᵀ, m.∂ᵢⱼLLᵀ, m.∂ᵢⱼS, m.S⁻¹∂ⱼS, m.∂ᵢSS⁻¹∂ⱼS
     )
     return m.H

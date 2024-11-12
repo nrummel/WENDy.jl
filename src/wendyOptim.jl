@@ -1,10 +1,4 @@
-## Iterative Reweighted Least Squares
-abstract type IRWLS_Iter end 
-struct Linear_IRWLS_Iter <: IRWLS_Iter
-    b₀::AbstractVector{<:AbstractFloat}
-    G0::AbstractMatrix{<:AbstractFloat}
-    Rᵀ!::Function 
-end 
+##
 function Linear_IRWLS_Iter(prob::WENDyProblem, params::WENDyParameters;ll::LogLevel=Warn)
     D = prob.D
     J = prob.J
@@ -15,6 +9,7 @@ function Linear_IRWLS_Iter(prob::WENDyProblem, params::WENDyParameters;ll::LogLe
     Rᵀ! = Covariance(prob, params)
     Linear_IRWLS_Iter(prob.b₀, G0, Rᵀ!)
 end
+##
 function (m::Linear_IRWLS_Iter)(wnm1::AbstractVector{<:AbstractFloat};ll::LogLevel=Warn)
     with_logger(ConsoleLogger(stderr,ll)) do 
         KD = length(m.b₀)
@@ -30,18 +25,7 @@ function (m::Linear_IRWLS_Iter)(wnm1::AbstractVector{<:AbstractFloat};ll::LogLev
         return wn
     end
 end
-## using NonlinearSolve to solve the NLS problem
-# struct
-struct NLS_iter <: IRWLS_Iter
-    b₀::AbstractVector
-    Rᵀ!::Covariance 
-    r!::Residual
-    ∇r!::JacobianResidual
-    reltol::AbstractFloat
-    abstol::AbstractFloat
-    maxiters::Int
-end 
-# constructor
+## constructor
 function NLS_iter(prob::WENDyProblem, params::WENDyParameters)
     Rᵀ! = Covariance(prob, params)
     r! = Residual(prob, params)
@@ -170,25 +154,6 @@ function IRWLS(prob::WENDyProblem{lip}, w0::AbstractVector{<:AbstractFloat}, par
     end
 end 
 ##
-abstract type CostFunction end
-
-struct FirstOrderCostFunction <: CostFunction
-    f::Function 
-    ∇f!::Function 
-end
-
-struct SecondOrderCostFunction <: CostFunction
-    f::Function 
-    ∇f!::Function 
-    Hf!::Function 
-end
-
-struct LeastSquaresCostFunction <: CostFunction 
-    r!::Function 
-    J!::Function 
-    KD::Int
-end 
-##
 function trustRegion(
     costFun::SecondOrderCostFunction, w0::AbstractVector{<:Real}, params::WENDyParameters; 
     return_wits::Bool=false, kwargs...
@@ -199,7 +164,6 @@ function trustRegion(
     J = length(w0)
     res = Optim.optimize(
         costFun.f, costFun.∇f!, costFun.Hf!, # f, g, h
-        zeros(J), Inf*ones(J), # box constraints 
         w0, Optim.NewtonTrustRegion(), # x0, algo
         Optim.Options(
             x_reltol=reltol, x_abstol=abstol, iterations=maxIt, time_limit=timelimit, 
@@ -275,14 +239,10 @@ function nonlinearLeastSquares(costFun::LeastSquaresCostFunction,
             w0
         ),
         NonlinearSolve.LevenbergMarquardt();
-        # NonlinearSolve.TrustRegion();
         abstol=params.optimAbstol,
         reltol=params.optimReltol,
         maxiters=params.optimMaxiters,
         maxtime=params.optimTimelimit,
-        store_trace=Val(return_wits), 
-        trace_level=return_wits ? TraceAll() : TraceMinimal(),
-        verbose=false
     )
     what = sol.u
     iter = sol.stats.nsteps
@@ -309,19 +269,19 @@ function hybrid(
     return return_wits ?  (what_fslsq, iter_wendy+iter_fslsq, hcat(wits_wendy, wits_fslsq )) : what_fslsq
 end
 """ Wrapper function to call specific solvers """
-function solve!(wendyProb::WENDyProblem, w0::AbstractVector{<:Real}, params::WENDyParameters=WENDyParameters(), alg::Symbol=:trustRegion; kwargs...)
+function solve(wendyProb::WENDyProblem, w0::AbstractVector{<:Real}, params::WENDyParameters=WENDyParameters(); alg::Symbol=:trustRegion, kwargs...)
     if alg == :trustRegion 
-        return trustRegion(wendyProb.wnll, w0, params, kwargs... )
+        return trustRegion(wendyProb.wnll, w0, params; kwargs... )
     elseif alg == :arcqk 
-        return arcqk(wendyProb.wnll, w0, params, kwargs... )
+        return arcqk(wendyProb.wnll, w0, params; kwargs... )
     elseif alg == :hybrid
-        return hybrid(wendyProb.wnll, wendyProb.fslsq, w0, params, kwargs...)
+        return hybrid(wendyProb.wnll, wendyProb.fslsq, w0, params; kwargs...)
     elseif alg == :fslsq 
-        return nonlinearLeastSquares(wendyProb.fslsq, w0, params, kwargs...)
+        return nonlinearLeastSquares(wendyProb.fslsq, w0, params; kwargs...)
     elseif alg == :wlsq 
-        return nonlinearLeastSquares(wendyProb.wlsq, w0, params, kwargs...)
+        return nonlinearLeastSquares(wendyProb.wlsq, w0, params; kwargs...)
     elseif alg == :irwls 
-        return nonlinearLeastSquares(wendyProb.wlsq, w0, params, kwargs...)
+        return IRWLS(wendyProb, w0, params; kwargs...)
     end
     @assert false """$alg is not recognized as an implemented algorithm consider: 
     :trustRegion, :arcqk, :hybrid, :fslsq, :wlsq, :irwls
