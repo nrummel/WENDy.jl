@@ -1,19 +1,18 @@
 module WENDy
     ## external dependencies
-    using Reexport
     # optimization algorithms
-    using NonlinearSolve # nonlinear least squares
-    import NonlinearSolve.solve
+    using NonlinearSolve: NonlinearLeastSquaresProblem, NonlinearFunction, LevenbergMarquardt # nonlinear least squares
+    using NonlinearSolve: solve as solve_lsq
     using Optim # trust region
     using ManualNLPModels: NLPModel # necessary for ARC_qK
     using AdaptiveRegularization: ARCqKOp # ARC_qK
     # For solving and symbolicly representing diff eq 
-    @reexport using OrdinaryDiffEq
+    using OrdinaryDiffEq: Rosenbrock23, ODEProblem, OrdinaryDiffEqAlgorithm 
+    using OrdinaryDiffEq: solve as solve_ode
     using Symbolics, ForwardDiff
-    using OrdinaryDiffEq: ODESolution, OrdinaryDiffEqAlgorithm, solve, Rosenbrock23
     using Symbolics: jacobian, @variables
     # Other Necessities
-    @reexport using Distributions: Normal, LogNormal, Distribution
+    using Distributions: Normal, LogNormal, Distribution
     using ImageFiltering: imfilter, Inner # Convolution in Julia
     using FFTW: fft, ifft
     using Tullio: @tullio
@@ -34,5 +33,5 @@ module WENDy
     include("wendyProblems.jl")
     include("wendyOptim.jl")
 
-    export WENDyProblem, WENDyParameters, solve
+    export WENDyProblem, WENDyParameters, solve, Normal, LogNormal
 end # module WENDy

@@ -174,7 +174,7 @@ function (m::LinearJacobianResidual)(Rᵀ⁻¹∇r::AbstractMatrix{<:Real}, ::Ab
 end 
 # method mutate internal data 
 function (m::LinearJacobianResidual)(::AbstractVector{<:Real}; ll::LogLevel=Warn)
-        return m.∇r
+    return m.∇r
 end
 # method mutate internal data when Rᵀ is given
 function (m::LinearJacobianResidual)(::AbstractVector{<:Real}, Rᵀ::AbstractMatrix{<:Real}; ll::LogLevel=Warn)

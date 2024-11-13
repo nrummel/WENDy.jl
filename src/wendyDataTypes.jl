@@ -73,7 +73,7 @@ end
 ##
 struct LeastSquaresCostFunction <: CostFunction 
     r!::Function 
-    J!::Function 
+    ∇r!::Function 
     KD::Int
 end 
 ##

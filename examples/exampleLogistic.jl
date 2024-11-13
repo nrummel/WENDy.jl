@@ -1,6 +1,8 @@
 using Random, Logging, LinearAlgebra
 using PlotlyJS
 using WENDy
+using OrdinaryDiffEq: ODEProblem
+using OrdinaryDiffEq: solve as solve_ode
 ## Define rhs, ic, time domain, and length of parameters
 function f!(du, u, w, t)
     du[1] = w[1] * u[1] - w[2] * u[1]^2
@@ -19,18 +21,20 @@ ode = ODEProblem(
     wstar
 )
 tt = tRng[1]:dt:tRng[end]
-Ustar = reduce(vcat, um for um in solve(ode, saveat=dt).u)
+Ustar = reduce(vcat, um for um in solve_ode(ode, saveat=dt).u)
 U = Ustar + 0.01*randn(size(Ustar))
 ## Create wendy problem struct
 wendyProb = WENDyProblem(tt, U, f!, J, Val(true), Val(Normal); ll=Logging.Info)
 ## Solve the wendy problm given an intial guess for the parameters 
 w0 = [0.5, 0.5]
-what = solve(wendyProb, w0)
+relErr = norm(w0 - wstar) / norm(wstar)
+@info "Init Relative Coefficient Error = $(relErr)"
+what = WENDy.solve(wendyProb, w0)
 relErr = norm(what - wstar) / norm(wstar)
 @info "Relative Coefficient Error = $(relErr)"
 ## plot the resutls 
 odeprob = ODEProblem(f!, u0, tRng, what)
-sol = solve(odeprob; saveat=dt)
+sol = solve_ode(odeprob; saveat=dt)
 Uhat = reduce(vcat, um' for um in sol.u)
 plot(
     [
@@ -40,4 +44,3 @@ plot(
     ],
     Layout(title="Results",xaxis_title="time(s)", yaxis_title="State")
 )
-

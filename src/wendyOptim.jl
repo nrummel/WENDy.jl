@@ -4,10 +4,10 @@ function Linear_IRWLS_Iter(prob::WENDyProblem, params::WENDyParameters;ll::LogLe
     J = prob.J
     K = prob.K 
     G0 = zeros(K*D, J)
-    ∇r! = JacobianResidual(prob, params)
+    ∇r! = JacobianResidual(prob.data, params)
     ∇r!(G0, zeros(J))
-    Rᵀ! = Covariance(prob, params)
-    Linear_IRWLS_Iter(prob.b₀, G0, Rᵀ!)
+    Rᵀ! = Covariance(prob.data, params)
+    Linear_IRWLS_Iter(prob.data.b₀, G0, Rᵀ!)
 end
 ##
 function (m::Linear_IRWLS_Iter)(wnm1::AbstractVector{<:AbstractFloat};ll::LogLevel=Warn)
@@ -27,11 +27,11 @@ function (m::Linear_IRWLS_Iter)(wnm1::AbstractVector{<:AbstractFloat};ll::LogLev
 end
 ## constructor
 function NLS_iter(prob::WENDyProblem, params::WENDyParameters)
-    Rᵀ! = Covariance(prob, params)
-    r! = Residual(prob, params)
-    ∇r! = JacobianResidual(prob, params)
+    Rᵀ! = Covariance(prob.data, params)
+    r! = Residual(prob.data, params)
+    ∇r! = JacobianResidual(prob.data, params)
 
-    NLS_iter(prob.b₀, Rᵀ!, r!, ∇r!, params.nlsReltol,params.nlsAbstol,  params.nlsMaxiters)
+    NLS_iter(prob.data.b₀, Rᵀ!, r!, ∇r!, params.nlsReltol,params.nlsAbstol,  params.nlsMaxiters)
 end
 # method
 function (m::NLS_iter)(wnm1::AbstractVector{<:AbstractFloat};ll::LogLevel=Warn, _ll::LogLevel=Warn)
@@ -200,7 +200,7 @@ function arcqk(
     end
     # store iteratios in a callback
     wits_arc = zeros(J, 0)
-    function _clbk(nlp, slvr, stats)
+    function _clbk(nlp, solver, stats)
         wits_arc = hcat(wits_arc, nlp.x)
         nothing
     end 
@@ -229,24 +229,40 @@ function nonlinearLeastSquares(costFun::LeastSquaresCostFunction,
     params::WENDyParameters; 
     return_wits::Bool=false, kwargs...
 )   
-    sol = NonlinearSolve.solve(
+    J = length(w0)
+    wits = zeros(J)
+    function r!(r,w, ::Any)
+        if return_wits 
+            wits = hcat(wits, w)
+        end
+        costFun.r!(r,w)
+        nothing 
+    end
+
+    function ∇r!(J, w, ::Any)
+        costFun.∇r!(J,w)
+        nothing
+    end
+
+    sol = solve_lsq(
         NonlinearLeastSquaresProblem(
-            NonlinearFunction(
-                (r,w,_)->costFun.r!(r,w),
-                jac=(J,w,_)->costFun.J!(J,w), 
+            NonlinearFunction( # {iip, specialize} 
+                r!;
+                jac=∇r!, 
                 resid_prototype=zeros(costFun.KD)
             ),
             w0
         ),
-        NonlinearSolve.LevenbergMarquardt();
+        LevenbergMarquardt();
         abstol=params.optimAbstol,
         reltol=params.optimReltol,
         maxiters=params.optimMaxiters,
         maxtime=params.optimTimelimit,
+        verbose=false
     )
     what = sol.u
     iter = sol.stats.nsteps
-    return return_wits ? (what, iter, hcat(w0, what)) : what
+    return return_wits ? (what, iter, wits) : what
 end
 
 function hybrid(

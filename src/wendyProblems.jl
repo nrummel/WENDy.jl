@@ -40,16 +40,16 @@ function _getRhsAndDerivatives_nonlinear(_f!::Function, D::Int, J::Int, K::Int, 
     return f!,∇ₓf!,G,∇ₚf!,∇ₚ∇ₓf!,Hₚf!,Hₚ∇ₓf!
 end
 ##
-function _fsres(w, tt, U, _f!, alg, reltol, abstol)
+function _forwardSolveResidual(w, tt, U, _f!, alg, reltol, abstol)
     Mp1, D = size(U)
     try 
         u0 = U[1,:]
         tRng = (tt[1], tt[end])
-        dt = (tRng[end]-tRng[1]) / (Mp1-1)
-        odeprob = ODEProblem{true, SciMLBase.FullSpecialize}(_f!, u0, tRng, w)
-        sol = solve(odeprob, alg; 
-            reltol=reltol, abstol=abstol, 
-            saveat=dt
+        dt = mean(diff(tt))
+        odeprob = ODEProblem(_f!, u0, tRng, w)
+        sol = solve_ode(odeprob, alg; 
+            reltol=reltol, abstol=abstol,
+            saveat=dt, force_dtmin=true
         )
         Uhat = reduce(vcat, um' for um in sol.u)
         r = (Uhat - U) 
@@ -62,7 +62,7 @@ end
 function _buildCostFunctions(_f!::Function, U::AbstractMatrix{<:Real}, data::WENDyInternals, params::WENDyParameters)
     Mp1, D = size(data.X)
     K, _ = size(data.V)
-    f(w) = _fsres(w, data.tt, U, _f!, params.fsAlg, params.fsReltol, params.fsAbstol)
+    f(w) = _forwardSolveResidual(w, data.tt, U, _f!, params.fsAlg, params.fsReltol, params.fsAbstol)
     fslsq = LeastSquaresCostFunction(
         (r, w) -> r .= f(w), 
         (jac,w) -> ForwardDiff.jacobian!(jac, f, w),
