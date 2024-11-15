@@ -185,6 +185,7 @@ function (m::GradientWeakNLL)(w::AbstractVector{W}; ll::LogLevel=Warn) where W<:
         m.S⁻¹r,  m.∂ⱼLLᵀ, m.∇S; # buffers
         ll=ll # kwargs
     )
+    return m.∇m
 end
 ## Because of the complications we separate these into separate types
 abstract type HesianWeakNLL<:Function end

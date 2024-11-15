@@ -29,13 +29,15 @@ Ustar = reduce(vcat, um' for um in solve_ode(ode, saveat=dt).u)
 snr   = 0.01
 U     = Ustar.* exp.(snr*randn(size(Ustar)))
 ## Create wendy problem struct
-wendyProb = WENDyProblem(tt, U, f!, J, Val(false)#=Nonlinear in parameters=#, Val(LogNormal)#=LogNormalNoise=#; ll=Logging.Info)
+wendyProb = WENDyProblem(tt, U, f!, J, Val(false)#=Nonlinear in parameters=#, Val(LogNormal)#=LogNormalNoise=#; ll=Logging.Info);
 ## Solve the wendy problm given an intial guess for the parameters 
-w0 = wstar + 0.2*abs.(wstar)
+J = length(wstar)
+w0 = wstar + 0.5*randn(J).*abs.(wstar)
+# w0 = [0.7336635446929285, 0.34924148955718615, 13.976533673829369, 6.282647403425017, 0.9149290036628314, 0.19280811624587546, 0.7701803478856664, 0.7805192636751863]
 relErr = norm(w0 - wstar) / norm(wstar)
 @info "Initializing with Relative Coefficient Error = $(relErr)"
 @info "Solving wendy problem ..."
-@time what = WENDy.solve(wendyProb, w0)
+@time what = WENDy.solve(wendyProb, w0; alg=:arcqk)
 relErr = norm(what - wstar) / norm(wstar)
 @info "Relative Coefficient Error = $(relErr)"
 ## plot the resutls 

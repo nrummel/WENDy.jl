@@ -17,11 +17,11 @@ function _buildGmat(f!::Function, tt::AbstractVector{<:Real}, Y::AbstractMatrix{
     G
 end
 ##
-function _getRhsAndDerivatives_linear(_f!::Function, tt::AbstractVector{<:Real}, Y::AbstractMatrix{<:Real}, V::AbstractMatrix{<:Real}, D::Int, J::Int, ::Val{DistType}) where DistType<:Distribution
+function _getRhsAndDerivatives_linear(_f!::Function, tt::AbstractVector{<:Real}, X::AbstractMatrix{<:Real}, V::AbstractMatrix{<:Real}, D::Int, J::Int, ::Val{DistType}) where DistType<:Distribution
     @info " Computing G matrix for linear problem"
     f!   = _getf(_f!, D, J, Val(DistType))
     ∇ₓf! = _get∇ₓf(f!, D, J)
-    G    = _buildGmat(f!, tt, Y, V, J)
+    G    = _buildGmat(f!, tt, X, V, J)
     function _foo!(::Any, ::Any, ::Any) 
         @assert false "This function is not implemented of linear problems"
     end
@@ -34,39 +34,39 @@ function _getRhsAndDerivatives_nonlinear(_f!::Function, D::Int, J::Int, K::Int, 
     ∇ₓf!   = _get∇ₓf(f!, D, J)
     G      = NaN .* ones(K*D, J)
     ∇ₚf!   = _get∇ₚf(f!, D, J)
-    ∇ₚ∇ₓf! = _get∇ₚ∇ₓf(_f!, D, J)
-    Hₚf!   = _getHₚf(_f!, D, J)
-    Hₚ∇ₓf! = _getHₚ∇ₓf(_f!, D, J)
+    ∇ₚ∇ₓf! = _get∇ₚ∇ₓf(f!, D, J)
+    Hₚf!   = _getHₚf(f!, D, J)
+    Hₚ∇ₓf! = _getHₚ∇ₓf(f!, D, J)
     return f!,∇ₓf!,G,∇ₚf!,∇ₚ∇ₓf!,Hₚf!,Hₚ∇ₓf!
 end
 ##
-function _forwardSolveResidual(w, tt, U, _f!, alg, reltol, abstol)
-    Mp1, D = size(U)
+function _forwardSolveResidual(w, _tt, U, _f!, alg, reltol, abstol)
+    _Mp1, D = size(U)
     try 
         u0 = U[1,:]
-        tRng = (tt[1], tt[end])
-        dt = mean(diff(tt))
+        tRng = (_tt[1], _tt[end])
+        dt = mean(diff(_tt))
         odeprob = ODEProblem(_f!, u0, tRng, w)
         sol = solve_ode(odeprob, alg; 
             reltol=reltol, abstol=abstol,
-            saveat=dt, force_dtmin=true
+            saveat=dt, verbose=false
         )
         Uhat = reduce(vcat, um' for um in sol.u)
         r = (Uhat - U) 
         return r[:]
     catch 
-        NaN*ones(Mp1*D)
+        NaN*ones(_Mp1*D)
     end
 end
 
-function _buildCostFunctions(_f!::Function, U::AbstractMatrix{<:Real}, data::WENDyInternals, params::WENDyParameters)
-    Mp1, D = size(data.X)
+function _buildCostFunctions(_tt::AbstractVector{<:Real}, _f!::Function, U::AbstractMatrix{<:Real}, data::WENDyInternals, params::WENDyParameters)
+    _Mp1, D = size(U)
     K, _ = size(data.V)
-    f(w) = _forwardSolveResidual(w, data.tt, U, _f!, params.fsAlg, params.fsReltol, params.fsAbstol)
+    f(w) = _forwardSolveResidual(w, _tt, U, _f!, params.fsAlg, params.fsReltol, params.fsAbstol)
     fslsq = LeastSquaresCostFunction(
         (r, w) -> r .= f(w), 
         (jac,w) -> ForwardDiff.jacobian!(jac, f, w),
-        Mp1*D
+        _Mp1*D
     )
 
     wlsq = LeastSquaresCostFunction(
@@ -85,7 +85,7 @@ end
 
 ## constructor
 function WENDyProblem(
-    tt::AbstractVector{<:Real}, U::AbstractVecOrMat{<:Real}, _f!::Function, J::Int, 
+    _tt::AbstractVector{<:Real}, U::AbstractVecOrMat{<:Real}, _f!::Function, J::Int, 
     ::Val{lip}=Val(false), ::Val{DistType}=Val(Normal),params::WENDyParameters=WENDyParameters(); 
     ll::LogLevel=Warn) where {lip, DistType<:Distribution}
     with_logger(ConsoleLogger(stderr, ll)) do
@@ -94,30 +94,38 @@ function WENDyProblem(
             @info "  Reshaping U to be an (M+1)x1 matrix"
             U = reshape(U, (length(U),1))
         end
-        Mp1, D = size(U)
+        _Mp1, D = size(U)
         @info "  Estimate the noise in each dimension"
-        _Y = DistType == Normal ? U : log.(U)
-        sig = estimate_std(_Y)
-        V, Vp = getTestFunctionMatrices(tt, U, params; ll=ll)
+        Mp1, tt, X = if DistType == Normal 
+            _Mp1, _tt, U
+        else
+            ix = findall( all(um .> 0) for um in eachrow(U))
+            if length(ix) < _Mp1
+                @info " Removing data that is zero so that logrithms are well defined: $(_Mp1 - length(ix)) data point(s) are invalid"
+            end
+            length(ix), _tt[ix], log.(U[ix,:])
+        end
+        sig = estimate_std(X)
+        V, Vp = getTestFunctionMatrices(tt, X, params; ll=ll)
         K, _ = size(V)
         @info "  Building the LHS to the residual"
-        b₀ = reshape(-Vp * _Y, K*D)
+        b₀ = reshape(-Vp * X, K*D)
         @info "  Build julia functions from symbolic expressions of ODE"
         (f!,∇ₓf!,G,∇ₚf!,∇ₚ∇ₓf!,Hₚf!,Hₚ∇ₓf!) = if lip  
-            _getRhsAndDerivatives_linear(_f!, tt, _Y, V, D, J, Val(DistType)) 
+            _getRhsAndDerivatives_linear(_f!, tt, X, V, D, J, Val(DistType)) 
         else 
             _getRhsAndDerivatives_nonlinear(_f!, D, J, K, Val(DistType))
         end
         @info "  Building Internal Data structures"
         data = WENDyInternals{lip,DistType}(
-            J,b₀,sig,tt,_Y,V,Vp,
+            J,b₀,sig,tt,X,V,Vp,
             f!,∇ₓf!,
             G, # only used in the linear case
             ∇ₚf!,∇ₚ∇ₓf!,Hₚf!,Hₚ∇ₓf! # only used in the nonlinear case
         )
         ## Build Cost Functions 
         @info "  Building Cost Functions"
-        fslsq, wlsq, wnll = _buildCostFunctions(_f!, U, data, params)
+        fslsq, wlsq, wnll = _buildCostFunctions(_tt, _f!, U, data, params)
 
         return WENDyProblem{lip, DistType}(
             D,J,Mp1,K,

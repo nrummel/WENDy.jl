@@ -79,7 +79,11 @@ function _Hwnll!(
     @assert !all(0 .== r)
     J = length(w)
     # Hm(w) - Hessian of Maholinobis distance 
-    F = svd(S)
+    F = try 
+        cholesky(S) 
+    catch 
+        lu(S)
+    end
     ## Precompute S⁻¹(G(w)-b) and S⁻¹∂ⱼG(w)
     ldiv!(S⁻¹r, F, r)
     ldiv!(S⁻¹∇r, F, G)

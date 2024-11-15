@@ -2,9 +2,9 @@
 @kwdef struct WENDyParameters   
     diagReg::Real                       = 1.0e-10
     radiusMinTime::Real                 = 0.01
-    radiusMaxTime::Real                 = 5.0
+    radiusMaxTime::Real                 = 1.0
     numRadii::Int                       = 100
-    radiiParams::AbstractVector{<:Real} = 2 .^(0:3)
+    radiiParams::AbstractVector{<:Real} = 2 .^(1:3)
     testFunSubRate::Real                = 2.0
     maxTestFunCondNum::Real             = 1e2
     Kmax::Int                           = 200
@@ -17,7 +17,7 @@
     optimAbstol::Real                   = 1e-8
     optimReltol::Real                   = 1e-8
     optimMaxiters::Int                  = 200
-    optimTimelimit::Real                = 200.0
+    optimTimelimit::Real                = 100.0
     fsAlg::OrdinaryDiffEqAlgorithm      = Rosenbrock23()
 end 
 ##

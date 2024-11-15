@@ -32,10 +32,17 @@ function _R!(
 end
 # m(w) - Maholinobis distance
 function _wnll(S::AbstractMatrix, r::AbstractVector, S⁻¹r::AbstractVector, constTerm::AbstractFloat)
-    F = svd(S)
+    F, logDet = try
+        F = cholesky(S)
+        logDet = 2*sum(log.(diag(F.U)))
+        F, logDet 
+    catch
+        F = lu(S)
+        logDet = sum(log.(diag(F.U)))
+        F, logDet 
+    end
     ldiv!(S⁻¹r, F, r)
     mdist = dot(r, S⁻¹r)
-    logDet = sum(log.(F.S))
     #constTerm
     1/2*(
         mdist 
@@ -54,7 +61,11 @@ function _∇wnll!(
 )
     J = length(∇m)
     # TODO: perhaps do this inplace?
-    F = svd(S) 
+    F = try 
+        cholesky(S) 
+    catch  
+        qr(S) 
+    end
     # precompute the S⁻¹r 
     ldiv!(S⁻¹r, F, r)
     # compute ∇S

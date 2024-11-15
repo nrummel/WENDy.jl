@@ -55,7 +55,7 @@ function _minRadius(
     end
     ix = _getcorner(log.(errs), radii) 
     
-    return debug ? (radii[ix], ix, radii, errs) : radii[ix]
+    return debug ? (ix, radii, errs) : radii[ix]
 end
 """
     Compute the derivative of a test function 
@@ -152,7 +152,9 @@ function getTestFunctionMatrices(
         end 
         @info "    pre-radiusMin=$radiusMin, radiusMax=$radiusMax"
         # select min radius by looking that M/testFunSubRate fourier mode of Φ∘U
-        radiusMin = _minRadius(U, dt, radiusMin, numRadii, radiusMax, testFunSubRate, Kᵣ)
+        radiusMin =  _minRadius(U, dt, radiusMin, numRadii, radiusMax, testFunSubRate, Kᵣ)
+        # return _minRadius(U, dt, radiusMin, numRadii, radiusMax, testFunSubRate, Kᵣ, debug=true)
+        # radiusMin = 4
         @info "    radiusMin=$radiusMin"
         radii = filter(r->r < radiusMax, Int.(floor.(radiiParams*radiusMin)))
         if length(radii) == 0 

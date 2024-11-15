@@ -61,17 +61,16 @@ function (m::NLS_iter)(wnm1::AbstractVector{<:AbstractFloat};ll::LogLevel=Warn, 
             ll::LogLevel=_ll
         ) = m.∇r!(jac, w, m.Rᵀ!.R; ll=ll)
         # Solve nonlinear Least squares problem         
-        prob = NonlinearLeastSquaresProblem(
-            NonlinearFunction(
-                resn!; 
-                jac=jacn!, 
-                resid_prototype=zeros(KD)
+        dt = @elapsed a = @allocations sol = solve_lsq(
+            NonlinearLeastSquaresProblem(
+                NonlinearFunction(
+                    resn!; 
+                    jac=jacn!, 
+                    resid_prototype=zeros(KD)
+                ),
+                wnm1
             ),
-            wnm1
-        )
-        dt = @elapsed a = @allocations sol = NonlinearSolve.solve(
-            prob,
-            NonlinearSolve.TrustRegion();
+            LevenbergMarquardt();
             reltol=m.reltol,
             maxiters=m.maxiters,
             verbose=false
@@ -164,7 +163,11 @@ function trustRegion(
     J = length(w0)
     res = Optim.optimize(
         costFun.f, costFun.∇f!, costFun.Hf!, # f, g, h
-        w0, Optim.NewtonTrustRegion(), # x0, algo
+        w0, Optim.NewtonTrustRegion(
+            # rho_lower = 0.05,
+            # rho_upper = 2.0,
+            # delta_hat = 100.0
+        ), # x0, algo
         Optim.Options(
             x_reltol=reltol, x_abstol=abstol, iterations=maxIt, time_limit=timelimit, 
             store_trace=return_wits, extended_trace=return_wits
@@ -230,7 +233,7 @@ function nonlinearLeastSquares(costFun::LeastSquaresCostFunction,
     return_wits::Bool=false, kwargs...
 )   
     J = length(w0)
-    wits = zeros(J)
+    wits = zeros(J,0)
     function r!(r,w, ::Any)
         if return_wits 
             wits = hcat(wits, w)

@@ -21,13 +21,18 @@ function _∇L!(
     ∇L::AbstractArray{<:Real,3}, w::AbstractVector{<:Real},
     tt::AbstractVector{<:Real}, X::AbstractMatrix{<:Real},V::AbstractMatrix{<:Real},sig::AbstractVector{<:Real},
     ∇ₚ∇ₓf!::Function,
-    JwJuF::AbstractArray{<:Real,4}, __∇L::AbstractArray{<:Real,5}, _∇L::AbstractArray{<:Real,5})
+JwJuF::AbstractArray{<:Real,4}, __∇L::AbstractArray{<:Real,5}, _∇L::AbstractArray{<:Real,5})
     Mp1, D = size(X)
     K, _ = size(V)
     J = length(w)
     # compute ∇L
     @inbounds for m in 1:Mp1 
-        @views ∇ₚ∇ₓf!(JwJuF[:,:,:,m], X[m,:], w, tt[m])
+        try 
+            @views ∇ₚ∇ₓf!(JwJuF[:,:,:,m], X[m,:], w, tt[m])
+        catch e
+            @show w,X[m,:],tt[m]  
+            throw(e)
+        end
     end
     @tullio _∇L[k,d2,m,d1,j] = JwJuF[d2,d1,j,m] * V[k,m] * sig[d1] 
     # @tullio __∇L[k,d2,d1,j,m] = JwJuF[d2,d1,j,m] * V[k,m] * sig[d1] 
@@ -114,7 +119,11 @@ function _Hwnll!(
     K, _ = size(V)
     J = length(w)
     # Hm(w) - Hessian of Maholinobis distance 
-    F = svd(S)
+    F = try 
+        cholesky(S) 
+    catch 
+        lu(S)
+    end
     ## Precompute S⁻¹(G(w)-b) and S⁻¹∂ⱼG(w)
     begin
         ldiv!(S⁻¹r, F, r)
