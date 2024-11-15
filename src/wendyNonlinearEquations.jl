@@ -27,12 +27,7 @@ JwJuF::AbstractArray{<:Real,4}, __∇L::AbstractArray{<:Real,5}, _∇L::Abstract
     J = length(w)
     # compute ∇L
     @inbounds for m in 1:Mp1 
-        try 
-            @views ∇ₚ∇ₓf!(JwJuF[:,:,:,m], X[m,:], w, tt[m])
-        catch e
-            @show w,X[m,:],tt[m]  
-            throw(e)
-        end
+        @views ∇ₚ∇ₓf!(JwJuF[:,:,:,m], X[m,:], w, tt[m])
     end
     @tullio _∇L[k,d2,m,d1,j] = JwJuF[d2,d1,j,m] * V[k,m] * sig[d1] 
     # @tullio __∇L[k,d2,d1,j,m] = JwJuF[d2,d1,j,m] * V[k,m] * sig[d1] 

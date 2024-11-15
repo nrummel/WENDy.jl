@@ -4,7 +4,7 @@
     radiusMinTime::Real                 = 0.01
     radiusMaxTime::Real                 = 1.0
     numRadii::Int                       = 100
-    radiiParams::AbstractVector{<:Real} = 2 .^(1:3)
+    radiiParams::AbstractVector{<:Real} = 2 .^(0:3)
     testFunSubRate::Real                = 2.0
     maxTestFunCondNum::Real             = 1e2
     Kmax::Int                           = 200
