@@ -17,7 +17,7 @@
     optimAbstol::Real                   = 1e-8
     optimReltol::Real                   = 1e-8
     optimMaxiters::Int                  = 200
-    optimTimelimit::Real                = 100.0
+    optimTimelimit::Real                = 200.0
     fsAlg::OrdinaryDiffEqAlgorithm      = Rosenbrock23()
 end 
 ##
