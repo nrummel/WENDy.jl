@@ -268,7 +268,7 @@ function nonlinearLeastSquares(costFun::LeastSquaresCostFunction,
     return return_wits ? (what, iter, wits) : what
 end
 
-function hybrid(
+function hybrid_trustRegion_fslsq(
     wnll::SecondOrderCostFunction, fslsq::LeastSquaresCostFunction, w0::AbstractVector{<:Real}, params::WENDyParameters; 
     return_wits::Bool=false, kwargs...
 )
@@ -287,20 +287,44 @@ function hybrid(
     end 
     return return_wits ?  (what_fslsq, iter_wendy+iter_fslsq, hcat(wits_wendy, wits_fslsq )) : what_fslsq
 end
+
+function hybrid_wlsq_trustRegion(
+    wlsq::LeastSquaresCostFunction, wnll::SecondOrderCostFunction, w0::AbstractVector{<:Real}, params::WENDyParameters; 
+    return_wits::Bool=false, kwargs...
+)
+    what_wlsq, iter_wlsq, wits_wlsq = if return_wits 
+        nonlinearLeastSquares(wlsq, w0, params, return_wits=true)
+    else 
+        what_wlsq, iter_wlsq = nonlinearLeastSquares(wlsq, what_wendy, params, return_wits=false)
+        what_wlsq, iter_wlsq, nothing
+    end 
+    what_wendy, iter_wendy, wits_wendy = if return_wits
+        trustRegion(wnll, what_wlsq, params, return_wits=true)
+    else 
+        what_wendy, iter_wendy = trustRegion(wnll, w0, params, return_wits=false)
+        what_wendy, iter_wendy, nothing
+    end 
+
+    return return_wits ?  (what_wendy, iter_wlsq + iter_wendy, hcat(wits_wlsq,wits_wendy )) : what_wendy
+end
+
+
 """ Wrapper function to call specific solvers """
 function solve(wendyProb::WENDyProblem, w0::AbstractVector{<:Real}, params::WENDyParameters=WENDyParameters(); alg::Symbol=:trustRegion, kwargs...)
     if alg == :trustRegion 
         return trustRegion(wendyProb.wnll, w0, params; kwargs... )
     elseif alg == :arcqk 
         return arcqk(wendyProb.wnll, w0, params; kwargs... )
-    elseif alg == :hybrid
-        return hybrid(wendyProb.wnll, wendyProb.fslsq, w0, params; kwargs...)
+    elseif alg == :hybrid_trustRegion_fslsq
+        return hybrid_trustRegion_fslsq(wendyProb.wnll, wendyProb.fslsq, w0, params; kwargs...)
     elseif alg == :fslsq 
         return nonlinearLeastSquares(wendyProb.fslsq, w0, params; kwargs...)
     elseif alg == :wlsq 
         return nonlinearLeastSquares(wendyProb.wlsq, w0, params; kwargs...)
     elseif alg == :irwls 
         return IRWLS(wendyProb, w0, params; kwargs...)
+    elseif alg == :hybrid_wlsq_trustRegion
+        return hybrid_wlsq_trustRegion(wendyProb.wlsq, wendyProb.wnll, w0, params; kwargs...) 
     end
     @assert false """$alg is not recognized as an implemented algorithm consider: 
     :trustRegion, :arcqk, :hybrid, :fslsq, :wlsq, :irwls
