@@ -269,9 +269,11 @@ function nonlinearLeastSquares(costFun::LeastSquaresCostFunction,
 end
 
 function hybrid_trustRegion_fslsq(
-    wnll::SecondOrderCostFunction, fslsq::LeastSquaresCostFunction, w0::AbstractVector{<:Real}, params::WENDyParameters; 
+    wnll::SecondOrderCostFunction, fslsq::LeastSquaresCostFunction, w0u0::AbstractVector{<:Real}, J::Int, params::WENDyParameters; 
     return_wits::Bool=false, kwargs...
 )
+    w0 = w0u0[1:J]
+    u0 = w0u0[J+1:end]
     what_wendy, iter_wendy, wits_wendy = if return_wits
         trustRegion(wnll, w0, params, return_wits=true)
     else 
@@ -280,12 +282,12 @@ function hybrid_trustRegion_fslsq(
     end 
 
     what_fslsq, iter_fslsq, wits_fslsq = if return_wits 
-        nonlinearLeastSquares(fslsq, what_wendy, params, return_wits=true)
+        nonlinearLeastSquares(fslsq, vcat(what_wendy, u0), params, return_wits=true)
     else 
         what_fslsq, iter_fslsq = nonlinearLeastSquares(fslsq, what_wendy, params, return_wits=false)
         what_fslsq, iter_fslsq, nothing
     end 
-    return return_wits ?  (what_fslsq, iter_wendy+iter_fslsq, hcat(wits_wendy, wits_fslsq )) : what_fslsq
+    return return_wits ?  (what_fslsq, iter_wendy+iter_fslsq, hcat(vcat(wits_wendy, reduce(hcat, u0 for _ in 1:size(wits_wendy,2))), wits_fslsq )) : what_fslsq
 end
 
 function hybrid_wlsq_trustRegion(
@@ -316,9 +318,9 @@ function solve(wendyProb::WENDyProblem, w0::AbstractVector{<:Real}, params::WEND
     elseif alg == :arcqk 
         return arcqk(wendyProb.wnll, w0, params; kwargs... )
     elseif alg == :hybrid_trustRegion_fslsq
-        return hybrid_trustRegion_fslsq(wendyProb.wnll, wendyProb.fslsq, w0, params; kwargs...)
+        return hybrid_trustRegion_fslsq(wendyProb.wnll, wendyProb.fslsq, vcat(w0, wendyProb.u0), wendyProb.J, params; kwargs...)
     elseif alg == :fslsq 
-        return nonlinearLeastSquares(wendyProb.fslsq, w0, params; kwargs...)
+        return nonlinearLeastSquares(wendyProb.fslsq, vcat(w0, wendyProb.u0), params; kwargs...)
     elseif alg == :wlsq 
         return nonlinearLeastSquares(wendyProb.wlsq, w0, params; kwargs...)
     elseif alg == :irwls 

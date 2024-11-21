@@ -40,10 +40,11 @@ function _getRhsAndDerivatives_nonlinear(_f!::Function, D::Int, J::Int, K::Int, 
     return f!,∇ₓf!,G,∇ₚf!,∇ₚ∇ₓf!,Hₚf!,Hₚ∇ₓf!
 end
 ##
-function _forwardSolveResidual(w, _tt, U, _f!, alg, reltol, abstol)
+function _forwardSolveResidual(wu0, J, _tt, U, _f!, alg, reltol, abstol)
     _Mp1, D = size(U)
     try 
-        u0 = U[1,:]
+        w = wu0[1:J]
+        u0 = wu0[J+1:end]
         tRng = (_tt[1], _tt[end])
         dt = mean(diff(_tt))
         odeprob = ODEProblem(_f!, u0, tRng, w)
@@ -59,13 +60,13 @@ function _forwardSolveResidual(w, _tt, U, _f!, alg, reltol, abstol)
     end
 end
 
-function _buildCostFunctions(_tt::AbstractVector{<:Real}, _f!::Function, U::AbstractMatrix{<:Real}, data::WENDyInternals, params::WENDyParameters)
+function _buildCostFunctions(J::Int, _tt::AbstractVector{<:Real}, _f!::Function, U::AbstractMatrix{<:Real}, data::WENDyInternals, params::WENDyParameters)
     _Mp1, D = size(U)
     K, _ = size(data.V)
-    f(w) = _forwardSolveResidual(w, _tt, U, _f!, params.fsAlg, params.fsReltol, params.fsAbstol)
+    f(wu0) = _forwardSolveResidual(wu0, J, _tt, U, _f!, params.fsAlg, params.fsReltol, params.fsAbstol)
     fslsq = LeastSquaresCostFunction(
-        (r, w) -> r .= f(w), 
-        (jac,w) -> ForwardDiff.jacobian!(jac, f, w),
+        (r, wu0) -> r .= f(wu0), 
+        (jac,wu0) -> ForwardDiff.jacobian!(jac, f, wu0),
         _Mp1*D
     )
 
@@ -125,10 +126,10 @@ function WENDyProblem(
         )
         ## Build Cost Functions 
         @info "  Building Cost Functions"
-        fslsq, wlsq, wnll = _buildCostFunctions(_tt, _f!, U, data, params)
+        fslsq, wlsq, wnll = _buildCostFunctions(J, _tt, _f!, U, data, params)
 
         return WENDyProblem{lip, DistType}(
-            D,J,Mp1,K,
+            D,J,Mp1,K,U[1,:],
             data, fslsq, wlsq, wnll
         )
     end

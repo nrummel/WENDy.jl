@@ -82,6 +82,7 @@ struct WENDyProblem{lip, DistType}
     J::Int # number of parameters (to be estimated)
     Mp1::Int # (Mp1+1) number of data points in time 
     K::Int # number of test functions 
+    u0::AbstractVector{<:Real}
     data::WENDyInternals{lip, DistType}
     # Cost functions 
     fslsq::LeastSquaresCostFunction
