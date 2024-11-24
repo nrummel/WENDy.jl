@@ -6,7 +6,8 @@
     numRadii::Int                       = 100
     radiiParams::AbstractVector{<:Real} = 2 .^(0:3)
     testFunSubRate::Real                = 2.0
-    maxTestFunCondNum::Real             = 1e2
+    maxTestFunCondNum::Real             = 1e4
+    minTestFunInfoNum::Real             = 0.95
     Kmax::Int                           = 200
     Kᵣ::Union{Nothing,Int}              = 100
     fsAbstol::Real                      = 1e-8
@@ -19,6 +20,7 @@
     optimMaxiters::Int                  = 200
     optimTimelimit::Real                = 200.0
     fsAlg::OrdinaryDiffEqAlgorithm      = Rosenbrock23()
+    fsU0Free::Bool                      = true
 end 
 ##
 struct WENDyInternals{lip, DistType}

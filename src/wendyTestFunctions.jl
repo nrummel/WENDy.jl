@@ -131,7 +131,7 @@ function _computeDerivative_fft(V::AbstractMatrix, dt::Real)
 end
 """ """
 function getTestFunctionMatrices(
-    tt::AbstractVector{<:Real}, U::AbstractMatrix{<:Real}, radiusMinTime::Real, radiusMaxTime::Real, numRadii::Int, testFunSubRate::Real, radiiParams::AbstractVector{<:Real}, maxTestFunCondNum::Real, Kmax::Int, Kᵣ::Union{Nothing,Int}; 
+    tt::AbstractVector{<:Real}, U::AbstractMatrix{<:Real}, radiusMinTime::Real, radiusMaxTime::Real, numRadii::Int, testFunSubRate::Real, radiiParams::AbstractVector{<:Real}, maxTestFunCondNum::Real, minTestFunInfoNum::Real, Kmax::Int, Kᵣ::Union{Nothing,Int}; 
     analyticVp::Bool=true, noSVD::Bool=false, ll::LogLevel=Info, debug::Bool=false
 )
     with_logger(ConsoleLogger(stderr, ll)) do 
@@ -174,7 +174,7 @@ function getTestFunctionMatrices(
         infoNumbers = [sum(F.S[1:k]) / sumAllS for k in 1:Kmax] 
         K = min(
             findlast(condNumbers .<= maxTestFunCondNum),
-            findlast(infoNumbers .<= 1 - 1/maxTestFunCondNum),
+            findlast(infoNumbers .<= minTestFunInfoNum),
             Kmax
         )
         if K == Kmax
@@ -191,5 +191,5 @@ function getTestFunctionMatrices(
 end
 ## Convience wrapper to get testfunctions with the parameter struct
 function getTestFunctionMatrices(tt::AbstractVector{<:Real}, U::AbstractMatrix{<:Real}, params::WENDyParameters; kwargs...)
-    getTestFunctionMatrices(tt, U, params.radiusMinTime,params.radiusMaxTime, params.numRadii, params.testFunSubRate,params.radiiParams,params.maxTestFunCondNum,params.Kmax, params.Kᵣ; kwargs...)
+    getTestFunctionMatrices(tt, U, params.radiusMinTime,params.radiusMaxTime, params.numRadii, params.testFunSubRate,params.radiiParams,params.maxTestFunCondNum, params.minTestFunInfoNum,params.Kmax, params.Kᵣ; kwargs...)
 end
