@@ -114,9 +114,9 @@ function _buildV(radius::Int, Mp1::Int, dt::Real, Kᵣ::Union{Int, Nothing}=noth
     return Vr
 end
 """ """ 
-function _computeDerivative_analytic(Vp_full::AbstractMatrix, fact::SVD, K::Int)
+function _computeDerivative_analytic(Vp_full::AbstractMatrix, F::SVD, K::Int)
     @info "    Computing Vp with analytic Vp_full and svd(V_full)"
-    (diagm(1 ./ fact.S) * fact.U' *  Vp_full)[1:K,:]
+    (diagm(1 ./ F.S) * F.U' *  Vp_full)[1:K,:]
 end
 """ """
 function _computeDerivative_fft(V::AbstractMatrix, dt::Real)
@@ -129,8 +129,7 @@ function _computeDerivative_fft(V::AbstractMatrix, dt::Real)
         vcat(0:floor(Mp1/2), -floor(Mp1/2):-1)
     Vp_fft = imag(ifft((-2*pi/(Mp1*dt))*k .* _Vp_fft, (1,)))'
 end
-"""
-"""
+""" """
 function getTestFunctionMatrices(
     tt::AbstractVector{<:Real}, U::AbstractMatrix{<:Real}, radiusMinTime::Real, radiusMaxTime::Real, numRadii::Int, testFunSubRate::Real, radiiParams::AbstractVector{<:Real}, maxTestFunCondNum::Real, Kmax::Int, Kᵣ::Union{Nothing,Int}; 
     analyticVp::Bool=true, noSVD::Bool=false, ll::LogLevel=Info, debug::Bool=false
@@ -161,22 +160,31 @@ function getTestFunctionMatrices(
         end
         V_full = reduce(vcat, _buildV(r, Mp1, dt) for r in radii)
         Vp_full = reduce(vcat, _buildV(r, Mp1, dt; derivativeOrder=1) for r in radii)
-        @info "    K_full=$(size(V_full,1))"
+        Kfull, _ = size(V_full)
+        @info "    K_full=$Kfull"
         if noSVD
             @info "    Returning the V_full, Vp_full"
             return V_full, Vp_full 
         end
-        fact = svd(V_full)
+        Kmax = min(Kmax, Kfull, Mp1)
+        F = minimum(size(V_full)) <= Kmax ? svd(V_full) : svds(V_full, nsv=Kmax)[1]
         # Choose K off how quickly the singular values decay wrt to the max
-        condNumbers = fact.S[1] ./ fact.S
-        K = findlast(condNumbers .<= maxTestFunCondNum) 
-        if K > min(Mp1, Kmax)
-            @info "    K=$K, but Kmax=$Kmax and Mp1=$Mp1"
-            K = min(Mp1,Kmax)
+        condNumbers = F.S[1] ./ F.S
+        sumAllS = sum(F.S) + (min(Kfull, Mp1)-Kmax) * F.S[end] # upper bound on the sum of all singular values
+        infoNumbers = [sum(F.S[1:k]) / sumAllS for k in 1:Kmax] 
+        K = min(
+            findlast(condNumbers .<= maxTestFunCondNum),
+            findlast(infoNumbers .<= 1 - 1/maxTestFunCondNum),
+            Kmax
+        )
+        if K == Kmax
+            @info "    Warning... K set to Kmax"
         end
+        @info "    condNum is now $(condNumbers[K])"
+        @info "    infoNum is now $(infoNumbers[K])"
         @info "    K=$(K)"
-        V = fact.Vt[1:K,:]
-        Vp = analyticVp ? _computeDerivative_analytic(Vp_full, fact, K) : _computeDerivative_fft(V, dt)
+        V = F.Vt[1:K,:]
+        Vp = analyticVp ? _computeDerivative_analytic(Vp_full, F, K) : _computeDerivative_fft(V, dt)
         @assert size(V,2) == Mp1 && size(Vp,2) == Mp1
         return debug ? (radii, V_full, Vp_full, V, Vp) : (V, Vp)
     end

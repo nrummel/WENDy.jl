@@ -16,6 +16,7 @@ module WENDy
     using ImageFiltering: imfilter, Inner # Convolution in Julia
     using FFTW: fft, ifft
     using Tullio: @tullio
+    using Arpack: svds
     # stdlib
     using LinearAlgebra, Statistics, Random, Logging, Printf
     using Logging: Info, Warn, LogLevel
