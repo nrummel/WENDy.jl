@@ -38,7 +38,7 @@ function _wnll(S::AbstractMatrix, r::AbstractVector, S⁻¹r::AbstractVector, co
         F, logDet 
     catch
         F = lu(S)
-        logDet = sum(log.(diag(F.U)))
+        logDet = sum(log.(filter!(x-> x >0, diag(F.U))))
         F, logDet 
     end
     ldiv!(S⁻¹r, F, r)
