@@ -49,7 +49,7 @@ function _forwardSolveResidual(wu0, J, _tt, U, _f!, alg, reltol, abstol, u0Free)
             wu0[1:J], U[1,:]
         end
         tRng = (_tt[1], _tt[end])
-        dt = mean(diff(_tt))
+        dt = (_tt[end] - _tt[1]) / (length(_tt) - 1)
         odeprob = ODEProblem(_f!, u0, tRng, w)
         sol = solve_ode(odeprob, alg; 
             reltol=reltol, abstol=abstol,
