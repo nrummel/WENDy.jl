@@ -136,7 +136,7 @@ function getTestFunctionMatrices(
 )
     with_logger(ConsoleLogger(stderr, ll)) do 
         @info "  Getting Test Function Matrices"
-        @assert all(diff(tt) .- (tt[2] - tt[1]) .< 1e-6) "Must use uniform time grid"
+        @assert all(abs.(diff(tt) .- (tt[2] - tt[1])) .< 1e-6) "Must use uniform time grid diff(tt) = $(diff(tt))"
         dt = mean(diff(tt))
         Mp1, _ = size(U)
         @info "    Mp1 = $Mp1, dt = $dt"

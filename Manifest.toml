@@ -2,7 +2,7 @@
 
 julia_version = "1.11.1"
 manifest_format = "2.0"
-project_hash = "96c213116597fb4444051b52a101bbe8ad226b53"
+project_hash = "07ff7a523324138aab4d045dd243b91f3099c7e9"
 
 [[deps.ADTypes]]
 git-tree-sha1 = "72af59f5b8f09faee36b4ec48e014a79210f2f4f"
@@ -770,6 +770,12 @@ deps = ["Artifacts", "Preferences"]
 git-tree-sha1 = "be3dc50a92e5a386872a493a10050136d4703f9b"
 uuid = "692b3bcd-3c85-4b1f-b108-f13ce0eb3210"
 version = "1.6.1"
+
+[[deps.JSOSolvers]]
+deps = ["Krylov", "LinearAlgebra", "LinearOperators", "Logging", "NLPModels", "NLPModelsModifiers", "Printf", "SolverCore", "SolverTools"]
+git-tree-sha1 = "67f493f5ad881df690c1d9a9bfb8c7c7eda42fba"
+uuid = "10dff2fc-5484-5881-a0e0-c90441020f8a"
+version = "0.11.2"
 
 [[deps.KLU]]
 deps = ["LinearAlgebra", "SparseArrays", "SuiteSparse_jll"]

@@ -85,6 +85,7 @@ struct WENDyProblem{lip, DistType}
     Mp1::Int # (Mp1+1) number of data points in time 
     K::Int # number of test functions 
     u0::AbstractVector{<:Real}
+    constraints::Union{Nothing,AbstractVector{Tuple{<:Real,<:Real}}}
     data::WENDyInternals{lip, DistType}
     # Cost functions 
     fslsq::LeastSquaresCostFunction

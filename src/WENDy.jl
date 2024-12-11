@@ -3,8 +3,9 @@ module WENDy
     # optimization algorithms
     using NonlinearSolve: NonlinearLeastSquaresProblem, NonlinearFunction, LevenbergMarquardt # nonlinear least squares
     using NonlinearSolve: solve as solve_lsq
-    using Optim # trust region
-    using ManualNLPModels: NLPModel # necessary for ARC_qK
+    using Optim:optimize, NewtonTrustRegion, Options as Optim_Options # unconstrained trust region
+    using JSOSolvers: tron # constrained trust region
+    using ManualNLPModels: NLPModel # necessary for ARC_qK, JSOSolvers
     using AdaptiveRegularization: ARCqKOp # ARC_qK
     # For solving and symbolicly representing diff eq 
     using OrdinaryDiffEq: Rosenbrock23, ODEProblem, OrdinaryDiffEqAlgorithm 

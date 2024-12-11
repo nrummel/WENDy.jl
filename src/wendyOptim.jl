@@ -154,21 +154,17 @@ function IRWLS(prob::WENDyProblem{lip}, w0::AbstractVector{<:AbstractFloat}, par
 end 
 ##
 function trustRegion(
-    costFun::SecondOrderCostFunction, w0::AbstractVector{<:Real}, params::WENDyParameters; 
+    costFun::SecondOrderCostFunction, w0::AbstractVector{<:Real}, params::WENDyParameters, ::Nothing=nothing; 
     return_wits::Bool=false, kwargs...
 )
     # Unpack optimization params
     maxIt,reltol,abstol,timelimit = params.optimMaxiters, params.optimReltol, params.optimAbstol, params.optimTimelimit
     # Call algorithm
     J = length(w0)
-    res = Optim.optimize(
+    res = optimize(
         costFun.f, costFun.∇f!, costFun.Hf!, # f, g, h
-        w0, Optim.NewtonTrustRegion(
-            # rho_lower = 0.05,
-            # rho_upper = 2.0,
-            # delta_hat = 100.0
-        ), # x0, algo
-        Optim.Options(
+        w0, NewtonTrustRegion(), 
+        Optim_Options(
             x_reltol=reltol, x_abstol=abstol, iterations=maxIt, time_limit=timelimit, 
             store_trace=return_wits, extended_trace=return_wits
         )
@@ -310,11 +306,64 @@ function hybrid_wlsq_trustRegion(
     return return_wits ?  (what_wendy, iter_wlsq + iter_wendy, hcat(wits_wlsq,wits_wendy )) : what_wendy
 end
 
+function trustRegion(
+    costFun::SecondOrderCostFunction, w0::AbstractVector{<:Real}, params::WENDyParameters, constraints::AbstractVector{Tuple{<:Real,<:Real}}; 
+    return_wits::Bool=false, kwargs...
+)
+    J = length(w0)
+    # this solver expects the an explicit gradient in this form
+    function fg!(g, w)
+        costFun.∇f!(g, w)
+        costFun.f(w), g
+    end
+    # This solver accepts Hvp operator, so we build one with memory
+    mem_w = zeros(J)
+    _H = zeros(J,J)
+    function Hv!(h, w, v; obj_weight=1.0)
+        if !all(mem_w .== w)
+            # @show norm(w - mem_w)
+            costFun.Hf!(_H, w)
+            mem_w .= w
+        end
+        h .= _H*v * obj_weight
+        h
+    end
+    # store iteratios in a callback
+    wits_tr = zeros(J, 0)
+    function _clbk(nlp, slvr, stats)
+        wits_tr
+        wits_tr = hcat(wits_tr, slvr.x)
+        nothing
+    end 
+    ℓ = [Float64(r[1]) for r in constraints]
+    u = [Float64(r[2]) for r in constraints]
+    # build the model to optimize then call solver
+    nlp = NLPModel(
+        w0,
+        ℓ,
+        u,
+        costFun.f;
+        objgrad = fg!,
+        hprod = Hv!,
+    )
 
+    verbose = :show_trace in keys(kwargs) ? 1 : 0
+    out = tron(
+        nlp,
+        verbose=verbose,
+        callback= return_wits ? _clbk : (::Any, ::Any,::Any) -> nothing,
+        atol=params.optimAbstol,
+        rtol=params.optimReltol,
+        max_iter=params.optimMaxiters,
+        max_time=params.optimTimelimit
+    )
+
+    return return_wits ? (out.solution, out.iter, wits_tr) : (out.solution, out.iter) 
+end 
 """ Wrapper function to call specific solvers """
 function solve(wendyProb::WENDyProblem, w0::AbstractVector{<:Real}, params::WENDyParameters=WENDyParameters(); alg::Symbol=:trustRegion, kwargs...)
     if alg == :trustRegion 
-        return trustRegion(wendyProb.wnll, w0, params; kwargs... )
+        return trustRegion(wendyProb.wnll, w0, params, wendyProb.constraints; kwargs... )
     elseif alg == :arcqk 
         return arcqk(wendyProb.wnll, w0, params; kwargs... )
     elseif alg == :hybrid_trustRegion_fslsq
