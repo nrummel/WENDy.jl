@@ -2,7 +2,7 @@
 @kwdef struct WENDyParameters   
     diagReg::Real                       = 1.0e-10
     radiusMinTime::Real                 = 0.01
-    radiusMaxTime::Real                 = 1.0
+    radiusMaxTime::Real                 = 5.0
     numRadii::Int                       = 100
     radiiParams::AbstractVector{<:Real} = 2 .^(0:3)
     testFunSubRate::Real                = 2.0

@@ -151,7 +151,12 @@ function getTestFunctionMatrices(
         end 
         @info "    pre-radiusMin=$radiusMin, radiusMax=$radiusMax"
         # select min radius by looking that M/testFunSubRate fourier mode of Φ∘U
-        radiusMin =  _minRadius(U, dt, radiusMin, numRadii, radiusMax, testFunSubRate, Kᵣ)
+        radiusMinMax = Int(floor(radiusMax/maximum(radiiParams)))
+        if radiusMinMax < radiusMin
+            @warn "Radius min and radius max are not chosen well"
+            radiusMinMax = radiusMin*10
+        end 
+        radiusMin =  _minRadius(U, dt, radiusMin, numRadii, radiusMinMax, testFunSubRate, Kᵣ)
         
         @info "    radiusMin=$radiusMin"
         radii = filter(r->r < radiusMax, Int.(floor.(radiiParams*radiusMin)))

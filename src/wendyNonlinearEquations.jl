@@ -21,7 +21,7 @@ function _∇L!(
     ∇L::AbstractArray{<:Real,3}, w::AbstractVector{<:Real},
     tt::AbstractVector{<:Real}, X::AbstractMatrix{<:Real},V::AbstractMatrix{<:Real},sig::AbstractVector{<:Real},
     ∇ₚ∇ₓf!::Function,
-JwJuF::AbstractArray{<:Real,4}, __∇L::AbstractArray{<:Real,5}, _∇L::AbstractArray{<:Real,5})
+    JwJuF::AbstractArray{<:Real,4}, __∇L::AbstractArray{<:Real,5}, _∇L::AbstractArray{<:Real,5})
     Mp1, D = size(X)
     K, _ = size(V)
     J = length(w)

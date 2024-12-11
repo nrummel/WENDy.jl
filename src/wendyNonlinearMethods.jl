@@ -178,6 +178,7 @@ function (m::NonlinearResidual)(w::AbstractVector{<:Real}; ll::LogLevel=Warn)
         m.F, m.G; 
         ll=ll
     )
+    return m.r
 end
 # method mutate internal data: assume b = R⁻ᵀ*b₀
 function (m::NonlinearResidual)(w::AbstractVector{<:Real}, b::AbstractVector{<:Real}, Rᵀ::AbstractMatrix{<:Real}; ll::LogLevel=Warn) 
