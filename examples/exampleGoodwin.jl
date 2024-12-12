@@ -12,14 +12,14 @@ function f!(du, u, w, t)
 end
 tRng  = (0.0, 80.0)
 dt    = 0.5
-u0    = [0.3617, 0.9137, 1.3934]
+u₀    = [0.3617, 0.9137, 1.3934]
 wstar = [3.4884, 0.0969, 2.15, 10, 0.0969, 0.0581, 0.0969, 0.0775]
 J     = length(wstar)
-D     = length(u0)
+D     = length(u₀)
 ## Generate data (one could use empircal data in practice)
 ode = ODEProblem(
     f!, 
-    u0, 
+    u₀, 
     tRng, 
     wstar
 )
@@ -41,7 +41,7 @@ relErr = norm(w0 - wstar) / norm(wstar)
 relErr = norm(what - wstar) / norm(wstar)
 @info "Relative Coefficient Error = $(relErr)"
 ## plot the resutls 
-odeprob = ODEProblem(f!, u0, tRng, what)
+odeprob = ODEProblem(f!, u₀, tRng, what)
 sol = solve_ode(odeprob; saveat=dt)
 Uhat = reduce(vcat, um' for um in sol.u)
 plot(

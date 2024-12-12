@@ -91,7 +91,10 @@ function (m::NLS_iter)(wnm1::AbstractVector{<:AbstractFloat};ll::LogLevel=Warn, 
     end
 end
 ##
-function IRWLS(prob::WENDyProblem{lip}, w0::AbstractVector{<:AbstractFloat}, params::WENDyParameters; 
+abstract type AbstractWENDySolver<:Function end 
+struct IRWLS<:AbstractWENDySolver end 
+
+function (m::IRWLS)(prob::WENDyProblem{lip}, w0::AbstractVector{<:AbstractFloat}, params::WENDyParameters; 
     ll::LogLevel=Warn, iterll::LogLevel=Warn, compareIters::Bool=false, 
     maxIt::Int=1000, return_wits::Bool=false
 ) where lip
@@ -152,9 +155,9 @@ function IRWLS(prob::WENDyProblem{lip}, w0::AbstractVector{<:AbstractFloat}, par
         return return_wits ? (wn, maxIt, hcat(w0,wit)) : (wn,maxIt)
     end
 end 
-##
-function trustRegion(
-    costFun::SecondOrderCostFunction, w0::AbstractVector{<:Real}, params::WENDyParameters, ::Nothing=nothing; 
+## unconstrained
+function _trustRegion_unconstrained(
+    costFun::SecondOrderCostFunction, w0::AbstractVector{<:Real}, params::WENDyParameters; 
     return_wits::Bool=false, kwargs...
 )
     # Unpack optimization params
@@ -174,139 +177,8 @@ function trustRegion(
     iter = res.iterations
     return return_wits ? (what, iter, reduce(hcat, t.metadata["x"] for t in res.trace)) : what
 end
-##
-function arcqk(
-    costFun::SecondOrderCostFunction, w0::AbstractVector{<:Real}, params::WENDyParameters; 
-    return_wits::Bool=false, kwargs...
-)
-    J = length(w0)
-    # this solver expects the an explicit gradient in this form
-    function fg!(g, w)
-        costFun.∇f!(g, w)
-        costFun.f(w), g
-    end
-    # This solver accepts Hvp operator, so we build one with memory
-    mem_w = zeros(J)
-    _H = zeros(J,J)
-    function Hv!(h, w, v; obj_weight=1.0)
-        if !all(mem_w .== w)
-            # @show norm(w - mem_w)
-            costFun.Hf!(_H, w)
-            mem_w .= w
-        end
-        h .= _H*v * obj_weight
-        h
-    end
-    # store iteratios in a callback
-    wits_arc = zeros(J, 0)
-    function _clbk(nlp, solver, stats)
-        wits_arc = hcat(wits_arc, nlp.x)
-        nothing
-    end 
-    # build the model to optimize then call solver
-    nlp = NLPModel(
-        w0,
-        costFun.f;
-        objgrad = fg!,
-        hprod = Hv!
-    )
-    verbose = :show_trace in keys(kwargs) ? kwargs.show_trace : false
-    out = ARCqKOp(
-        nlp, 
-        verbose = verbose, 
-        callback = return_wits ? _clbk : (::Any, ::Any,::Any) -> nothing,
-        atol=params.optimAbstol,
-        rtol=params.optimReltol,
-        max_iter=params.optimMaxiters,
-        max_time=params.optimTimelimit,
-    )
-    return return_wits ? (out.solution, out.iter, wits_arc) : out.solution
-end
-
-function nonlinearLeastSquares(costFun::LeastSquaresCostFunction,
-    w0::AbstractVector{<:Real}, 
-    params::WENDyParameters; 
-    return_wits::Bool=false, kwargs...
-)   
-    J = length(w0)
-    wits = zeros(J,0)
-    function r!(r,w, ::Any)
-        if return_wits 
-            wits = hcat(wits, w)
-        end
-        costFun.r!(r,w)
-        nothing 
-    end
-
-    function ∇r!(J, w, ::Any)
-        costFun.∇r!(J,w)
-        nothing
-    end
-
-    sol = solve_lsq(
-        NonlinearLeastSquaresProblem(
-            NonlinearFunction( # {iip, specialize} 
-                r!;
-                jac=∇r!, 
-                resid_prototype=zeros(costFun.KD)
-            ),
-            w0
-        ),
-        LevenbergMarquardt();
-        abstol=params.optimAbstol,
-        reltol=params.optimReltol,
-        maxiters=params.optimMaxiters,
-        maxtime=params.optimTimelimit,
-        verbose=false
-    )
-    what = sol.u
-    iter = sol.stats.nsteps
-    return return_wits ? (what, iter, wits) : what
-end
-
-function hybrid_trustRegion_fslsq(
-    wnll::SecondOrderCostFunction, fslsq::LeastSquaresCostFunction, w0u0::AbstractVector{<:Real}, J::Int, params::WENDyParameters; 
-    return_wits::Bool=false, kwargs...
-)
-    w0 = w0u0[1:J]
-    u0 = w0u0[J+1:end]
-    what_wendy, iter_wendy, wits_wendy = if return_wits
-        trustRegion(wnll, w0, params, return_wits=true)
-    else 
-        what_wendy, iter_wendy = trustRegion(wnll, w0, params, return_wits=false)
-        what_wendy, iter_wendy, nothing
-    end 
-
-    what_fslsq, iter_fslsq, wits_fslsq = if return_wits 
-        nonlinearLeastSquares(fslsq, vcat(what_wendy, u0), params, return_wits=true)
-    else 
-        what_fslsq, iter_fslsq = nonlinearLeastSquares(fslsq, what_wendy, params, return_wits=false)
-        what_fslsq, iter_fslsq, nothing
-    end 
-    return return_wits ?  (what_fslsq, iter_wendy+iter_fslsq, hcat(vcat(wits_wendy, reduce(hcat, u0 for _ in 1:size(wits_wendy,2))), wits_fslsq )) : what_fslsq
-end
-
-function hybrid_wlsq_trustRegion(
-    wlsq::LeastSquaresCostFunction, wnll::SecondOrderCostFunction, w0::AbstractVector{<:Real}, params::WENDyParameters; 
-    return_wits::Bool=false, kwargs...
-)
-    what_wlsq, iter_wlsq, wits_wlsq = if return_wits 
-        nonlinearLeastSquares(wlsq, w0, params, return_wits=true)
-    else 
-        what_wlsq, iter_wlsq = nonlinearLeastSquares(wlsq, what_wendy, params, return_wits=false)
-        what_wlsq, iter_wlsq, nothing
-    end 
-    what_wendy, iter_wendy, wits_wendy = if return_wits
-        trustRegion(wnll, what_wlsq, params, return_wits=true)
-    else 
-        what_wendy, iter_wendy = trustRegion(wnll, w0, params, return_wits=false)
-        what_wendy, iter_wendy, nothing
-    end 
-
-    return return_wits ?  (what_wendy, iter_wlsq + iter_wendy, hcat(wits_wlsq,wits_wendy )) : what_wendy
-end
-
-function trustRegion(
+## constrained
+function _trustRegion_constrained(
     costFun::SecondOrderCostFunction, w0::AbstractVector{<:Real}, params::WENDyParameters, constraints::AbstractVector{Tuple{<:Real,<:Real}}; 
     return_wits::Bool=false, kwargs...
 )
@@ -360,24 +232,174 @@ function trustRegion(
 
     return return_wits ? (out.solution, out.iter, wits_tr) : (out.solution, out.iter) 
 end 
-""" Wrapper function to call specific solvers """
-function solve(wendyProb::WENDyProblem, w0::AbstractVector{<:Real}, params::WENDyParameters=WENDyParameters(); alg::Symbol=:trustRegion, kwargs...)
-    if alg == :trustRegion 
-        return trustRegion(wendyProb.wnll, w0, params, wendyProb.constraints; kwargs... )
-    elseif alg == :arcqk 
-        return arcqk(wendyProb.wnll, w0, params; kwargs... )
-    elseif alg == :hybrid_trustRegion_fslsq
-        return hybrid_trustRegion_fslsq(wendyProb.wnll, wendyProb.fslsq, vcat(w0, wendyProb.u0), wendyProb.J, params; kwargs...)
-    elseif alg == :fslsq 
-        return nonlinearLeastSquares(wendyProb.fslsq, vcat(w0, wendyProb.u0), params; kwargs...)
-    elseif alg == :wlsq 
-        return nonlinearLeastSquares(wendyProb.wlsq, w0, params; kwargs...)
-    elseif alg == :irwls 
-        return IRWLS(wendyProb, w0, params; kwargs...)
-    elseif alg == :hybrid_wlsq_trustRegion
-        return hybrid_wlsq_trustRegion(wendyProb.wlsq, wendyProb.wnll, w0, params; kwargs...) 
+#
+struct TrustRegion<:AbstractWENDySolver end 
+function (m::TrustRegion)(wendyProb::WENDyProblem, w0::AbstractVector{<:Real}, params::WENDyParameters; 
+    return_wits::Bool=false, kwargs...
+)
+    if isnothing(wendyProb.constraints) 
+        return _trustRegion_unconstrained(wendyProb.wnll, w0, params;return_wits=return_wits,kwargs...)
+    end 
+    return _trustRegion_constrained(wendyProb.wnll, w0, params, wendyProb.constraints; return_wits=return_wits,kwargs...)
+end
+##
+struct ARCqK<:AbstractWENDySolver end 
+function (m::ARCqK)(
+    wendyProb::WENDyProblem, w0::AbstractVector{<:Real}, params::WENDyParameters; 
+    return_wits::Bool=false, kwargs...
+)
+    costFun = wendyProb.wnll
+    J = length(w0)
+    # this solver expects the an explicit gradient in this form
+    function fg!(g, w)
+        costFun.∇f!(g, w)
+        costFun.f(w), g
     end
-    @assert false """$alg is not recognized as an implemented algorithm consider: 
-    :trustRegion, :arcqk, :hybrid, :fslsq, :wlsq, :irwls
-    """
+    # This solver accepts Hvp operator, so we build one with memory
+    mem_w = zeros(J)
+    _H = zeros(J,J)
+    function Hv!(h, w, v; obj_weight=1.0)
+        if !all(mem_w .== w)
+            # @show norm(w - mem_w)
+            costFun.Hf!(_H, w)
+            mem_w .= w
+        end
+        h .= _H*v * obj_weight
+        h
+    end
+    # store iteratios in a callback
+    wits_arc = zeros(J, 0)
+    function _clbk(nlp, solver, stats)
+        wits_arc = hcat(wits_arc, nlp.x)
+        nothing
+    end 
+    # build the model to optimize then call solver
+    nlp = NLPModel(
+        w0,
+        costFun.f;
+        objgrad = fg!,
+        hprod = Hv!
+    )
+    verbose = :show_trace in keys(kwargs) ? kwargs.show_trace : false
+    out = ARCqKOp(
+        nlp, 
+        verbose = verbose, 
+        callback = return_wits ? _clbk : (::Any, ::Any,::Any) -> nothing,
+        atol=params.optimAbstol,
+        rtol=params.optimReltol,
+        max_iter=params.optimMaxiters,
+        max_time=params.optimTimelimit,
+    )
+    return return_wits ? (out.solution, out.iter, wits_arc) : out.solution
+end
+## solver for nonlinear least squares problems
+function nonlinearLeastSquares(costFun::LeastSquaresCostFunction,
+    w0::AbstractVector{<:Real}, 
+    params::WENDyParameters; 
+    return_wits::Bool=false, kwargs...
+)   
+    J = length(w0)
+    wits = zeros(J,0)
+    function r!(r,w, ::Any)
+        if return_wits 
+            wits = hcat(wits, w)
+        end
+        costFun.r!(r,w)
+        nothing 
+    end
+
+    function ∇r!(J, w, ::Any)
+        costFun.∇r!(J,w)
+        nothing
+    end
+
+    sol = solve_lsq(
+        NonlinearLeastSquaresProblem(
+            NonlinearFunction( # {iip, specialize} 
+                r!;
+                jac=∇r!, 
+                resid_prototype=zeros(costFun.KD)
+            ),
+            w0
+        ),
+        LevenbergMarquardt();
+        abstol=params.optimAbstol,
+        reltol=params.optimReltol,
+        maxiters=params.optimMaxiters,
+        maxtime=params.optimTimelimit,
+        verbose=false
+    )
+    what = sol.u
+    iter = sol.stats.nsteps
+    return return_wits ? (what, iter, wits) : what
+end
+# forward solve nonlinear least squares
+struct FSNLS<:AbstractWENDySolver end 
+(m::FSNLS)(wendyProb::WENDyProblem, w0::AbstractVector{<:Real}, params::WENDyParameters; 
+return_wits::Bool=false, kwargs...) = nonlinearLeastSquares(wendyProb.fslsq, vcat(w0, wendyProb.u₀), params; return_wits=return_wits, kwargs...)
+# weak form nonlinear least squares
+struct WLSQ<:AbstractWENDySolver end 
+(m::WLSQ)(wendyProb::WENDyProblem, w0::AbstractVector{<:Real}, params::WENDyParameters; 
+return_wits::Bool=false, kwargs...) = nonlinearLeastSquares(wendyProb.wlsq, w0, params; return_wits=return_wits, kwargs...)
+# hybrid : tr -> fsnls
+struct HybridTrustRegionFSNLS<:AbstractWENDySolver end 
+function (m::HybridTrustRegionFSNLS)(
+    wendyProb::WENDyProblem, w0::AbstractVector{<:Real}, params::WENDyParameters; 
+    return_wits::Bool=false, kwargs...
+)
+    u₀ = wendyProb.u₀
+    what_wendy, iter_wendy, wits_wendy = if return_wits
+        TrustRegion()(wendyProb, w0, params, return_wits=true)
+    else 
+        what_wendy, iter_wendy = TrustRegion()(wendyProb, w0, params, return_wits=false)
+        what_wendy, iter_wendy, nothing
+    end 
+
+    what_fslsq, iter_fslsq, wits_fslsq = if return_wits 
+        FSNLS()(wendyProb, what_wendy, params, return_wits=true)
+    else 
+        what_fslsq, iter_fslsq = FSNLS()(wendyProb, vcat(what_wendy,u₀), params, return_wits=false)
+        what_fslsq, iter_fslsq, nothing
+    end 
+    return return_wits ?  (what_fslsq, iter_wendy+iter_fslsq, hcat(vcat(wits_wendy, reduce(hcat, u₀ for _ in 1:size(wits_wendy,2))), wits_fslsq )) : what_fslsq
+end
+# hybrid : wlsq -> tr
+struct HybridWLSQTrustRegion<:AbstractWENDySolver end 
+function (m::HybridWLSQTrustRegion)(
+    wendyProb::WENDyProblem, w0::AbstractVector{<:Real}, params::WENDyParameters; 
+    return_wits::Bool=false, kwargs...
+)
+    what_wlsq, iter_wlsq, wits_wlsq = if return_wits 
+        WLSQ()(wendyProb, w0, params, return_wits=true)
+    else 
+        what_wlsq, iter_wlsq = WLSQ()(wendyProb, what_wendy, params, return_wits=false)
+        what_wlsq, iter_wlsq, nothing
+    end 
+    what_wendy, iter_wendy, wits_wendy = if return_wits
+        TrustRegion()(wendyProb, what_wlsq, params, return_wits=true)
+    else 
+        what_wendy, iter_wendy = TrustRegion()(wendyProb, w0, params, return_wits=false)
+        what_wendy, iter_wendy, nothing
+    end 
+
+    return return_wits ?  (what_wendy, iter_wlsq + iter_wendy, hcat(wits_wlsq,wits_wendy )) : what_wendy
+end
+""" 
+    solve(wendyProb::WENDyProblem, w0::AbstractVector{<:Real}, params::WENDyParameters=WENDyParameters(); alg::Symbol=:trustRegion, kwargs...)
+
+# Arguments 
+- wendyProblem::WENDyProblem : An instance of a WENDyProblem for the ODE that you wish to estimate parameters for 
+- w0::AbstractVector{<:Real} : Inital guess for the parameters
+- params::WENDyParameters : hyperparameters for the WENDy Algorithm 
+- alg::AbstractWENDySolver=TrustRegion() : Choice of solver 
+    - FSNLS : forward solve nonlinear least squares 
+    - WLSQ : weak form least squares 
+    - IRWLS : WENDy generalized least squares solver via iterative reweighted east squares 
+    - TrustRegion : (default) optimize over the weak form negative log-likelihood with a trust region solver (not this is the only solver that will respect the constraints)
+    - ARCqK : optimize over the weak form negative log-likelihood with adaptive regularized cubics algorithm
+    - HybridTrustRegionFSNLS : hybrid solver that first optimizes with the trust region solver then passes the result as an intialization to the forward solve least squares solver 
+    - HybridWLSQTrustRegion : hybrid solver that first optimizes with the weak form least squares solver then passes the result as an intialization to the trust region weak form negative log-likelihood solver
+"""
+function solve(wendyProb::WENDyProblem, w0::AbstractVector{<:Real}, params::WENDyParameters=WENDyParameters(); alg::AbstractWENDySolver=TrustRegion(), kwargs...)
+    alg(wendyProb, w0, params; kwargs... )
 end

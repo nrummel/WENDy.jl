@@ -10,13 +10,13 @@ function f!(du, u, w, t)
 end
 tRng = (0.0, 10.0)
 dt = 0.1
-u0 = [0.01]
+u₀ = [0.01]
 wstar = [1.0, 1.0]
 J = length(wstar)
 ## Generate data (one could use empircal data in practice)
 ode = ODEProblem(
     f!, 
-    u0, 
+    u₀, 
     tRng, 
     wstar
 )
@@ -33,7 +33,7 @@ what = WENDy.solve(wendyProb, w0)
 relErr = norm(what - wstar) / norm(wstar)
 @info "Relative Coefficient Error = $(relErr)"
 ## plot the resutls 
-odeprob = ODEProblem(f!, u0, tRng, what)
+odeprob = ODEProblem(f!, u₀, tRng, what)
 sol = solve_ode(odeprob; saveat=dt)
 Uhat = reduce(vcat, um' for um in sol.u)
 plot(
