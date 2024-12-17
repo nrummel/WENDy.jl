@@ -37,7 +37,9 @@ function _minRadius(
 )
     @assert 2 <= testFunSubRate < 4 "We only suppport scaling between 2 and 4"
     Mp1, D = size(U)
-    radii = radiusMin:min(radiusMin+numRadii, radiusMax)
+    # look for a radius between radiusMin and radiusMax, but only check numRadii of them ...
+    step = Int(ceil((radiusMax - radiusMin ) / numRadii))
+    radii = radiusMin:step:radiusMax
     errs = zeros(length(radii))
     # Select the fourier modes from just the where roots of unit would hit on the subsampled grid
     IX = Int(floor((Mp1-1)/testFunSubRate)) 
@@ -156,6 +158,7 @@ function getTestFunctionMatrices(
             @warn "Radius min and radius max are not chosen well"
             radiusMinMax = radiusMin*10
         end 
+        @info "    radiusMinMax=$radiusMinMax"
         radiusMin =  _minRadius(U, dt, radiusMin, numRadii, radiusMinMax, testFunSubRate, Kᵣ)
         
         @info "    radiusMin=$radiusMin"
