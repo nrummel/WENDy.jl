@@ -3,8 +3,7 @@ function _L!(
     L::AbstractMatrix{<:Real},w::AbstractVector{<:Real}, # output/input
     tt::AbstractVector{<:Real}, X::AbstractMatrix{<:Real}, V::AbstractMatrix{<:Real}, L₀::AbstractMatrix{<:Real}, sig::AbstractVector{<:Real}, # data
     ∇ₓf!::Function, # functions
-    JuF::AbstractArray{<:Real, 3}, __L₁::AbstractArray{<:Real, 4}, _L₁::AbstractArray{<:Real, 4}; # buffers
-    ll::LogLevel=Warn # kwargs
+    JuF::AbstractArray{<:Real, 3}, _L₁::AbstractArray{<:Real, 4} # buffers
 ) 
     Mp1, D = size(X)
     K, _ = size(V)
@@ -21,7 +20,7 @@ function _∇L!(
     ∇L::AbstractArray{<:Real,3}, w::AbstractVector{<:Real},
     tt::AbstractVector{<:Real}, X::AbstractMatrix{<:Real},V::AbstractMatrix{<:Real},sig::AbstractVector{<:Real},
     ∇ₚ∇ₓf!::Function,
-    JwJuF::AbstractArray{<:Real,4}, __∇L::AbstractArray{<:Real,5}, _∇L::AbstractArray{<:Real,5})
+    JwJuF::AbstractArray{<:Real,4}, _∇L::AbstractArray{<:Real,5})
     Mp1, D = size(X)
     K, _ = size(V)
     J = length(w)
@@ -30,8 +29,6 @@ function _∇L!(
         @views ∇ₚ∇ₓf!(JwJuF[:,:,:,m], X[m,:], w, tt[m])
     end
     @tullio _∇L[k,d2,m,d1,j] = JwJuF[d2,d1,j,m] * V[k,m] * sig[d1] 
-    # @tullio __∇L[k,d2,d1,j,m] = JwJuF[d2,d1,j,m] * V[k,m] * sig[d1] 
-    # permutedims!(_∇L,__∇L,(1,2,5,3,4))
     @views ∇L .= reshape(_∇L,K*D,Mp1*D,J)
     nothing
 end
@@ -39,8 +36,7 @@ end
 function _g!(g::AbstractVector, w::AbstractVector, # output/input
     tt::AbstractVector{<:Real}, X::AbstractMatrix, V::AbstractMatrix, # data
     f!::Function, # function
-    F::AbstractMatrix{<:Real}, G::AbstractMatrix{<:Real}; # buffers
-    ll::LogLevel=Warn #kwargs
+    F::AbstractMatrix{<:Real}, G::AbstractMatrix{<:Real} # buffers
 )
     Mp1, D = size(X)
     K, _ = size(V)
@@ -56,8 +52,7 @@ function _r!(
     r::AbstractVector,w::AbstractVector, # output/input
     tt::AbstractVector{<:Real}, X::AbstractMatrix, V::AbstractMatrix, b₀::AbstractVector, # data
     f!::Function, # function
-    F::AbstractMatrix{<:Real}, G::AbstractMatrix{<:Real}; # buffers
-    ll::LogLevel=Warn #kwargs
+    F::AbstractMatrix{<:Real}, G::AbstractMatrix{<:Real} # buffers
 ) 
     _g!(
         r, w, 
@@ -73,8 +68,7 @@ end
 function _Rᵀr!(r::AbstractVector, w::AbstractVector, # output/input
      tt::AbstractVector{<:Real}, X::AbstractMatrix, V::AbstractMatrix, Rᵀ::AbstractMatrix,b::AbstractVector, # Data
      f!::Function, # functions
-     F::AbstractMatrix{<:Real}, G::AbstractMatrix{<:Real}, g::AbstractVector; # buffeers   
-     ll::LogLevel=Warn #kwargs
+     F::AbstractMatrix{<:Real}, G::AbstractMatrix{<:Real}, g::AbstractVector # buffeers   
 ) 
     _g!(g, w, tt, X, V, f!, F, G; ll=ll)
     ldiv!(r, LowerTriangular(Rᵀ), g)
@@ -86,8 +80,7 @@ function _∇r!(
     ∇r::AbstractMatrix{<:Real}, w::AbstractVector{<:Real}, # output/input
     tt::AbstractVector{<:Real}, X::AbstractMatrix{<:Real}, V::AbstractMatrix{<:Real}, 
     ∇ₚf!::Function, # functions
-    JwF::AbstractArray{<:Real, 3}, __∇r::AbstractArray{<:Real, 3}, _∇r::AbstractArray{<:Real, 3}; # buffers
-    ll::LogLevel=Warn # kwargs
+    JwF::AbstractArray{<:Real, 3}, __∇r::AbstractArray{<:Real, 3}, _∇r::AbstractArray{<:Real, 3} # buffers
 ) 
     Mp1, D = size(X)
     K, _ = size(V)
@@ -97,7 +90,7 @@ function _∇r!(
     @inbounds for m in 1:Mp1
         @views ∇ₚf!(JwF[:,:,m], X[m,:], w, tt[m])
     end
-    # TODO maybe make the dimensions slightly different _JG[k,d,j] to minimize permutedims
+    
     @tullio __∇r[d,j,k] = V[k,m] * JwF[d,j,m] 
     permutedims!(_∇r, __∇r,(3,1,2))
     @views ∇r .= reshape(_∇r, K*D, J)
@@ -105,10 +98,10 @@ function _∇r!(
 end
 function _Hwnll!(
     H::AbstractMatrix{<:Real}, w::AbstractVector{<:Real},
-    ∇L::AbstractArray{<:Real, 3}, tt::AbstractVector{<:Real}, X::AbstractMatrix{<:Real}, _Y::AbstractMatrix{<:Real}, V::AbstractMatrix{<:Real}, L::AbstractMatrix{<:Real}, S::AbstractMatrix{<:Real}, ∇r::AbstractMatrix{<:Real}, b₀::AbstractVector{<:Real}, sig::AbstractVector{<:Real},
+    ∇L::AbstractArray{<:Real, 3}, tt::AbstractVector{<:Real}, X::AbstractMatrix{<:Real}, V::AbstractMatrix{<:Real}, L::AbstractMatrix{<:Real}, S::AbstractMatrix{<:Real}, ∇r::AbstractMatrix{<:Real}, b₀::AbstractVector{<:Real}, sig::AbstractVector{<:Real},
     r::AbstractVector{<:Real},  
     Hₚf!::Function, Hₚ∇ₓf!::Function,  S⁻¹r::AbstractVector{<:Real}, 
-    S⁻¹∇r::AbstractMatrix{<:Real}, ∂ⱼLLᵀ::AbstractMatrix{<:Real}, ∇S::AbstractArray{<:Real, 3}, HwF::AbstractArray{<:Real, 4}, _∇²r::AbstractArray{<:Real, 4}, ∇²r::AbstractArray{<:Real, 3}, HwJuF::AbstractArray{<:Real, 5}, __∇²L::AbstractArray{<:Real, 6}, _∇²L::AbstractArray{<:Real, 6}, ∇²L::AbstractArray{<:Real, 4}, ∂ⱼL∂ᵢLᵀ::AbstractMatrix{<:Real}, ∂ᵢⱼLLᵀ::AbstractMatrix{<:Real}, ∂ᵢⱼS::AbstractMatrix{<:Real}, S⁻¹∂ⱼS::AbstractMatrix{<:Real}, ∂ᵢSS⁻¹∂ⱼS::AbstractMatrix{<:Real}
+    S⁻¹∇r::AbstractMatrix{<:Real}, ∂ⱼLLᵀ::AbstractMatrix{<:Real}, ∇S::AbstractArray{<:Real, 3}, HwF::AbstractArray{<:Real, 4}, _∇²r::AbstractArray{<:Real, 4}, ∇²r::AbstractArray{<:Real, 3}, HwJuF::AbstractArray{<:Real, 5}, _∇²L::AbstractArray{<:Real, 6}, ∇²L::AbstractArray{<:Real, 4}, ∂ⱼL∂ᵢLᵀ::AbstractMatrix{<:Real}, ∂ᵢⱼLLᵀ::AbstractMatrix{<:Real}, ∂ᵢⱼS::AbstractMatrix{<:Real}, S⁻¹∂ⱼS::AbstractMatrix{<:Real}, ∂ᵢSS⁻¹∂ⱼS::AbstractMatrix{<:Real}
 )
     Mp1, D = size(X)
     K, _ = size(V)
@@ -142,7 +135,7 @@ function _Hwnll!(
     ## compute ∇²L
     begin
         @inbounds for m in 1:Mp1 
-            @views Hₚ∇ₓf!(HwJuF[:,:,:,:,m], _Y[m,:], w, tt[m])
+            @views Hₚ∇ₓf!(HwJuF[:,:,:,:,m], X[m,:], w, tt[m])
         end
         # turns out this is slower
         # @time "outerprod" @tullio __∇²L[k,d2,d1,j1,j2,m] = V[k,m] * HwJuF[d2,d1,j1,j2,m] * sig[d1] 
