@@ -1,5 +1,5 @@
 ##
-function Linear_IRWLS_Iter(prob::WENDyProblem, params::WENDyParameters;ll::LogLevel=Warn)
+function Linear_IRWLS_Iter(prob::WENDyProblem, params::WENDyParameters; ll::LogLevel=Warn)
     D = prob.D
     J = prob.J
     K = prob.K 
@@ -34,7 +34,7 @@ function NLS_iter(prob::WENDyProblem, params::WENDyParameters)
     NLS_iter(prob.data.b₀, Rᵀ!, r!, ∇r!, params.nlsReltol,params.nlsAbstol,  params.nlsMaxiters)
 end
 # method
-function (m::NLS_iter)(wnm1::AbstractVector{<:AbstractFloat};ll::LogLevel=Warn, _ll::LogLevel=Warn)
+function (m::NLS_iter)(wnm1::AbstractVector{<:AbstractFloat};ll::LogLevel=Warn)
     with_logger(ConsoleLogger(stderr,ll)) do 
         @info "  Running local optimization method"
         # compute the covariance 
@@ -50,16 +50,14 @@ function (m::NLS_iter)(wnm1::AbstractVector{<:AbstractFloat};ll::LogLevel=Warn, 
         resn!(
             r::AbstractVector,
             w::AbstractVector, 
-            ::Any; 
-            ll::LogLevel=_ll
-        ) = m.r!(r, w, b, m.Rᵀ!.R; ll=ll) 
+            ::Any
+        ) = m.r!(r, w, b, m.Rᵀ!.R) 
 
         jacn!(
             jac::AbstractMatrix, 
             w::AbstractVector, 
-            ::Any; 
-            ll::LogLevel=_ll
-        ) = m.∇r!(jac, w, m.Rᵀ!.R; ll=ll)
+            ::Any
+        ) = m.∇r!(jac, w, m.Rᵀ!.R)
         # Solve nonlinear Least squares problem         
         dt = @elapsed a = @allocations sol = solve_lsq(
             NonlinearLeastSquaresProblem(

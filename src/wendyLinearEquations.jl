@@ -27,8 +27,7 @@ end
 ## L(w)
 function _L!(
     L::AbstractMatrix{<:Real},w::AbstractVector{<:Real}, # output/input
-    L₁::AbstractArray{<:Real}, L₀::AbstractMatrix{<:Real}; # data
-    ll::LogLevel=Warn # kwargs
+    L₁::AbstractArray{<:Real}, L₀::AbstractMatrix{<:Real} # data
 ) 
     @tullio L[kd,md] = L₁[kd,md,j]*w[j] 
     L .+= L₀
@@ -36,8 +35,7 @@ function _L!(
 end
 ## G(w)
 function _g!(g::AbstractVector, w::AbstractVector, # output/input
-    G::AbstractMatrix{<:Real}; # data
-    ll::LogLevel=Warn #kwargs
+    G::AbstractMatrix{<:Real} # data
 )
     mul!(g, G, w)
     nothing
@@ -45,20 +43,18 @@ end
 # r(w) = G*w - b₀
 function _r!(
     r::AbstractVector, w::AbstractVector, # output/input
-    G::AbstractMatrix, b₀::AbstractVector; # data
-    ll::LogLevel=Warn #kwargs
+    G::AbstractMatrix, b₀::AbstractVector # data
 ) 
-    _g!(r, w, G; ll=ll)
+    _g!(r, w, G )
     @views r .-= b₀
     nothing
 end
 # Weighted residual (Rᵀ)⁻¹(G(w)) - b, where b = (Rᵀ)⁻¹b₀
 function _Rᵀr!(r::AbstractVector, w::AbstractVector, # output/input
      G::AbstractMatrix{<:Real}, Rᵀ::AbstractMatrix, b::AbstractVector, # Data
-     g::AbstractVector; # buffeers   
-     ll::LogLevel=Warn #kwargs
+     g::AbstractVector # buffeers   
 ) 
-    _g!(g, w, G; ll=ll)
+    _g!(g, w, G)
     ldiv!(r, LowerTriangular(Rᵀ), g)
     @views r .-= b
     nothing

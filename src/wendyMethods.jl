@@ -40,13 +40,13 @@ function Covariance(data::WENDyInternals, params::WENDyParameters, ::Val{T}=Val(
     Covariance(params.diagReg, L!, K, D, Val(T))
 end
 # method inplace 
-function (m::Covariance)(R::AbstractMatrix{<:Real}, w::AbstractVector{W};ll::LogLevel=Warn, transpose::Bool=true, doChol::Bool=true) where W<:Real
-    m.L!(w; ll=ll) 
+function (m::Covariance)(R::AbstractMatrix{<:Real}, w::AbstractVector{W}; transpose::Bool=true, doChol::Bool=true) where W<:Real
+    m.L!(w) 
     _R!(
         R,w,
         m.L!.L, m.diagReg,
         m.thisI,m.Sreg,m.S;
-        doChol=doChol, ll=ll
+        doChol=doChol 
     )
     if transpose 
         @views R .= R'
@@ -54,13 +54,13 @@ function (m::Covariance)(R::AbstractMatrix{<:Real}, w::AbstractVector{W};ll::Log
     nothing
 end
 # method mutate internal data 
-function (m::Covariance)(w::AbstractVector{W}; ll::LogLevel=Warn, transpose::Bool=true, doChol::Bool=true) where W<:Real
-    m.L!(w;ll=ll) 
+function (m::Covariance)(w::AbstractVector{W}; transpose::Bool=true, doChol::Bool=true) where W<:Real
+    m.L!(w) 
     _R!(
         m.R, w,
         m.L!.L, m.diagReg,
         m.thisI,m.Sreg,m.S;
-        doChol=doChol, ll=ll
+        doChol=doChol
     )
     if transpose 
         @views m.R .= m.R'
@@ -108,11 +108,11 @@ function WeakNLL(data::WENDyInternals, params::WENDyParameters, ::Val{T}=Val(Flo
     )
 end
 # method
-function (m::WeakNLL)(w::AbstractVector{T}; ll::LogLevel=Warn) where T<:Real
+function (m::WeakNLL)(w::AbstractVector{T}) where T<:Real
     KD,_ = size(m.S) 
     constTerm = KD/2*log(2*pi)
-    m.r!(m.r,w;ll=ll)
-    m.R!(m.S,w;ll=ll, doChol=false)
+    m.r!(m.r,w)
+    m.R!(m.S,w, doChol=false)
     return _wnll(m.S, m.r, m.S⁻¹r, constTerm)
 end
 ## ∇m(w) - gradient of Maholinobis distance
@@ -152,38 +152,36 @@ function GradientWeakNLL(data::WENDyInternals, params::WENDyParameters, ::Val{T}
     )
 end
 # method inplace
-function (m::GradientWeakNLL)(∇m::AbstractVector{<:Real}, w::AbstractVector{W}; ll::LogLevel=Warn) where W<:Real
+function (m::GradientWeakNLL)(∇m::AbstractVector{<:Real}, w::AbstractVector{W}) where W<:Real
     # Compute L(w) & S(w)
-    m.R!(w; ll=ll, transpose=false, doChol=false) 
+    m.R!(w, transpose=false, doChol=false) 
     # Compute residal
-    m.r!(w; ll=ll)
+    m.r!(w)
     # Compute jacobian of residual
-    m.∇r!(w; ll=ll)
+    m.∇r!(w)
     # Compute jacobian of covariance factor
-    m.∇L!(w; ll=ll)
+    m.∇L!(w)
     
     _∇wnll!(
         ∇m, w, # ouput, input
         m.∇L!.∇L, m.R!.L!.L, m.R!.Sreg, m.∇r!.∇r, m.r!.r, # data
         m.S⁻¹r,  m.∂ⱼLLᵀ, m.∇S; # buffers
-        ll=ll # kwargs
     )
 end
 # method mutate internal data
-function (m::GradientWeakNLL)(w::AbstractVector{W}; ll::LogLevel=Warn) where W<:Real
+function (m::GradientWeakNLL)(w::AbstractVector{W}) where W<:Real
     # Compute L(w) & S(w)
-    m.R!(w; ll=ll, transpose=false, doChol=false) 
+    m.R!(w, transpose=false, doChol=false) 
     # Compute residal
-    m.r!(w; ll=ll)
+    m.r!(w)
     # Compute jacobian of residual
-    m.∇r!(w; ll=ll)
+    m.∇r!(w)
     # Compute jacobian of covariance factor
-    m.∇L!(w; ll=ll)
+    m.∇L!(w)
     _∇wnll!(
         m.∇m, w, # ouput, input
         m.∇L!.∇L, m.R!.L!.L, m.R!.Sreg, m.∇r!.∇r, m.r!.r, # data
-        m.S⁻¹r,  m.∂ⱼLLᵀ, m.∇S; # buffers
-        ll=ll # kwargs
+        m.S⁻¹r,  m.∂ⱼLLᵀ, m.∇S
     )
     return m.∇m
 end

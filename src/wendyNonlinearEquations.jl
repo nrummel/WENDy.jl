@@ -58,8 +58,7 @@ function _r!(
         r, w, 
         tt, X, V, 
         f!,
-        F, G; 
-        ll=ll
+        F, G
     )
     @views r .-= b₀
     nothing
@@ -70,7 +69,7 @@ function _Rᵀr!(r::AbstractVector, w::AbstractVector, # output/input
      f!::Function, # functions
      F::AbstractMatrix{<:Real}, G::AbstractMatrix{<:Real}, g::AbstractVector # buffeers   
 ) 
-    _g!(g, w, tt, X, V, f!, F, G; ll=ll)
+    _g!(g, w, tt, X, V, f!, F, G)
     ldiv!(r, LowerTriangular(Rᵀ), g)
     @views r .-= b
     nothing

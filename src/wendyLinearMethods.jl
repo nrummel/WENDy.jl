@@ -1,4 +1,4 @@
-## L(w)
+## L(p)
 # struct
 struct LinearCovarianceFactor<:CovarianceFactor
     # output
@@ -9,7 +9,7 @@ struct LinearCovarianceFactor<:CovarianceFactor
 end 
 
 # constructor
-function LinearCovarianceFactor(data::WENDyInternals{true,<:Distribution}, params::Union{Nothing, WENDyParameters}, # Function
+function LinearCovarianceFactor(data::WENDyInternals{true,<:Distribution}, ::Union{Nothing, WENDyParameters}=nothing, # Function
     ::Val{T}=Val(Float64) #optional type
 ) where T<:Real
     tt, X, V, Vp, sig, ∇ₓf! = data.tt, data.X, data.V, data.Vp, data.sig,data.∇ₓf!
@@ -18,7 +18,7 @@ function LinearCovarianceFactor(data::WENDyInternals{true,<:Distribution}, param
     J = data.J
     # preallocate output
     L = zeros(T,K*D,Mp1*D)
-    # precompute L₀ because it does not depend on w
+    # precompute L₀ because it does not depend on p
     __L₀ = zeros(T,K,D,D,Mp1)
     _L₀ = zeros(T,K,D,Mp1,D)
     L₀ = zeros(T,K*D,Mp1*D)
@@ -27,7 +27,7 @@ function LinearCovarianceFactor(data::WENDyInternals{true,<:Distribution}, param
         Vp, sig,
         __L₀,_L₀
     )
-    # precompute L₁ because it is constant wrt w 
+    # precompute L₁ because it is constant wrt p 
     L₁ = zeros(T, K*D, Mp1*D,J)
     JuF = zeros(T,D,D,Mp1)
     _∂ⱼL = zeros(T,K,D,D,Mp1)
@@ -46,29 +46,27 @@ function LinearCovarianceFactor(data::WENDyInternals{true,<:Distribution}, param
     )
 end
 # method inplace 
-function (m::LinearCovarianceFactor)(L::AbstractMatrix, w::AbstractVector{<:Real}; ll::LogLevel=Info) 
+function (m::LinearCovarianceFactor)(L::AbstractMatrix, p::AbstractVector{<:Real}) 
     _L!(
-        L,w,
-        m.L₁,m.L₀;
-        ll=ll
+        L,p,
+        m.L₁,m.L₀
     )
     nothing
 end
 # method mutate internal data 
-function (m::LinearCovarianceFactor)(w::AbstractVector{<:Real}; ll::LogLevel=Info) 
+function (m::LinearCovarianceFactor)(p::AbstractVector{<:Real}) 
     _L!(
-        m.L,w,
-        m.L₁,m.L₀;
-        ll=ll
+        m.L,p,
+        m.L₁,m.L₀
     )
     return m.L
 end
-## ∇L(w)
+## ∇L(p)
 struct LinearGradientCovarianceFactor<:GradientCovarianceFactor 
     # output
     ∇L::AbstractArray{<:Real,3}
 end 
-function LinearGradientCovarianceFactor(data::WENDyInternals{true, <:Distribution}, ::WENDyParameters, ::Val{T}=Val(Float64)) where T<:Real
+function LinearGradientCovarianceFactor(data::WENDyInternals{true, <:Distribution}, ::Union{WENDyParameters,Nothing}=nothing, ::Val{T}=Val(Float64)) where T<:Real
     Mp1, D = size(data.X)
     K, _ = size(data.V)
     J = data.J
@@ -87,13 +85,13 @@ function LinearGradientCovarianceFactor(data::WENDyInternals{true, <:Distributio
     LinearGradientCovarianceFactor(L₁)
 end
 # method inplace 
-function (m::LinearGradientCovarianceFactor)(∇L::AbstractArray{3, <:Real}, ::AbstractVector{<:Real}; ll::LogLevel=Warn)
+function (m::LinearGradientCovarianceFactor)(∇L::AbstractArray{3, <:Real}, ::AbstractVector{<:Real})
     ∇L .= m.∇L
 end
-function (m::LinearGradientCovarianceFactor)(::AbstractVector{<:Real}; ll::LogLevel=Warn) 
+function (m::LinearGradientCovarianceFactor)(::AbstractVector{<:Real}) 
     return m.∇L
 end
-## r(w) - Residual
+## r(p) - Residual
 # struct
 struct LinearResidual<:Residual
     # ouput
@@ -116,40 +114,36 @@ function LinearResidual(data::WENDyInternals{true,<:Distribution}, params::Union
     LinearResidual(r,data.b₀, data.G, g)
 end
 # method inplace 
-function (m::LinearResidual)(r::AbstractVector{<:Real}, w::AbstractVector{<:Real}; ll::LogLevel=Warn) 
+function (m::LinearResidual)(r::AbstractVector{<:Real}, p::AbstractVector{<:Real}) 
     _r!(
-        r, w, 
-        m.G, m.b₀;    
-        ll=ll
+        r, p, 
+        m.G, m.b₀
     )
     nothing 
 end
 # Inplace: This assumes that b = R⁻ᵀ*b₀
-function (m::LinearResidual)(r::AbstractVector{<:Real}, w::AbstractVector{<:Real}, b::AbstractVector{<:Real}, Rᵀ::AbstractMatrix{<:Real}; ll::LogLevel=Warn) 
+function (m::LinearResidual)(r::AbstractVector{<:Real}, p::AbstractVector{<:Real}, b::AbstractVector{<:Real}, Rᵀ::AbstractMatrix{<:Real}) 
     _Rᵀr!(
-        r, w, 
+        r, p, 
         m.∇r, Rᵀ, b, 
-        m.g; 
-        ll=ll 
+        m.g
     )
     nothing
 end
 # method mutate internal data 
-function (m::LinearResidual)(w::AbstractVector{<:Real}; ll::LogLevel=Warn) 
+function (m::LinearResidual)(p::AbstractVector{<:Real}) 
     _r!(
-        m.r, w, 
-        m.G, m.b₀; 
-        ll=ll
+        m.r, p, 
+        m.G, m.b₀
     )
     return m.r
 end
 # method mutate internal data: This assumes that b = R⁻ᵀ*b₀
-function (m::LinearResidual)(w::AbstractVector{<:Real}, b::AbstractVector{<:Real}, Rᵀ::AbstractMatrix{<:Real}; ll::LogLevel=Warn) 
+function (m::LinearResidual)(p::AbstractVector{<:Real}, b::AbstractVector{<:Real}, Rᵀ::AbstractMatrix{<:Real}) 
     _Rᵀr!(
-        m.r, w, 
+        m.r, p, 
         m.G, Rᵀ, b, 
-        m.g; 
-        ll=ll 
+        m.g
     )
     return m.r
 end
@@ -163,25 +157,25 @@ function LinearJacobianResidual(data::WENDyInternals{true,<:Distribution}, param
     LinearJacobianResidual(similar(data.G), data.G, similar(data.b₀))
 end
 # method inplace 
-function (m::LinearJacobianResidual)(∇r::AbstractMatrix{<:Real}, w::AbstractVector{<:Real}; ll::LogLevel=Warn)
+function (m::LinearJacobianResidual)(∇r::AbstractMatrix{<:Real}, ::Union{AbstractVector{<:Real},Nothing}=nothing)
     @views ∇r .= m.∇r
     return nothing
 end
 # method in place when Rᵀ is given
-function (m::LinearJacobianResidual)(Rᵀ⁻¹∇r::AbstractMatrix{<:Real}, ::AbstractVector{<:Real}, Rᵀ::AbstractMatrix{<:Real}; ll::LogLevel=Warn)
+function (m::LinearJacobianResidual)(Rᵀ⁻¹∇r::AbstractMatrix{<:Real}, ::AbstractVector{<:Real}, Rᵀ::AbstractMatrix{<:Real})
     ldiv!(Rᵀ⁻¹∇r, LowerTriangular(Rᵀ), m.∇r)
     nothing
 end 
 # method mutate internal data 
-function (m::LinearJacobianResidual)(::AbstractVector{<:Real}; ll::LogLevel=Warn)
+function (m::LinearJacobianResidual)(::AbstractVector{<:Real})
     return m.∇r
 end
 # method mutate internal data when Rᵀ is given
-function (m::LinearJacobianResidual)(::AbstractVector{<:Real}, Rᵀ::AbstractMatrix{<:Real}; ll::LogLevel=Warn)
+function (m::LinearJacobianResidual)(::AbstractVector{<:Real}, Rᵀ::AbstractMatrix{<:Real})
     ldiv!(m.Rᵀ⁻¹∇r, LowerTriangular(Rᵀ), m.∇r)
     return m.Rᵀ⁻¹∇r
 end 
-## Hm(w) - Hessian of Maholinobis Distance
+## Hm(p) - Hessian of Maholinobis Distance
 struct LinearHesianWeakNLL<:HesianWeakNLL
     # output 
     H::AbstractMatrix{<:Real}
@@ -231,28 +225,28 @@ function LinearHesianWeakNLL(data::WENDyInternals{true,<:Distribution}, params::
     )
 end
 # method inplace
-function (m::LinearHesianWeakNLL)(H::AbstractMatrix{<:Real}, w::AbstractVector{<:Real}; ll::LogLevel=Warn)
+function (m::LinearHesianWeakNLL)(H::AbstractMatrix{<:Real}, p::AbstractVector{<:Real})
     # TODO: try letting cholesky factorization back in here
-    m.R!(w; transpose=false, doChol=false) 
-    m.r!(w) 
-    m.∇r!(w)
-    m.∇L!(w)
+    m.R!(p; transpose=false, doChol=false) 
+    m.r!(p) 
+    m.∇r!(p)
+    m.∇L!(p)
     _Hwnll!(
-        H, w,
+        H, p,
         m.∇L!.∇L, m.∇r!.∇r, m.R!.L!.L, m.R!.Sreg, 
         m.r!.r,  
         m.S⁻¹r, m.S⁻¹∇r, m.∂ⱼLLᵀ, m.∇S, m.∂ⱼL∂ᵢLᵀ, m.∂ᵢⱼS, m.S⁻¹∂ⱼS, m.∂ᵢSS⁻¹∂ⱼS
     )
 end
 # method mutate internal data
-function (m::LinearHesianWeakNLL)(w::AbstractVector{<:Real}; ll::LogLevel=Warn)
+function (m::LinearHesianWeakNLL)(p::AbstractVector{<:Real})
     # TODO: try letting cholesky factorization back in here
-    m.R!(w; transpose=false, doChol=false) 
-    m.r!(w) 
-    m.∇r!(w)
-    m.∇L!(w)
+    m.R!(p; transpose=false, doChol=false) 
+    m.r!(p) 
+    m.∇r!(p)
+    m.∇L!(p)
     _Hwnll!(
-        m.H, w,
+        m.H, p,
         m.∇L!.∇L, m.∇r!.∇r, m.R!.L!.L, m.R!.Sreg,
         m.r!.r,  
         m.S⁻¹r, m.S⁻¹∇r, m.∂ⱼLLᵀ, m.∇S, m.∂ⱼL∂ᵢLᵀ, m.∂ᵢⱼS, m.S⁻¹∂ⱼS, m.∂ᵢSS⁻¹∂ⱼS
