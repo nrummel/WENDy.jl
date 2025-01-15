@@ -180,13 +180,13 @@ function getTestFunctionMatrices(
         condNumbers = F.S[1] ./ F.S
         sumAllS = sum(F.S) + (min(Kfull, Mp1)-Kmax) * F.S[end] # upper bound on the sum of all singular values
         infoNumbers = [sum(F.S[1:k]) / sumAllS for k in 1:Kmax] 
-        K = min(
-            findlast(condNumbers .<= maxTestFunCondNum),
-            findlast(infoNumbers .<= minTestFunInfoNum),
-            Kmax
-        )
+        K1 = findlast(condNumbers .<= maxTestFunCondNum)
+        K2 = findlast(infoNumbers .<= minTestFunInfoNum)
+        isnothing(K1) && (K1 = Inf)
+        isnothing(K2) && (K2 = Inf)
+        K = Int(floor(min(K1,K2,Kmax)))
         if K == Kmax
-            @info "    Warning... K set to Kmax"
+            @info "    Warning... K set to Kmax=$Kmax"
         end
         @info "    condNum is now $(condNumbers[K])"
         @info "    infoNum is now $(infoNumbers[K])"
