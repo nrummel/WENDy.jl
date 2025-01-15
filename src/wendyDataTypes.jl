@@ -23,7 +23,7 @@ Hyper-parameters for the WENDy Algorithm
 - optimReltol::Real = 1e-8 : relative tolerance (used by all other optimization algorithms)
 - optimMaxiters::Int = 200 : maximum iterations (used by all other optimization algorithms)
 - optimTimelimit::Real = 200.0 : maximum time in seconds (used by all other optimization algorithms)
-- fsAlg::OrdinaryDiffEqAlgorithm = Rosenbrock23() :  forward solve algorithm used by the forward solve nonlinear least squares algorithm
+- fsAlg::OrdinaryDiffEqAlgorithm = Rodas4P() :  forward solve algorithm used by the forward solve nonlinear least squares algorithm
 - fsU0Free::Bool = true : Specifies if the forward solve algorithm should also optimize over the initial condition
 """
 @kwdef struct WENDyParameters   
@@ -46,7 +46,7 @@ Hyper-parameters for the WENDy Algorithm
     optimReltol::Real                   = 1e-8
     optimMaxiters::Int                  = 200
     optimTimelimit::Real                = 200.0
-    fsAlg::OrdinaryDiffEqAlgorithm      = Rosenbrock23()
+    fsAlg::OrdinaryDiffEqAlgorithm      = Rodas4P()
     fsU0Free::Bool                      = true
 end 
 ##

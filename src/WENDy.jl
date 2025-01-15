@@ -8,7 +8,7 @@ module WENDy
     using ManualNLPModels: NLPModel # necessary for ARC_qK, JSOSolvers
     using AdaptiveRegularization: ARCqKOp # ARC_qK
     # For solving and symbolicly representing diff eq 
-    using OrdinaryDiffEq: Rosenbrock23, ODEProblem, OrdinaryDiffEqAlgorithm 
+    using OrdinaryDiffEq: Rodas4P, ODEProblem, OrdinaryDiffEqAlgorithm 
     using OrdinaryDiffEq: solve as solve_ode
     using Symbolics, ForwardDiff
     using Symbolics: jacobian, @variables
