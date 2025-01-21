@@ -36,6 +36,9 @@ function _minRadius(
     debug::Bool=false
 )
     @assert 2 <= testFunSubRate < 4 "We only suppport scaling between 2 and 4"
+    if radiusMax == radiusMax
+        return radiusMin 
+    end
     Mp1, D = size(U)
     # look for a radius between radiusMin and radiusMax, but only check numRadii of them ...
     step = Int(ceil((radiusMax - radiusMin ) / numRadii))
