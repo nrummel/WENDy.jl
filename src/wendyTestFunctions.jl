@@ -36,7 +36,7 @@ function _minRadius(
     debug::Bool=false
 )
     @assert 2 <= testFunSubRate < 4 "We only suppport scaling between 2 and 4"
-    if radiusMax == radiusMax
+    if radiusMin >= radiusMax
         return radiusMin 
     end
     Mp1, D = size(U)
