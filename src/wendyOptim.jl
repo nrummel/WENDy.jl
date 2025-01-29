@@ -228,7 +228,7 @@ function _trustRegion_constrained(
         max_time=params.optimTimelimit
     )
 
-    return return_wits ? (out.solution, out.iter, wits_tr) : (out.solution, out.iter) 
+    return return_wits ? (out.solution, out.iter, wits_tr) : out.solution
 end 
 #
 struct TrustRegion<:AbstractWENDySolver end 

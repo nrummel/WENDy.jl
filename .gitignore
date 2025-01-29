@@ -19,3 +19,4 @@ chromedriver
 *.asv
 *.fig
 results/*
+docs/build/

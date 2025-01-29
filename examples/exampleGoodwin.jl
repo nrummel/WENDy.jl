@@ -1,8 +1,8 @@
 using Random, Logging, LinearAlgebra
 using PlotlyJS
 using WENDy
-import OrdinaryDiffEq: ODEProblem
-import OrdinaryDiffEq.solve as solve_ode
+using OrdinaryDiffEq: ODEProblem
+using OrdinaryDiffEq: solve as solve_ode
 ## Define rhs, ic, time domain, and length of parameters
 function f!(du, u, w, t)
     du[1] = w[1] / (w[3] + u[3]^w[4]) - w[2] * u[1]
@@ -37,7 +37,7 @@ w0 = wstar + 0.5*randn(J).*abs.(wstar)
 relErr = norm(w0 - wstar) / norm(wstar)
 @info "Initializing with Relative Coefficient Error = $(relErr)"
 @info "Solving wendy problem ..."
-@time what = WENDy.solve(wendyProb, w0; alg=:arcqk)
+@time what = WENDy.solve(wendyProb, w0)
 relErr = norm(what - wstar) / norm(wstar)
 @info "Relative Coefficient Error = $(relErr)"
 ## plot the resutls 
