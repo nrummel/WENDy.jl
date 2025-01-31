@@ -111,6 +111,7 @@ function WENDyProblem(
             length(ix), _tt[ix], log.(U[ix,:])
         end
         sig = estimate_std(X)
+        @info "  sig = $sig"
         V, Vp = getTestFunctionMatrices(tt, X, params; ll=ll)
         K, _ = size(V)
         @info "  Building the LHS to the residual"
