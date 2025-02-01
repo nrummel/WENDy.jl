@@ -44,7 +44,7 @@ Hyper-parameters for the WENDy Algorithm
     nlsMaxiters::Int                    = 1000
     optimAbstol::Real                   = 1e-8
     optimReltol::Real                   = 1e-8
-    optimMaxiters::Int                  = 200
+    optimMaxiters::Int                  = 500
     optimTimelimit::Real                = 200.0
     fsAlg::OrdinaryDiffEqAlgorithm      = Rodas4P()
     fsU0Free::Bool                      = true
