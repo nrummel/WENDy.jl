@@ -3,7 +3,7 @@
 This is the documentation of [WENDy.jl](https://github.com/nrummel/WENDy.jl). The work comes from the the MathBio Group at University of Colorado Boulder. For further reading find our paper at [arxiv link](https://arxiv.org/).
 
 ## Problem Statement
-WENDy is an algorithm that can estimate unknown parameters for ordinary differential equations given noisey data.
+WENDy is an algorithm that can estimate unknown parameters for ordinary differential equations given noisy data.
 
 The set up for this algorithm is to assume that a physical system with state variable, $\boldsymbol{u} \in \mathbb{R}^D$, is governed by a system of ordinary differential equation with true parameters, $\mathbf{p}^* \in \mathbb{R}^J$:
 ```math
@@ -24,7 +24,7 @@ The user has observed data of this system on a uniform grid, $$\{t_m \mathbf{u}_
         \log(\eta) &\stackrel{iid}{\sim} \mathcal{N}(\mathbf{0}, \mathbb{I}_D)\\
     \end{align*}
 ```
-*Note*: The Hammard product $$\circ$$ is the element-wise multiplication on the two vectors. 
+*Note*: The Hadamard product $$\circ$$ is the element-wise multiplication on the two vectors. 
 
 The goal of the algorithm is that recover unknown parameters $\mathbf{p}$. In other words, we hope that if the one were to solve the system of differential equations with the estimated parameters then it would match the true state, then 
 ```math
