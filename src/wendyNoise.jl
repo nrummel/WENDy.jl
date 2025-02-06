@@ -4,7 +4,7 @@ function estimate_std(_Y::AbstractMatrix{<:Real}; k::Int=6)
     std = zeros(D)
     for d = 1:D
         f = _Y[:,d]
-        C = fdcoeffF(k,0,-k-2:k+2)
+        C = _fdcoeffF(k,0,-k-2:k+2)
         filter = C[:,end]
         filter = filter / norm(filter,2)
         std[d] = sqrt(mean(imfilter(f,filter,Inner()).parent.^2))
@@ -26,23 +26,9 @@ Requires length(x) > k.
 Usually the elements x(i) are monotonically increasing
 and x(1) <= xbar <= x(n), but neither condition is required.
 The x values need not be equally spaced but must be distinct.  
-This program should give the same results as fdcoeffV.m, but for large
-values of n is much more stable numerically.
-Based on the program "weights" in 
-B. Fornberg, "Calculation of weights in finite difference formulas",
-SIAM Review 40 (1998), pp. 685-691.
-Note: Forberg's algorithm can be used to simultaneously compute the
-coefficients for derivatives of order 0, 1, ..., m where m <= n-1.
-This gives a coefficient matrix C(1:n,1:m) whose k'th column gives
-the coefficients for the k'th derivative.
-In this version we set m=k and only compute the coefficients for
-derivatives of order up to order k, and then return only the k'th column
-of the resulting C matrix (converted to a row vector).  
-This routine is then compatible with fdcoeffV.   
-It can be easily modified to return the whole array if desired.
 From  http://www.amath.washington.edu/~rjl/fdmbook/  (2007)
 """
-function fdcoeffF(k,xbar,x)
+function _fdcoeffF(k,xbar,x)
     n = length(x)
     if k >= n
        @error "*** length(x) must be larger than k"

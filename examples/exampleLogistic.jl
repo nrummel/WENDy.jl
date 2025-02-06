@@ -4,8 +4,8 @@ using WENDy
 using OrdinaryDiffEq: ODEProblem
 using OrdinaryDiffEq: solve as solve_ode
 ## Define rhs, ic, time domain, and length of parameters
-function f!(du, u, w, t)
-    du[1] = w[1] * u[1] - w[2] * u[1]^2
+function f!(du, u, p, t)
+    du[1] = p[1] * u[1] - p[2] * u[1]^2
     nothing
 end
 tRng = (0.0, 10.0)
@@ -26,10 +26,10 @@ U = Ustar + 0.01*randn(size(Ustar))
 ## Create wendy problem struct
 wendyProb = WENDyProblem(tt, U, f!, J, Val(true), Val(Normal); ll=Logging.Info)
 ## Solve the wendy problm given an intial guess for the parameters 
-w0 = [0.5, 0.5]
-relErr = norm(w0 - wstar) / norm(wstar)
+p₀ = [0.5, 0.5]
+relErr = norm(p₀ - wstar) / norm(wstar)
 @info "Init Relative Coefficient Error = $(relErr)"
-what = WENDy.solve(wendyProb, w0)
+what = WENDy.solve(wendyProb, p₀)
 relErr = norm(what - wstar) / norm(wstar)
 @info "Relative Coefficient Error = $(relErr)"
 ## plot the resutls 

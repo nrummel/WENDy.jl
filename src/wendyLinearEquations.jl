@@ -1,5 +1,5 @@
-## Equations that work if the ode rhs is linear in w
-# L₁ - this is the gradient/jacobian of L(w) when L is linear 
+## Equations that work if the ode rhs is linear in p
+# L₁ - this is the gradient/jacobian of L(p) when L is linear 
 function _L₁!(
     L₁::AbstractArray{<:Real,3}, 
     tt::AbstractVector{<:Real}, X::AbstractMatrix{<:Real}, V::AbstractMatrix{<:Real}, sig::AbstractVector{<:Real}, 
@@ -24,44 +24,44 @@ function _L₁!(
     end
     nothing
 end
-## L(w)
+## L(p)
 function _L!(
-    L::AbstractMatrix{<:Real},w::AbstractVector{<:Real}, # output/input
+    L::AbstractMatrix{<:Real},p::AbstractVector{<:Real}, # output/input
     L₁::AbstractArray{<:Real}, L₀::AbstractMatrix{<:Real} # data
 ) 
-    @tullio L[kd,md] = L₁[kd,md,j]*w[j] 
+    @tullio L[kd,md] = L₁[kd,md,j]*p[j] 
     L .+= L₀
     nothing
 end
-## G(w)
-function _g!(g::AbstractVector, w::AbstractVector, # output/input
+## G(p)
+function _g!(g::AbstractVector, p::AbstractVector, # output/input
     G::AbstractMatrix{<:Real} # data
 )
-    mul!(g, G, w)
+    mul!(g, G, p)
     nothing
 end
-# r(w) = G*w - b₀
+# r(p) = G*p - b₀
 function _r!(
-    r::AbstractVector, w::AbstractVector, # output/input
+    r::AbstractVector, p::AbstractVector, # output/input
     G::AbstractMatrix, b₀::AbstractVector # data
 ) 
-    _g!(r, w, G )
+    _g!(r, p, G )
     @views r .-= b₀
     nothing
 end
-# Weighted residual (Rᵀ)⁻¹(G(w)) - b, where b = (Rᵀ)⁻¹b₀
-function _Rᵀr!(r::AbstractVector, w::AbstractVector, # output/input
+# Weighted residual (Rᵀ)⁻¹(G(p)) - b, where b = (Rᵀ)⁻¹b₀
+function _Rᵀr!(r::AbstractVector, p::AbstractVector, # output/input
      G::AbstractMatrix{<:Real}, Rᵀ::AbstractMatrix, b::AbstractVector, # Data
      g::AbstractVector # buffeers   
 ) 
-    _g!(g, w, G)
+    _g!(g, p, G)
     ldiv!(r, LowerTriangular(Rᵀ), g)
     @views r .-= b
     nothing
 end
-## Hm(w) - hessian of the Maholinobis distance when the ode is linear in parameters ⇒ ∀w  ∂ᵢⱼS = 0 and ∂ᵢⱼr = 0. Also notice that ∇_w[G*w -b₀] = G
+## Hm(p) - hessian of the Maholinobis distance when the ode is linear in parameters ⇒ ∀w  ∂ᵢⱼS = 0 and ∂ᵢⱼr = 0. Also notice that ∇_w[G*p -b₀] = G
 function _Hwnll!(
-    H::AbstractMatrix{<:Real}, w::AbstractVector{<:Real},
+    H::AbstractMatrix{<:Real}, p::AbstractVector{<:Real},
     ∇L::AbstractArray{<:Real,3}, G::AbstractMatrix{<:Real}, L::AbstractMatrix{<:Real}, S::AbstractMatrix{<:Real}, 
     r::AbstractVector{<:Real}, 
     S⁻¹r::AbstractVector{<:Real}, S⁻¹∇r::AbstractMatrix{<:Real}, 
@@ -73,14 +73,14 @@ function _Hwnll!(
     @assert !all(0 .== L)
     @assert !all(0 .== S)
     @assert !all(0 .== r)
-    J = length(w)
-    # Hm(w) - Hessian of Maholinobis distance 
+    J = length(p)
+    # Hm(p) - Hessian of Maholinobis distance 
     F = try 
         cholesky(S) 
     catch 
         lu(S)
     end
-    ## Precompute S⁻¹(G(w)-b) and S⁻¹∂ⱼG(w)
+    ## Precompute S⁻¹(G(p)-b) and S⁻¹∂ⱼG(p)
     ldiv!(S⁻¹r, F, r)
     ldiv!(S⁻¹∇r, F, G)
     ## Compute ∇S 

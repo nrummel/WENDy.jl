@@ -1,7 +1,30 @@
 """
-    WENDyParameters
-
 Hyper-parameters for the WENDy Algorithm
+
+# Constructor 
+    WENDyParameters(;   
+        diagReg::Real=1.0e-10,
+        radiusMinTime::Real=0.01,
+        radiusMaxTime::Real=5.0,
+        numRadii::Int=100,
+        radiiParams::AbstractVector{<:Real}=2 .^(0:3),
+        testFunSubRate::Real=2.0,
+        maxTestFunCondNum::Real=1e4,
+        minTestFunInfoNum::Real=0.95,
+        Kmax::Int=200,
+        Kᵣ::Union{Nothing,Int}=100,
+        fsAbstol::Real=1e-8,
+        fsReltol::Real=1e-8,
+        nlsAbstol::Real=1e-8,
+        nlsReltol::Real=1e-8,
+        nlsMaxiters::Int=1000,
+        optimAbstol::Real=1e-8,
+        optimReltol::Real=1e-8,
+        optimMaxiters::Int=500,
+        optimTimelimit::Real=200.0,
+        fsAlg::OrdinaryDiffEqAlgorithm=Rodas4P(),
+        fsU0Free::Bool=true
+    )
 
 # Fields
 - diagReg::Real = 1.0e-10 : Regularization constant for the covariance computations
@@ -16,13 +39,13 @@ Hyper-parameters for the WENDy Algorithm
 - Kᵣ::Union{Nothing,Int} = 100 : how many test function to spread through the time domain in the min radii detection sub-algorithm
 - fsAbstol::Real = 1e-8 : forward solve absolute tolerance for solving ordinary differential equation
 - fsReltol::Real = 1e-8 : forward solve relative tolerance for solving ordinary differntial equation
-- nlsAbstol::Real = 1e-8 : nonlinear least squares absolute tolerance (only used in the IRWLS WENDy algorithm)
-- nlsReltol::Real = 1e-8 : nonlinear least squares relative tolerance (only used in the IRWLS WENDy algorithm)
-- nlsMaxiters::Int = 1000 : nonlinear least squares maximum iterations (only used in the IRWLS WENDy algorithm)
+- nlsAbstol::Real = 1e-8 : nonlinear least squares absolute tolerance (only used in the IRLS WENDy algorithm)
+- nlsReltol::Real = 1e-8 : nonlinear least squares relative tolerance (only used in the IRLS WENDy algorithm)
+- nlsMaxiters::Int = 1000 : nonlinear least squares maximum iterations (only used in the IRLS WENDy algorithm)
 - optimAbstol::Real = 1e-8 : absolute tolerance (used by all other optimization algorithms)
 - optimReltol::Real = 1e-8 : relative tolerance (used by all other optimization algorithms)
 - optimMaxiters::Int = 200 : maximum iterations (used by all other optimization algorithms)
-- optimTimelimit::Real = 200.0 : maximum time in seconds (used by all other optimization algorithms)
+- optimTimelimit::Real = 500.0 : maximum time in seconds (used by all other optimization algorithms)
 - fsAlg::OrdinaryDiffEqAlgorithm = Rodas4P() :  forward solve algorithm used by the forward solve nonlinear least squares algorithm
 - fsU0Free::Bool = true : Specifies if the forward solve algorithm should also optimize over the initial condition
 """
@@ -68,16 +91,16 @@ struct WENDyInternals{lip, DistType}
     Hₚf!::Function
     Hₚ∇ₓf!::Function
 end
-## IRWLS 
-abstract type IRWLS_Iter end 
+## IRLS 
+abstract type IRLSIter end 
 ##
-struct Linear_IRWLS_Iter <: IRWLS_Iter
+struct LinearIRLSIter <: IRLSIter
     b₀::AbstractVector{<:AbstractFloat}
     G0::AbstractMatrix{<:AbstractFloat}
     Rᵀ!::Function 
 end 
 ##
-struct NLS_iter <: IRWLS_Iter
+struct NonLinearIRLSIter <: IRLSIter
     b₀::AbstractVector
     Rᵀ!::Function 
     r!::Function
@@ -106,9 +129,32 @@ struct LeastSquaresCostFunction <: CostFunction
     KD::Int
 end 
 """
-    WENDyProblem{lip, DistType}
+    WENDyProblem{lip, DistType}(...)
 
 A WENDyProblem struct pre-computes and allocates data structures for efficient solving of the parameter inverse problem
+
+# Constructor 
+    WENDyProblem(
+        _tt::AbstractVector{<:Real}, 
+        U::AbstractVecOrMat{<:Real}, 
+        _f!::Function, 
+        J::Int, 
+        ::Val{lip}=Val(false), 
+        ::Val{DistType}=Val(Normal), 
+        params::WENDyParameters=WENDyParameters(); 
+        constraints::Union{Nothing,AbstractVector{Tuple{<:Real,<:Real}}}=nothing, 
+        ll::LogLevel=Warn
+    )
+## Arguments 
+- _tt::AbstractVector{<:Real} : vector of times (equispaced)
+- U::AbstractVecOrMat{<:Real} : Corrupted state variable data 
+- _f!::Function : Right hand-side of the differential equation
+- J::Int : number of parameters (to be estimated)
+- ::Val{lip}=Val(false) : (optional) specify whether the right hand side is `linear in parameters' for improved computational efficiency
+- ::Val{DistType}=Val(Normal) : (optional) specify the distribution of the measurement noise. Choose either Val(Normal) for additive Gaussian noise of Val(LogNormal) for multiplicative LogNormal noise.
+- params::WENDyParameters : (optional) struct of hyper-parameters for the WENDy Algorithm (see the doc for WENDyParameters)
+- constraints=nothing : (optional) Linear box constraints for each parameter, ∀j ∈ [1, ⋯,J], ℓⱼ ≤ pⱼ ≤ uⱼ. Accepts constraints as a list of tuples, [(ℓ₁,u₁), ⋯]. Note: this only is compatible with the TrustRegion solver.
+- ll::LogLevel=Warn : (optional) see additional algorithm information by setting ll=Info
 
 # Fields
 - D::Int : number of state variables
@@ -118,23 +164,10 @@ A WENDyProblem struct pre-computes and allocates data structures for efficient s
 - u₀::AbstractVector{<:Real} : Initial Condition of the ODE (Necessary for the forward solver)
 - constraints : vector of tuples containing linear constraints for each parameter
 - data : Internal data structure 
-- fslsq::LeastSquaresCostFunction : Cost function for the comparison method
+- oels::LeastSquaresCostFunction : Cost function for the comparison method
 - wlsq::LeastSquaresCostFunction : Cost function for the weak form least squares problem
 - wnll::SecondOrderCostFunction : Cost function for the weak form negative log-likelihood 
 
-# Constructor 
-    WENDyProblem(_tt::AbstractVector{<:Real}, U::AbstractVecOrMat{<:Real}, _f!::Function, J::Int, ::Val{lip}=Val(false), ::Val{DistType}=Val(Normal), params::WENDyParameters=WENDyParameters(); constraints::Union{Nothing,AbstractVector{Tuple{T1,T2}}}=nothing, ll::LogLevel=Warn)
-It is recommend that you use the built-in constructor to build your WENDyProblem
-## Arguments 
-- _tt::AbstractVector{<:Real} : vector of times (equispaced)
-- U::AbstractVecOrMat{<:Real} : Corrupted state variable data 
-- _f!::Function : Right hand-side of the differential equation
-- J::Int : number of parameters (to be estimated)
-- ::Val{lip}=Val(false) : (optional) specify whether the right hand side is `linear in parameters' for improved computational efficiency
-- ::Val{DistType}=Val(Normal) : (optional) specify the distribution of the measurement noise
-- params::WENDyParameters : (optional) struct of hyper-parameters for the WENDy Algorithm (see the doc for WENDyParameters)
-- constraints=nothing : Linear box constraints for each parameter
-- ll::LogLevel=Warn : (optional) see additional algorithm information by setting ll=Info
 """
 struct WENDyProblem{lip, DistType}
     D::Int # number of state variables
@@ -145,7 +178,7 @@ struct WENDyProblem{lip, DistType}
     constraints::Union{Nothing,AbstractVector{Tuple{<:Real,<:Real}}}
     data::WENDyInternals{lip, DistType}
     # Cost functions 
-    fslsq::LeastSquaresCostFunction
+    oels::LeastSquaresCostFunction
     wlsq::LeastSquaresCostFunction
     wnll::SecondOrderCostFunction 
 end 

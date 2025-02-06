@@ -1,5 +1,5 @@
-## Equations that do not depend on if the problem is linear or not in w
-# L₀ = V′ ∘ diag(σ₁,⋯,σ_D)
+## Equations that do not depend on if the problem is linear or not in parameters
+"""L₀ = V′ ∘ diag(σ₁,⋯,σ_D)"""
 function _L₀!(
     L₀::AbstractMatrix, # output
     Vp::AbstractMatrix, sig::AbstractVector, # data
@@ -12,9 +12,11 @@ function _L₀!(
     @views L₀ .= reshape(_L₀,K*D,Mp1*D)
     nothing 
 end
-# R(w) - Cholesky factorization of the Covariance/just compute and regularizee the covariance
+""" 
+Performs diagonal regularization and then  computed the Cholesky factorization of the weak residual's covariance.
+"""
 function _R!(
-    R::AbstractMatrix{<:Real}, w::AbstractVector{<:Real}, # output/input
+    R::AbstractMatrix{<:Real}, # output/input
     L::AbstractMatrix{<:Real}, diagReg::AbstractFloat, # data
     thisI::AbstractMatrix{<:Real}, Sreg::AbstractMatrix{<:Real}, S::AbstractMatrix{<:Real}; # buffers
     doChol::Bool=true, ll::LogLevel=Warn #kwargs
@@ -30,7 +32,7 @@ function _R!(
     @views R .= UpperTriangular(R)
     nothing
 end
-# m(w) - Maholinobis distance
+""" weak form negative log likelihood """
 function _wnll(S::AbstractMatrix, r::AbstractVector, S⁻¹r::AbstractVector, constTerm::AbstractFloat)
     F, logDet = try
         F = cholesky(S)
@@ -49,15 +51,11 @@ function _wnll(S::AbstractMatrix, r::AbstractVector, S⁻¹r::AbstractVector, co
         + logDet 
     ) + constTerm
 end
-# function _wnll(Rᵀ⁻¹r::AbstractVector, )
-#     1/2*(dot(Rᵀ⁻¹r, Rᵀ⁻¹r) + sum(log.()))
-# end
-# ∇m(w) - Gradient of Maholinobis distance
+"""∇m(p) - Gradient of weak form negative log likelihood"""
 function _∇wnll!(
-    ∇m::AbstractVector{<:Real},w::AbstractVector{<:Real},
+    ∇m::AbstractVector{<:Real},
     ∇L::AbstractArray{<:Real,3}, L::AbstractMatrix{<:Real}, S::AbstractMatrix{<:Real}, ∇r::AbstractMatrix{<:Real}, r::AbstractVector{<:Real},
-    S⁻¹r::AbstractVector{<:Real}, ∂ⱼLLᵀ::AbstractMatrix{<:Real}, ∇S::AbstractArray{<:Real,3};
-    ll::LogLevel=Warn
+    S⁻¹r::AbstractVector{<:Real}, ∂ⱼLLᵀ::AbstractMatrix{<:Real}, ∇S::AbstractArray{<:Real,3}
 )
     J = length(∇m)
     # TODO: perhaps do this inplace?

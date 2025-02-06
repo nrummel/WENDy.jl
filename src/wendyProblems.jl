@@ -43,14 +43,14 @@ end
 function _forwardSolveResidual(wu0, J, _tt, U, _f!, alg, reltol, abstol, u0Free)
     _Mp1, D = size(U)
     try 
-        w,u₀ = if u0Free
+        p,u₀ = if u0Free
             wu0[1:J], wu0[J+1:end]
         else 
             wu0[1:J], U[1,:]
         end
         tRng = (_tt[1], _tt[end])
         dt = (_tt[end] - _tt[1]) / (length(_tt) - 1)
-        odeprob = ODEProblem(_f!, u₀, tRng, w)
+        odeprob = ODEProblem(_f!, u₀, tRng, p)
         sol = solve_ode(odeprob, alg; 
             reltol=reltol, abstol=abstol,
             saveat=dt, verbose=false
@@ -67,7 +67,7 @@ function _buildCostFunctions(J::Int, _tt::AbstractVector{<:Real}, _f!::Function,
     _Mp1, D = size(U)
     K, _ = size(data.V)
     f(wu0) = _forwardSolveResidual(wu0, J, _tt, U, _f!, params.fsAlg, params.fsReltol, params.fsAbstol, params.fsU0Free)
-    fslsq = LeastSquaresCostFunction(
+    oels = LeastSquaresCostFunction(
         (r, wu0) -> r .= f(wu0), 
         (jac,wu0) -> ForwardDiff.jacobian!(jac, f, wu0),
         _Mp1*D
@@ -84,7 +84,7 @@ function _buildCostFunctions(J::Int, _tt::AbstractVector{<:Real}, _f!::Function,
         GradientWeakNLL(data, params),
         HesianWeakNLL(data, params)
     )
-    return fslsq, wlsq, wnll
+    return oels, wlsq, wnll
 end
 
 ## constructor
@@ -131,11 +131,11 @@ function WENDyProblem(
         )
         ## Build Cost Functions 
         @info "  Building Cost Functions"
-        fslsq, wlsq, wnll = _buildCostFunctions(J, _tt, _f!, U, data, params)
+        oels, wlsq, wnll = _buildCostFunctions(J, _tt, _f!, U, data, params)
 
         return WENDyProblem{lip, DistType}(
             D,J,Mp1,K,U[1,:],constraints,
-            data, fslsq, wlsq, wnll
+            data, oels, wlsq, wnll
         )
     end
 end

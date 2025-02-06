@@ -9,30 +9,28 @@ struct LinearCovarianceFactor<:CovarianceFactor
 end 
 
 # constructor
-function LinearCovarianceFactor(data::WENDyInternals{true,<:Distribution}, ::Union{Nothing, WENDyParameters}=nothing, # Function
-    ::Val{T}=Val(Float64) #optional type
-) where T<:Real
+function LinearCovarianceFactor(data::WENDyInternals{true,<:Distribution}, ::Union{Nothing, WENDyParameters}=nothing) 
     tt, X, V, Vp, sig, ∇ₓf! = data.tt, data.X, data.V, data.Vp, data.sig,data.∇ₓf!
     Mp1, D = size(X)
     K, Mp1 = size(V)
     J = data.J
     # preallocate output
-    L = zeros(T,K*D,Mp1*D)
+    L = zeros(K*D,Mp1*D)
     # precompute L₀ because it does not depend on p
-    __L₀ = zeros(T,K,D,D,Mp1)
-    _L₀ = zeros(T,K,D,Mp1,D)
-    L₀ = zeros(T,K*D,Mp1*D)
+    __L₀ = zeros(K,D,D,Mp1)
+    _L₀ = zeros(K,D,Mp1,D)
+    L₀ = zeros(K*D,Mp1*D)
     _L₀!(
         L₀,
         Vp, sig,
         __L₀,_L₀
     )
     # precompute L₁ because it is constant wrt p 
-    L₁ = zeros(T, K*D, Mp1*D,J)
-    JuF = zeros(T,D,D,Mp1)
-    _∂ⱼL = zeros(T,K,D,D,Mp1)
-    ∂ⱼL = zeros(T,K,D,Mp1,D)
-    eⱼ = zeros(T,J)
+    L₁ = zeros(K*D, Mp1*D,J)
+    JuF = zeros(D,D,Mp1)
+    _∂ⱼL = zeros(K,D,D,Mp1)
+    ∂ⱼL = zeros(K,D,Mp1,D)
+    eⱼ = zeros(J)
     _L₁!(
         L₁, 
         tt, X, V, sig,
@@ -62,19 +60,19 @@ function (m::LinearCovarianceFactor)(p::AbstractVector{<:Real})
     return m.L
 end
 ## ∇L(p)
-struct LinearGradientCovarianceFactor<:GradientCovarianceFactor 
+struct LinearJacobianCovarianceFactor<:JacobianCovarianceFactor 
     # output
     ∇L::AbstractArray{<:Real,3}
 end 
-function LinearGradientCovarianceFactor(data::WENDyInternals{true, <:Distribution}, ::Union{WENDyParameters,Nothing}=nothing, ::Val{T}=Val(Float64)) where T<:Real
+function LinearJacobianCovarianceFactor(data::WENDyInternals{true, <:Distribution}, ::Union{WENDyParameters,Nothing}=nothing)
     Mp1, D = size(data.X)
     K, _ = size(data.V)
     J = data.J
-    L₁ = zeros(T, K*D, Mp1*D,J)
-    JuF = zeros(T,D,D,Mp1)
-    _∂ⱼL = zeros(T,K,D,D,Mp1)
-    ∂ⱼL = zeros(T,K,D,Mp1,D)
-    eⱼ = zeros(T,J)
+    L₁ = zeros(K*D, Mp1*D,J)
+    JuF = zeros(D,D,Mp1)
+    _∂ⱼL = zeros(K,D,D,Mp1)
+    ∂ⱼL = zeros(K,D,Mp1,D)
+    eⱼ = zeros(J)
     _L₁!(
         L₁, 
         data.tt, data.X, data.V, data.sig, 
@@ -82,13 +80,13 @@ function LinearGradientCovarianceFactor(data::WENDyInternals{true, <:Distributio
         JuF, _∂ⱼL, ∂ⱼL, eⱼ
     )
    
-    LinearGradientCovarianceFactor(L₁)
+    LinearJacobianCovarianceFactor(L₁)
 end
 # method inplace 
-function (m::LinearGradientCovarianceFactor)(∇L::AbstractArray{3, <:Real}, ::AbstractVector{<:Real})
+function (m::LinearJacobianCovarianceFactor)(∇L::AbstractArray{3, <:Real}, ::AbstractVector{<:Real})
     ∇L .= m.∇L
 end
-function (m::LinearGradientCovarianceFactor)(::AbstractVector{<:Real}) 
+function (m::LinearJacobianCovarianceFactor)(::AbstractVector{<:Real}) 
     return m.∇L
 end
 ## r(p) - Residual
@@ -103,14 +101,14 @@ struct LinearResidual<:Residual
     g::AbstractVector{<:Real} 
 end
 # constructors 
-function LinearResidual(data::WENDyInternals{true,<:Distribution}, params::Union{WENDyParameters, Nothing}=nothing, ::Val{T}=Val(Float64)) where T<:Real 
+function LinearResidual(data::WENDyInternals{true,<:Distribution}, params::Union{WENDyParameters, Nothing}=nothing)
     Mp1, D = size(data.X)
     K, _ = size(data.V)
     KD = K*D
     # ouput
-    r = zeros(T,KD)
+    r = zeros(KD)
     # buffers
-    g = zeros(T, KD)
+    g = zeros(KD)
     LinearResidual(r,data.b₀, data.G, g)
 end
 # method inplace 
@@ -153,7 +151,7 @@ struct LinearJacobianResidual<:JacobianResidual
     g::AbstractVector{<:Real}
 end
 # constructors
-function LinearJacobianResidual(data::WENDyInternals{true,<:Distribution}, params::Union{WENDyParameters, Nothing}=nothing, ::Val{T}=Val(Float64)) where T<:Real 
+function LinearJacobianResidual(data::WENDyInternals{true,<:Distribution}, params::Union{WENDyParameters, Nothing}=nothing)
     LinearJacobianResidual(similar(data.G), data.G, similar(data.b₀))
 end
 # method inplace 
@@ -185,7 +183,7 @@ struct LinearHesianWeakNLL<:HesianWeakNLL
     R!::Covariance
     r!::Residual
     ∇r!::JacobianResidual
-    ∇L!::GradientCovarianceFactor
+    ∇L!::JacobianCovarianceFactor
     # buffers 
     S⁻¹r::AbstractVector{<:Real}
     S⁻¹∇r::AbstractMatrix{<:Real}
@@ -197,7 +195,7 @@ struct LinearHesianWeakNLL<:HesianWeakNLL
     ∂ᵢSS⁻¹∂ⱼS::AbstractMatrix{<:Real}
 end
 
-function LinearHesianWeakNLL(data::WENDyInternals{true,<:Distribution}, params::WENDyParameters, ::Val{T}=Val(Float64)) where T<:Real
+function LinearHesianWeakNLL(data::WENDyInternals{true,<:Distribution}, params::WENDyParameters) 
     _, D = size(data.X)
     K, _ = size(data.V)
     J = data.J
@@ -207,16 +205,16 @@ function LinearHesianWeakNLL(data::WENDyInternals{true,<:Distribution}, params::
     R! = Covariance(data, params)
     r! = Residual(data, params)
     ∇r! = JacobianResidual(data, params)
-    ∇L! = GradientCovarianceFactor(data, params)
+    ∇L! = JacobianCovarianceFactor(data, params)
     # buffers
-    S⁻¹r = zeros(T, K*D)
-    S⁻¹∇r = zeros(T, K*D, J)
-    ∂ⱼLLᵀ = zeros(T, K*D, K*D)
-    ∇S = zeros(T, K*D, K*D, J)
-    ∂ⱼL∂ᵢLᵀ = zeros(T, K*D, K*D)
-    ∂ᵢⱼS = zeros(T, K*D, K*D)
-    S⁻¹∂ⱼS = zeros(T, K*D, K*D)
-    ∂ᵢSS⁻¹∂ⱼS = zeros(T, K*D, K*D)
+    S⁻¹r = zeros(K*D)
+    S⁻¹∇r = zeros(K*D, J)
+    ∂ⱼLLᵀ = zeros(K*D, K*D)
+    ∇S = zeros(K*D, K*D, J)
+    ∂ⱼL∂ᵢLᵀ = zeros(K*D, K*D)
+    ∂ᵢⱼS = zeros(K*D, K*D)
+    S⁻¹∂ⱼS = zeros(K*D, K*D)
+    ∂ᵢSS⁻¹∂ⱼS = zeros(K*D, K*D)
     LinearHesianWeakNLL(
         H,
         data.b₀,

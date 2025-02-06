@@ -4,11 +4,11 @@ using WENDy
 using OrdinaryDiffEq: ODEProblem
 using OrdinaryDiffEq: solve as solve_ode
 ## Define rhs, ic, time domain, and length of parameters
-function f!(du, u, w, t)
-    β = (w[1] * exp(-w[1] * w[2])) / (1 - exp(-w[1] * w[2]))
-    du[1] = -w[1] * u[1] + w[3] * u[2] + β * u[3] 
-    du[2] = w[1] * u[1] - w[3] * u[2] - w[4] * (1 - exp(-w[5]  * t^2)) * u[2] 
-    du[3] = w[4] * (1 - exp(-w[5]  * t^2)) * u[2] - β * u[3]
+function f!(du, u, p, t)
+    β = (p[1] * exp(-p[1] * p[2])) / (1 - exp(-p[1] * p[2]))
+    du[1] = -p[1] * u[1] + p[3] * u[2] + β * u[3] 
+    du[2] = p[1] * u[1] - p[3] * u[2] - p[4] * (1 - exp(-p[5]  * t^2)) * u[2] 
+    du[3] = p[4] * (1 - exp(-p[5]  * t^2)) * u[2] - β * u[3]
 end
 tRng  = (0.0, 50.0)
 dt    = 0.1
@@ -45,11 +45,11 @@ params = WENDyParameters(
 wendyProb = WENDyProblem(tt, U, f!, J, Val(false)#=Nonlinear in parameters=#, Val(LogNormal)#=LogNormalNoise=#, params; ll=Logging.Info, constraints=constraints);
 ## Solve the wendy problm given an intial guess for the parameters 
 J = length(wstar)
-w0 = wstar + 0.5*randn(J).*abs.(wstar)
-relErr = norm(w0 - wstar) / norm(wstar)
+p₀ = wstar + 0.5*randn(J).*abs.(wstar)
+relErr = norm(p₀ - wstar) / norm(wstar)
 @info "Initializing with Relative Coefficient Error = $(relErr)"
 @info "Solving wendy problem ..."
-@time what = WENDy.solve(wendyProb, w0)
+@time what = WENDy.solve(wendyProb, p₀)
 relErr = norm(what - wstar) / norm(wstar)
 @info "Relative Coefficient Error = $(relErr)"
 ## plot the resutls 

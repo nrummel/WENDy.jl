@@ -1,22 +1,27 @@
-push!(LOAD_PATH, joinpath(@__DIR__, "../src/"))
 using Documenter, WENDy
-# CI_FLG = get(ENV, "CI", nothing) == "true"
+
+# DocMeta.setdocmeta(WENDy, :DocTestSetup, :(using WENDy); recursive=true)
 
 makedocs(
     modules = [WENDy],
+    checkdocs=:exports,
+    # doctest=true, 
+    # linktest=true, 
+    # authors="Nicholas Rummel <nic.rummel@colorado.edu>",
+    # repo="https://github.com/nrummel/WENDy.jl/blob/{commit}{path}#{line}",
+    sitename="WENDy.jl",
     format = Documenter.HTML(
-        # prettyurls = CI_FLG,
-        canonical = "http://weavejl.mpastell.com/stable/",
+        prettyurls =  get(ENV, "CI", nothing) == "true",
+        canonical = "https://nrummel.github.io/WENDy.jl/",
     ),
-    sitename = "WENDy.jl",
     pages = [
-        "index.md",
-        "getting_started.md",
-        "usage.md",
+        "Home"=>"index.md",
+        "Examples"=>"examples.md",
+        "Reference"=>"reference.md",
     ],
 )
 
 deploydocs(
-    repo = "github.com/JunoLab/Weave.jl.git",
+    repo = "github.com/nrummel/WENDy.jl",
     push_preview = true,
 )

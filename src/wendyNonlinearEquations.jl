@@ -1,6 +1,6 @@
-# L(w)
+# L(p)
 function _L!(
-    L::AbstractMatrix{<:Real},w::AbstractVector{<:Real}, # output/input
+    L::AbstractMatrix{<:Real},p::AbstractVector{<:Real}, # output/input
     tt::AbstractVector{<:Real}, X::AbstractMatrix{<:Real}, V::AbstractMatrix{<:Real}, L₀::AbstractMatrix{<:Real}, sig::AbstractVector{<:Real}, # data
     ∇ₓf!::Function, # functions
     JuF::AbstractArray{<:Real, 3}, _L₁::AbstractArray{<:Real, 4} # buffers
@@ -8,32 +8,32 @@ function _L!(
     Mp1, D = size(X)
     K, _ = size(V)
     @inbounds for m in 1:Mp1
-        @views ∇ₓf!(JuF[:,:,m], X[m,:], w, tt[m])
+        @views ∇ₓf!(JuF[:,:,m], X[m,:], p, tt[m])
     end
     @tullio _L₁[k,d2,m,d1] = JuF[d2,d1,m] * V[k,m]* sig[d1] # increases allocation from 4 to 45 
     # permutedims!(_L₁,__L₁,(1,2,4,3))
     @views L .= reshape(_L₁,K*D,Mp1*D) + L₀
     nothing
 end
-# ∇L(w)
+# ∇L(p)
 function _∇L!(
-    ∇L::AbstractArray{<:Real,3}, w::AbstractVector{<:Real},
+    ∇L::AbstractArray{<:Real,3}, p::AbstractVector{<:Real},
     tt::AbstractVector{<:Real}, X::AbstractMatrix{<:Real},V::AbstractMatrix{<:Real},sig::AbstractVector{<:Real},
     ∇ₚ∇ₓf!::Function,
     JwJuF::AbstractArray{<:Real,4}, _∇L::AbstractArray{<:Real,5})
     Mp1, D = size(X)
     K, _ = size(V)
-    J = length(w)
+    J = length(p)
     # compute ∇L
     @inbounds for m in 1:Mp1 
-        @views ∇ₚ∇ₓf!(JwJuF[:,:,:,m], X[m,:], w, tt[m])
+        @views ∇ₚ∇ₓf!(JwJuF[:,:,:,m], X[m,:], p, tt[m])
     end
     @tullio _∇L[k,d2,m,d1,j] = JwJuF[d2,d1,j,m] * V[k,m] * sig[d1] 
     @views ∇L .= reshape(_∇L,K*D,Mp1*D,J)
     nothing
 end
-# G(w)
-function _g!(g::AbstractVector, w::AbstractVector, # output/input
+# G(p)
+function _g!(g::AbstractVector, p::AbstractVector, # output/input
     tt::AbstractVector{<:Real}, X::AbstractMatrix, V::AbstractMatrix, # data
     f!::Function, # function
     F::AbstractMatrix{<:Real}, G::AbstractMatrix{<:Real} # buffers
@@ -41,21 +41,21 @@ function _g!(g::AbstractVector, w::AbstractVector, # output/input
     Mp1, D = size(X)
     K, _ = size(V)
     for m in 1:Mp1
-        @views f!(F[m,:], X[m,:], w, tt[m])
+        @views f!(F[m,:], X[m,:], p, tt[m])
     end
     mul!(G, V, F)
     @views g .= reshape(G, K*D)
     nothing
 end
-# r(w) = G(w) - b₀
+# r(p) = G(p) - b₀
 function _r!(
-    r::AbstractVector,w::AbstractVector, # output/input
+    r::AbstractVector,p::AbstractVector, # output/input
     tt::AbstractVector{<:Real}, X::AbstractMatrix, V::AbstractMatrix, b₀::AbstractVector, # data
     f!::Function, # function
     F::AbstractMatrix{<:Real}, G::AbstractMatrix{<:Real} # buffers
 ) 
     _g!(
-        r, w, 
+        r, p, 
         tt, X, V, 
         f!,
         F, G
@@ -63,20 +63,20 @@ function _r!(
     @views r .-= b₀
     nothing
 end
-# Weighted residual (Rᵀ)⁻¹(G(w)) - b, where b = (Rᵀ)⁻¹b₀
-function _Rᵀr!(r::AbstractVector, w::AbstractVector, # output/input
+# Weighted residual (Rᵀ)⁻¹(G(p)) - b, where b = (Rᵀ)⁻¹b₀
+function _Rᵀr!(r::AbstractVector, p::AbstractVector, # output/input
      tt::AbstractVector{<:Real}, X::AbstractMatrix, V::AbstractMatrix, Rᵀ::AbstractMatrix,b::AbstractVector, # Data
      f!::Function, # functions
      F::AbstractMatrix{<:Real}, G::AbstractMatrix{<:Real}, g::AbstractVector # buffeers   
 ) 
-    _g!(g, w, tt, X, V, f!, F, G)
+    _g!(g, p, tt, X, V, f!, F, G)
     ldiv!(r, LowerTriangular(Rᵀ), g)
     @views r .-= b
     nothing
 end
 # ∇r = ∇G
 function _∇r!(
-    ∇r::AbstractMatrix{<:Real}, w::AbstractVector{<:Real}, # output/input
+    ∇r::AbstractMatrix{<:Real}, p::AbstractVector{<:Real}, # output/input
     tt::AbstractVector{<:Real}, X::AbstractMatrix{<:Real}, V::AbstractMatrix{<:Real}, 
     ∇ₚf!::Function, # functions
     JwF::AbstractArray{<:Real, 3}, __∇r::AbstractArray{<:Real, 3}, _∇r::AbstractArray{<:Real, 3} # buffers
@@ -84,10 +84,10 @@ function _∇r!(
     Mp1, D = size(X)
     K, _ = size(V)
     _, J = size(∇r)
-    @assert length(w) == J "w must be of length $J"
+    @assert length(p) == J "p must be of length $J"
 
     @inbounds for m in 1:Mp1
-        @views ∇ₚf!(JwF[:,:,m], X[m,:], w, tt[m])
+        @views ∇ₚf!(JwF[:,:,m], X[m,:], p, tt[m])
     end
     
     @tullio __∇r[d,j,k] = V[k,m] * JwF[d,j,m] 
@@ -96,7 +96,7 @@ function _∇r!(
     nothing
 end
 function _Hwnll!(
-    H::AbstractMatrix{<:Real}, w::AbstractVector{<:Real},
+    H::AbstractMatrix{<:Real}, p::AbstractVector{<:Real},
     ∇L::AbstractArray{<:Real, 3}, tt::AbstractVector{<:Real}, X::AbstractMatrix{<:Real}, V::AbstractMatrix{<:Real}, L::AbstractMatrix{<:Real}, S::AbstractMatrix{<:Real}, ∇r::AbstractMatrix{<:Real}, b₀::AbstractVector{<:Real}, sig::AbstractVector{<:Real},
     r::AbstractVector{<:Real},  
     Hₚf!::Function, Hₚ∇ₓf!::Function,  S⁻¹r::AbstractVector{<:Real}, 
@@ -104,14 +104,14 @@ function _Hwnll!(
 )
     Mp1, D = size(X)
     K, _ = size(V)
-    J = length(w)
-    # Hm(w) - Hessian of Maholinobis distance 
+    J = length(p)
+    # Hm(p) - Hessian of Maholinobis distance 
     F = try 
         cholesky(S) 
     catch 
         lu(S)
     end
-    ## Precompute S⁻¹(G(w)-b) and S⁻¹∂ⱼG(w)
+    ## Precompute S⁻¹(G(p)-b) and S⁻¹∂ⱼG(p)
     begin
         ldiv!(S⁻¹r, F, r)
         ldiv!(S⁻¹∇r, F, ∇r)
@@ -126,7 +126,7 @@ function _Hwnll!(
     ## compute ∇²r
     begin
         @inbounds for m in 1:Mp1 
-            @views Hₚf!(HwF[:,:,:,m], X[m,:], w, tt[m] )
+            @views Hₚf!(HwF[:,:,:,m], X[m,:], p, tt[m] )
         end
         @tullio _∇²r[k,d,j1,j2] = V[k,m] * HwF[d,j1,j2,m] 
         ∇²r = reshape(_∇²r,K*D,J,J)
@@ -134,7 +134,7 @@ function _Hwnll!(
     ## compute ∇²L
     begin
         @inbounds for m in 1:Mp1 
-            @views Hₚ∇ₓf!(HwJuF[:,:,:,:,m], X[m,:], w, tt[m])
+            @views Hₚ∇ₓf!(HwJuF[:,:,:,:,m], X[m,:], p, tt[m])
         end
         # turns out this is slower
         # @time "outerprod" @tullio __∇²L[k,d2,d1,j1,j2,m] = V[k,m] * HwJuF[d2,d1,j1,j2,m] * sig[d1] 

@@ -16,23 +16,23 @@ struct NonlinearCovarianceFactor<:CovarianceFactor
     _L₁::AbstractArray{<:Real, 4}
 end 
 # constructor
-function NonlinearCovarianceFactor(data::WENDyInternals{false,<:Distribution}, params::Union{WENDyParameters,Nothing}=nothing, ::Val{T}=Val(Float64)) where T<:Real
+function NonlinearCovarianceFactor(data::WENDyInternals{false,<:Distribution}, params::Union{WENDyParameters,Nothing}=nothing)
     Mp1, D = size(data.X)
     K, _ = size(data.V)
     # preallocate output
-    L = zeros(T,K*D,Mp1*D)
+    L = zeros(K*D,Mp1*D)
     # precompute L₀ because it does not depend on p
-    __L₀ = zeros(T,K,D,D,Mp1)
-    _L₀ = zeros(T,K,D,Mp1,D)
-    L₀ = zeros(T,K*D,Mp1*D)
+    __L₀ = zeros(K,D,D,Mp1)
+    _L₀ = zeros(K,D,Mp1,D)
+    L₀ = zeros(K*D,Mp1*D)
     _L₀!(
         L₀,
         data.Vp, data.sig,
         __L₀,_L₀
     )
     # buffers
-    JuF = zeros(T,D,D,Mp1)
-    _L₁ = zeros(T,K,D,Mp1,D)
+    JuF = zeros(D,D,Mp1)
+    _L₁ = zeros(K,D,Mp1,D)
 
     return NonlinearCovarianceFactor(
         L,
@@ -62,7 +62,7 @@ function (m::NonlinearCovarianceFactor)(p::AbstractVector{<:Real})
     return m.L
 end
 ##
-struct NonlinearGradientCovarianceFactor<:GradientCovarianceFactor 
+struct NonlinearJacobianCovarianceFactor<:JacobianCovarianceFactor 
     # output
     ∇L::AbstractArray{<:Real,3}
     # data 
@@ -76,15 +76,15 @@ struct NonlinearGradientCovarianceFactor<:GradientCovarianceFactor
     JwJuF::AbstractArray{<:Real,4}
     _∇L::AbstractArray{<:Real,5}
 end 
-function NonlinearGradientCovarianceFactor(data::WENDyInternals{false,<:Distribution}, params::Union{WENDyParameters,Nothing}=nothing, ::Val{T}=Val(Float64)) where T<:Real
+function NonlinearJacobianCovarianceFactor(data::WENDyInternals{false,<:Distribution}, params::Union{WENDyParameters,Nothing}=nothing)
     Mp1, D = size(data.X)
     K, _ = size(data.V)
     J = data.J
-    ∇L = zeros(T,K*D,Mp1*D,J)
-    JwJuF = zeros(T,D,D,J,Mp1)
-    _∇L = zeros(T,K,D,Mp1,D,J)
+    ∇L = zeros(K*D,Mp1*D,J)
+    JwJuF = zeros(D,D,J,Mp1)
+    _∇L = zeros(K,D,Mp1,D,J)
    
-    NonlinearGradientCovarianceFactor(
+    NonlinearJacobianCovarianceFactor(
         ∇L,
         data.tt, data.X, data.V, data.sig, 
         data.∇ₚ∇ₓf!,
@@ -92,7 +92,7 @@ function NonlinearGradientCovarianceFactor(data::WENDyInternals{false,<:Distribu
     )
 end
 # method inplace 
-function (m::NonlinearGradientCovarianceFactor)(∇L::AbstractArray{3, <:Real}, p::AbstractVector{<:Real})
+function (m::NonlinearJacobianCovarianceFactor)(∇L::AbstractArray{3, <:Real}, p::AbstractVector{<:Real})
     _∇L!(
         ∇L, p,
         m.tt,m.X,m.V,m.sig,
@@ -101,7 +101,7 @@ function (m::NonlinearGradientCovarianceFactor)(∇L::AbstractArray{3, <:Real}, 
     )
 end
 # method mutating interal storage
-function (m::NonlinearGradientCovarianceFactor)(p::AbstractVector{<:Real})
+function (m::NonlinearJacobianCovarianceFactor)(p::AbstractVector{<:Real})
     _∇L!(
         m.∇L, p,
         m.tt,m.X,m.V,m.sig,
@@ -127,15 +127,15 @@ struct NonlinearResidual<:Residual
     g::AbstractVector{<:Real} 
 end
 # constructors 
-function NonlinearResidual(data::WENDyInternals{false,<:Distribution}, params::Union{WENDyParameters, Nothing}=nothing, ::Val{T}=Val(Float64)) where T<:Real
+function NonlinearResidual(data::WENDyInternals{false,<:Distribution}, params::Union{WENDyParameters, Nothing}=nothing)
     Mp1, D = size(data.X)
     K, _ = size(data.V)
     # ouput
-    r = zeros(T,K*D)
+    r = zeros(K*D)
     # buffers
-    F = zeros(T, Mp1, D)
-    G = zeros(T, K, D)
-    g = zeros(T, K*D)
+    F = zeros(Mp1, D)
+    G = zeros(K, D)
+    g = zeros(K*D)
     NonlinearResidual(
         r,
         data.tt,data.b₀,data.X, data.V, 
@@ -199,15 +199,15 @@ struct NonlinearJacobianResidual<:JacobianResidual
     ∇r::AbstractMatrix{<:Real} 
 end
 # constructors
-function NonlinearJacobianResidual(data::WENDyInternals{false,<:Distribution}, params::Union{WENDyParameters, Nothing}=nothing, ::Val{T}=Val(Float64)) where T<:Real 
+function NonlinearJacobianResidual(data::WENDyInternals{false,<:Distribution}, params::Union{WENDyParameters, Nothing}=nothing) 
     J = data.J
     Mp1, D = size(data.X)
     K, _ = size(data.V)
     Rᵀ⁻¹∇r = zeros(K*D,J)
-    JwF = zeros(T,D,J,Mp1)
-    __∇r = zeros(T,D,J,K)
-    _∇r = zeros(T,K,D,J)
-    ∇r = zeros(T,K*D, J)
+    JwF = zeros(D,J,Mp1)
+    __∇r = zeros(D,J,K)
+    _∇r = zeros(K,D,J)
+    ∇r = zeros(K*D, J)
     NonlinearJacobianResidual(
         Rᵀ⁻¹∇r, 
         data.tt, data.X, data.V, 
@@ -262,7 +262,7 @@ struct NonlinearHesianWeakNLL<:HesianWeakNLL
     R!::Covariance
     r!::Residual
     ∇r!::JacobianResidual
-    ∇L!::GradientCovarianceFactor
+    ∇L!::JacobianCovarianceFactor
     Hₚf!::Function
     Hₚ∇ₓf!::Function
     # buffers 
@@ -283,7 +283,7 @@ struct NonlinearHesianWeakNLL<:HesianWeakNLL
     ∂ᵢSS⁻¹∂ⱼS::AbstractMatrix{<:Real}
 end
 
-function NonlinearHesianWeakNLL(data::WENDyInternals{false,<:Distribution}, params::WENDyParameters, ::Val{T}=Val(Float64)) where T<:Real
+function NonlinearHesianWeakNLL(data::WENDyInternals{false,<:Distribution}, params::WENDyParameters)
     Mp1, D = size(data.X)
     K, _ = size(data.V)
     J =  data.J
@@ -294,23 +294,23 @@ function NonlinearHesianWeakNLL(data::WENDyInternals{false,<:Distribution}, para
     R! = Covariance(data, params)
     r! = Residual(data, params)
     ∇r! = JacobianResidual(data, params)
-    ∇L! = GradientCovarianceFactor(data, params)
+    ∇L! = JacobianCovarianceFactor(data, params)
     # buffers
-    S⁻¹r = zeros(T, K*D)
-    S⁻¹∇r = zeros(T, K*D, J)
-    ∂ⱼLLᵀ = zeros(T, K*D, K*D)
-    ∇S = zeros(T, K*D, K*D, J)
-    HwF = zeros(T, D, J, J, Mp1)
-    _∇²r = zeros(T, K, D, J, J)
-    ∇²r = zeros(T, K*D, J, J)
-    HwJuF = zeros(T, D, D, J, J, Mp1)
-    _∇²L = zeros(T, K, D, Mp1, D, J, J)
-    ∇²L = zeros(T, K*D, Mp1*D, J, J)
-    ∂ⱼL∂ᵢLᵀ = zeros(T, K*D, K*D)
-    ∂ⱼᵢLLᵀ = zeros(T, K*D, K*D)
-    ∂ᵢⱼS = zeros(T, K*D, K*D)
-    S⁻¹∂ⱼS = zeros(T, K*D, K*D)
-    ∂ᵢSS⁻¹∂ⱼS = zeros(T, K*D, K*D)
+    S⁻¹r = zeros(K*D)
+    S⁻¹∇r = zeros(K*D, J)
+    ∂ⱼLLᵀ = zeros(K*D, K*D)
+    ∇S = zeros(K*D, K*D, J)
+    HwF = zeros(D, J, J, Mp1)
+    _∇²r = zeros(K, D, J, J)
+    ∇²r = zeros(K*D, J, J)
+    HwJuF = zeros(D, D, J, J, Mp1)
+    _∇²L = zeros(K, D, Mp1, D, J, J)
+    ∇²L = zeros(K*D, Mp1*D, J, J)
+    ∂ⱼL∂ᵢLᵀ = zeros(K*D, K*D)
+    ∂ⱼᵢLLᵀ = zeros(K*D, K*D)
+    ∂ᵢⱼS = zeros(K*D, K*D)
+    S⁻¹∂ⱼS = zeros(K*D, K*D)
+    ∂ᵢSS⁻¹∂ⱼS = zeros(K*D, K*D)
     NonlinearHesianWeakNLL(
         H,
         data.tt, data.X, data.V, data.b₀, data.sig,

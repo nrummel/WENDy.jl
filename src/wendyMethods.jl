@@ -1,14 +1,19 @@
-## L(w)
+""" 
+    For computational efficiency, it is advantageous to compute the matrix L(p) where LLᵀ = S(p) the covariance of the weak residual. 
+    Depending on whether the problem is linear in parameters or not a LinearCovarianceFactor or a NonLinearCovarianceFactor will be created. 
+"""
 abstract type CovarianceFactor<:Function end 
 function CovarianceFactor(data::WENDyInternals{lip, <:Distribution}, params::WENDyParameters) where lip
     return lip ? LinearCovarianceFactor(data, params) : NonlinearCovarianceFactor(data, params)
 end
-## ∇L(w)
-abstract type GradientCovarianceFactor<:Function end 
-function GradientCovarianceFactor(data::WENDyInternals{lip, <:Distribution}, params::WENDyParameters, ::Val{T}=Val(Float64)) where {lip, T<:Real}
-    return lip ? LinearGradientCovarianceFactor(data, params, Val(T)) : NonlinearGradientCovarianceFactor(data, params, Val(T))
+""" 
+    Jacobian of the covariance factor with respect to the parameters of interest p, ∇ₚL. 
+"""
+abstract type JacobianCovarianceFactor<:Function end 
+function JacobianCovarianceFactor(data::WENDyInternals{lip, <:Distribution}, params::WENDyParameters) where lip
+    return lip ? LinearJacobianCovarianceFactor(data, params) : NonlinearJacobianCovarianceFactor(data, params)
 end
-## R(w)
+## R(p)
 # struct/method
 struct Covariance<:Function
     #output
@@ -22,28 +27,23 @@ struct Covariance<:Function
     S::AbstractMatrix{<:Real}
     Sreg::AbstractMatrix{<:Real}
 end
-# constructors
-function Covariance(diagReg::AbstractFloat, L!::CovarianceFactor, K::Int, D::Int, ::Val{T}=Val(Float64)) where T<:Real
-    KD,MD = size(L!.L)
-    # ouput
-    R = zeros(T, KD, KD)
-    # buffers 
-    thisI = Matrix{T}(I, KD, KD)
-    S = zeros(T, KD, KD)
-    Sreg = zeros(T, KD, KD)
-    Covariance(R, diagReg, L!, thisI, S, Sreg)
-end
-function Covariance(data::WENDyInternals, params::WENDyParameters, ::Val{T}=Val(Float64)) where T<:Real
+# constructor
+function Covariance(data::WENDyInternals, params::WENDyParameters) 
     L! = CovarianceFactor(data, params)
-    _, D = size(data.X)
-    K, _ = size(data.V)
-    Covariance(params.diagReg, L!, K, D, Val(T))
+    KD, _ = size(L!.L)
+    # ouput
+    R = zeros(KD, KD)
+    # buffers 
+    thisI = Matrix(I, KD, KD)
+    S = zeros(KD, KD)
+    Sreg = zeros(KD, KD)
+    Covariance(R, params.diagReg, L!, thisI, S, Sreg)
 end
 # method inplace 
-function (m::Covariance)(R::AbstractMatrix{<:Real}, w::AbstractVector{W}; transpose::Bool=true, doChol::Bool=true) where W<:Real
-    m.L!(w) 
+function (m::Covariance)(R::AbstractMatrix{<:Real}, p::AbstractVector{<:Real}; transpose::Bool=true, doChol::Bool=true)
+    m.L!(p) 
     _R!(
-        R,w,
+        R,
         m.L!.L, m.diagReg,
         m.thisI,m.Sreg,m.S;
         doChol=doChol 
@@ -54,10 +54,10 @@ function (m::Covariance)(R::AbstractMatrix{<:Real}, w::AbstractVector{W}; transp
     nothing
 end
 # method mutate internal data 
-function (m::Covariance)(w::AbstractVector{W}; transpose::Bool=true, doChol::Bool=true) where W<:Real
-    m.L!(w) 
+function (m::Covariance)(p::AbstractVector{<:Real}; transpose::Bool=true, doChol::Bool=true)
+    m.L!(p) 
     _R!(
-        m.R, w,
+        m.R,
         m.L!.L, m.diagReg,
         m.thisI,m.Sreg,m.S;
         doChol=doChol
@@ -67,14 +67,14 @@ function (m::Covariance)(w::AbstractVector{W}; transpose::Bool=true, doChol::Boo
     end
     m.R
 end
-## G(w) - b / G*w - b 
+## G(p) - b / G*p - b 
 abstract type Residual<:Function end 
-function Residual(data::WENDyInternals{lip, <:Distribution}, params::WENDyParameters, ::Val{T}=Val(Float64)) where {lip,T<:Real} 
-    return lip ? LinearResidual(data, params, Val(T)) :  NonlinearResidual(data, params, Val(T))
+function Residual(data::WENDyInternals{lip, <:Distribution}, params::WENDyParameters) where lip 
+    return lip ? LinearResidual(data, params) :  NonlinearResidual(data, params)
 end
 abstract type JacobianResidual<:Function end
-function JacobianResidual(data::WENDyInternals{lip, <:Distribution}, params::WENDyParameters, ::Val{T}=Val(Float64)) where {lip,T<:Real}
-    return lip ? LinearJacobianResidual(data, params, Val(T)) : NonlinearJacobianResidual(data, params, Val(T))
+function JacobianResidual(data::WENDyInternals{lip, <:Distribution}, params::WENDyParameters) where lip
+    return lip ? LinearJacobianResidual(data, params) : NonlinearJacobianResidual(data, params)
 end
 ## Maholinobis distance 
 # struct
@@ -90,32 +90,32 @@ struct WeakNLL<:Function
     Rᵀ⁻¹r::AbstractVector{<:Real}
 end
 # constructor
-function WeakNLL(data::WENDyInternals, params::WENDyParameters, ::Val{T}=Val(Float64)) where T<:Real
+function WeakNLL(data::WENDyInternals, params::WENDyParameters)
     # functions
-    R! = Covariance(data, params, Val(T))
-    r! = Residual(data, params, Val(T))
+    R! = Covariance(data, params)
+    r! = Residual(data, params)
     # buffer
     _, D = size(data.X)
     K, _ = size(data.V)
-    S = zeros(T, K*D, K*D)
-    Rᵀ= zeros(T, K*D, K*D)
-    r = zeros(T, K*D)
-    S⁻¹r = zeros(T, K*D)
-    Rᵀ⁻¹r = zeros(T, K*D)
+    S = zeros(K*D, K*D)
+    Rᵀ= zeros(K*D, K*D)
+    r = zeros(K*D)
+    S⁻¹r = zeros(K*D)
+    Rᵀ⁻¹r = zeros(K*D)
     WeakNLL(
         R!, r!, 
         S, Rᵀ, r, S⁻¹r,Rᵀ⁻¹r
     )
 end
 # method
-function (m::WeakNLL)(w::AbstractVector{T}) where T<:Real
+function (m::WeakNLL)(p::AbstractVector{<:Real})
     KD,_ = size(m.S) 
     constTerm = KD/2*log(2*pi)
-    m.r!(m.r,w)
-    m.R!(m.S,w, doChol=false)
+    m.r!(m.r,p)
+    m.R!(m.S,p, doChol=false)
     return _wnll(m.S, m.r, m.S⁻¹r, constTerm)
 end
-## ∇m(w) - gradient of Maholinobis distance
+## ∇m(p) - gradient of Maholinobis distance
 struct GradientWeakNLL<:Function
     # output
     ∇m::AbstractVector{<:Real}
@@ -123,28 +123,28 @@ struct GradientWeakNLL<:Function
     R!::Covariance
     r!::Residual
     ∇r!::JacobianResidual
-    ∇L!::GradientCovarianceFactor
+    ∇L!::JacobianCovarianceFactor
     # Buffers
     S⁻¹r::AbstractVector{<:Real}
     ∂ⱼLLᵀ::AbstractMatrix{<:Real}
     ∇S::AbstractArray{<:Real,3}
 end
 # constructor
-function GradientWeakNLL(data::WENDyInternals, params::WENDyParameters, ::Val{T}=Val(Float64)) where T
+function GradientWeakNLL(data::WENDyInternals, params::WENDyParameters) 
     _, D = size(data.X)
     K, _ = size(data.V)
     J = data.J
     # output
-    ∇m = zeros(T,J)
+    ∇m = zeros(J)
     # methods 
-    R!  = Covariance(data, params, Val(T))
-    r!  = Residual(data, params, Val(T))
-    ∇r! = JacobianResidual(data, params, Val(T))
-    ∇L! = GradientCovarianceFactor(data, params, Val(T))
+    R!  = Covariance(data, params)
+    r!  = Residual(data, params)
+    ∇r! = JacobianResidual(data, params)
+    ∇L! = JacobianCovarianceFactor(data, params)
     # preallocate buffers
-    S⁻¹r = zeros(T, K*D)
-    ∂ⱼLLᵀ = zeros(T, K*D,K*D)
-    ∇S = zeros(T,K*D,K*D,J)
+    S⁻¹r = zeros( K*D)
+    ∂ⱼLLᵀ = zeros( K*D,K*D)
+    ∇S = zeros(K*D,K*D,J)
     GradientWeakNLL(
         ∇m,
         R!, r!, ∇r!, ∇L!,
@@ -152,34 +152,34 @@ function GradientWeakNLL(data::WENDyInternals, params::WENDyParameters, ::Val{T}
     )
 end
 # method inplace
-function (m::GradientWeakNLL)(∇m::AbstractVector{<:Real}, w::AbstractVector{W}) where W<:Real
-    # Compute L(w) & S(w)
-    m.R!(w, transpose=false, doChol=false) 
+function (m::GradientWeakNLL)(∇m::AbstractVector{<:Real}, p::AbstractVector{<:Real})
+    # Compute L(p) & S(p)
+    m.R!(p, transpose=false, doChol=false) 
     # Compute residal
-    m.r!(w)
+    m.r!(p)
     # Compute jacobian of residual
-    m.∇r!(w)
+    m.∇r!(p)
     # Compute jacobian of covariance factor
-    m.∇L!(w)
+    m.∇L!(p)
     
     _∇wnll!(
-        ∇m, w, # ouput, input
+        ∇m, # ouput
         m.∇L!.∇L, m.R!.L!.L, m.R!.Sreg, m.∇r!.∇r, m.r!.r, # data
         m.S⁻¹r,  m.∂ⱼLLᵀ, m.∇S; # buffers
     )
 end
 # method mutate internal data
-function (m::GradientWeakNLL)(w::AbstractVector{W}) where W<:Real
-    # Compute L(w) & S(w)
-    m.R!(w, transpose=false, doChol=false) 
+function (m::GradientWeakNLL)(p::AbstractVector{<:Real})
+    # Compute L(p) & S(p)
+    m.R!(p, transpose=false, doChol=false) 
     # Compute residal
-    m.r!(w)
+    m.r!(p)
     # Compute jacobian of residual
-    m.∇r!(w)
+    m.∇r!(p)
     # Compute jacobian of covariance factor
-    m.∇L!(w)
+    m.∇L!(p)
     _∇wnll!(
-        m.∇m, w, # ouput, input
+        m.∇m,  # ouput
         m.∇L!.∇L, m.R!.L!.L, m.R!.Sreg, m.∇r!.∇r, m.r!.r, # data
         m.S⁻¹r,  m.∂ⱼLLᵀ, m.∇S
     )
