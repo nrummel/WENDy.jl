@@ -20,3 +20,6 @@ chromedriver
 *.fig
 results/*
 docs/build/
+docs/Manifest.toml
+Manifest.toml
+examples/Manifest.toml

@@ -2,9 +2,9 @@
 
 *Weak form Estimation of Nonlinear Dynamics in Julia.*
 
-| **Documentation**                                                               | **Build Status**                                                                                |
-|:-------------------------------------------------------------------------------:|:-----------------------------------------------------------------------------------------------:|
-| [![][docs-stable-img]][docs-stable-url] [![][docs-dev-img]][docs-dev-url] | [![][GHA-img]][GHA-url] [![][codecov-img]][codecov-url] [![PkgEval][pkgeval-img]][pkgeval-url] |
+|**Documentation** |
+|:-----------------:|
+| [![][docs-stable-img]][docs-stable-url] [![][docs-dev-img]][docs-dev-url] | 
 
 
 ## Installation
@@ -22,11 +22,27 @@ Or, equivalently, via the `Pkg` API:
 julia> import Pkg; Pkg.add("Documenter")
 ```
 
-## Documentation
-
-- [**STABLE**][docs-stable-url] &mdash; **documentation of the most recently tagged version.**
-- [**DEVEL**][docs-dev-url] &mdash; *documentation of the in-development version.*
-
 ## Publication
 The work comes from the the MathBio Group at University of Colorado Boulder. For further reading find our paper at [arxiv link](https://arxiv.org/).
 
+
+[contrib-url]: https://documenter.juliadocs.org/dev/contributing/
+[discourse-tag-url]: https://discourse.julialang.org/tags/documenter
+[gitter-url]: https://gitter.im/juliadocs/users
+
+[docs-dev-img]: https://img.shields.io/badge/docs-dev-blue.svg
+[docs-dev-url]: https://documenter.juliadocs.org/dev
+
+[docs-stable-img]: https://img.shields.io/badge/docs-stable-blue.svg
+[docs-stable-url]: https://documenter.juliadocs.org/stable
+
+[GHA-img]: https://github.com/JuliaDocs/Documenter.jl/workflows/CI/badge.svg
+[GHA-url]: https://github.com/JuliaDocs/Documenter.jl/actions?query=workflows/CI
+
+[codecov-img]: https://codecov.io/gh/JuliaDocs/Documenter.jl/branch/master/graph/badge.svg
+[codecov-url]: https://codecov.io/gh/JuliaDocs/Documenter.jl
+
+[issues-url]: https://github.com/JuliaDocs/Documenter.jl/issues
+
+[pkgeval-img]: https://juliaci.github.io/NanosoldierReports/pkgeval_badges/D/Documenter.svg
+[pkgeval-url]: https://juliaci.github.io/NanosoldierReports/pkgeval_badges/D/Documenter.html
