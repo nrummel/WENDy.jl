@@ -26,9 +26,9 @@ jobs:
           version: "1"
       - run: |
         julia --project=docs -e '
-        using Pkg
-        Pkg.develop(PackageSpec(path=pwd()))
-        Pkg.instantiate()'
+          using Pkg
+          Pkg.develop(PackageSpec(path=pwd()))
+          Pkg.instantiate()'
       -run: julia --project=docs -e docs/make.jl  
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # If authenticating with GitHub Actions token
