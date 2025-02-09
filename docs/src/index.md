@@ -6,7 +6,7 @@ This is the documentation of [WENDy.jl](https://github.com/nrummel/WENDy.jl). Th
 
 - Estimation of parameters for ordinary differential equations
 - Supports: 
-    - Additive Gaussian Noise and Multiplicative LogNormal Noise.
+    - Additive Gaussian Noise and Multiplicative LogNormal Noise
     - Ordinary differential equations that are nonlinear in parameters
     - Ordinary differential equations that are inhomogeneous in time
     - Box constraints for parameter spaces

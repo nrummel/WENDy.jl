@@ -12,13 +12,13 @@ The package can be installed with the Julia package manager.
 From the Julia REPL, type `]` to enter the Pkg REPL mode and run:
 
 ```
-pkg> add https://github.com/nrummel/WENDy.jl
+pkg> add WENDy
 ```
 
 ## Current features
 - Estimation of parameters for ordinary differential equations
 - Supports: 
-    - Additive Gaussian Noise and Multiplicative LogNormal Noise.
+    - Additive Gaussian Noise and Multiplicative LogNormal Noise
     - Ordinary differential equations that are nonlinear in parameters
     - Ordinary differential equations that are inhomogeneous in time
     - Box constraints for parameter spaces
