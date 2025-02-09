@@ -4,7 +4,7 @@
 
 |**Documentation** |
 |:-----------------:|
-| [![][docs-stable-img]][docs-stable-url] [![][docs-dev-img]][docs-dev-url] | 
+| [![][docs-stable-img]][docs-dev-url] [![][docs-dev-img]][docs-dev-url] | 
 
 
 ## Installation
@@ -13,17 +13,11 @@ The package can be installed with the Julia package manager.
 From the Julia REPL, type `]` to enter the Pkg REPL mode and run:
 
 ```
-pkg> add WENDy
-```
-
-Or, equivalently, via the `Pkg` API:
-
-```julia
-julia> import Pkg; Pkg.add("Documenter")
+pkg> add https://github.com/nrummel/WENDy.jl
 ```
 
 ## Publication
-The work comes from the the MathBio Group at University of Colorado Boulder. For further reading find our paper at [arxiv link](https://arxiv.org/).
+The work comes from the the [Stephen Becker's](https://amath.colorado.edu/faculty/becker) and the [MathBio Group's](https://www.colorado.edu/project/mathbio/) at University of Colorado Boulder. For further reading find our paper at [arxiv link](https://arxiv.org/).
 
 
 [contrib-url]: https://documenter.juliadocs.org/dev/contributing/
