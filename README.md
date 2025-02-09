@@ -31,10 +31,10 @@ The work comes from the the MathBio Group at University of Colorado Boulder. For
 [gitter-url]: https://gitter.im/juliadocs/users
 
 [docs-dev-img]: https://img.shields.io/badge/docs-dev-blue.svg
-[docs-dev-url]: https://documenter.juliadocs.org/dev
+[docs-dev-url]: https://nrummel.github.io/WENDy.jl/dev
 
 [docs-stable-img]: https://img.shields.io/badge/docs-stable-blue.svg
-[docs-stable-url]: https://documenter.juliadocs.org/stable
+[docs-stable-url]: https://nrummel.github.io/WENDy.jl/stable
 
 [GHA-img]: https://github.com/JuliaDocs/Documenter.jl/workflows/CI/badge.svg
 [GHA-url]: https://github.com/JuliaDocs/Documenter.jl/actions?query=workflows/CI

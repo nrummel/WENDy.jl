@@ -400,7 +400,7 @@ Solve the inverse problem for the unknown parameters
 - wendyProblem::WENDyProblem : An instance of a WENDyProblem for the ODE that you wish to estimate parameters for 
 - p₀::AbstractVector{<:Real} : Inital guess for the parameters
 - params::WENDyParameters : hyperparameters for the WENDy Algorithm 
-- alg::AbstractWENDySolver=TrustRegion() : Choice of solver 
+- alg::AbstractWENDySolver=TrustRegion() : (optional) Choice of solver 
     - OELS : output error least squares
     - WLS : weak form least squares 
     - IRLS : WENDy generalized least squares solver via iterative reweighted least squares 
@@ -409,6 +409,14 @@ Solve the inverse problem for the unknown parameters
     - HybridTrustRegionOELS : hybrid solver that first optimizes with the trust region solver then passes the result as an intialization to the output error least squares problem
     - HybridWLSTrustRegion : hybrid solver that first optimizes with the weak form least squares solver then passes the result as an intialization to the trust region weak form negative log-likelihood solver
 """
-function solve(wendyProb::WENDyProblem, p₀::AbstractVector{<:Real}, params::WENDyParameters=WENDyParameters(); alg::AbstractWENDySolver=TrustRegion(), kwargs...)
+function solve(wendyProb::WENDyProblem, p₀::AbstractVector{<:Real}, params::WENDyParameters=WENDyParameters(); alg::AbstractWENDySolver=TrustRegion(), forceAlg::Bool=false, kwargs...)
+    if !forceAlg && !isa(alg, OELS) 
+        maxSizeOfData = sqrt(maximum(wendyProb.data.X.^2))
+        minSig = minimum(wendyProb.data.sig)
+        if minSig/maxSizeOfData < 1e-8
+            @info "Switching the Weak Form Least Squares Problem, Noise is considered negligible..."
+            alg = WLS() 
+        end
+    end
     alg(wendyProb, p₀, params; kwargs... )
 end

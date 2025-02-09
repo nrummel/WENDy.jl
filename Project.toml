@@ -1,7 +1,7 @@
 name = "WENDy"
 uuid = "d405da13-e5c5-4ff7-999e-699e6f93cd5d"
 authors = ["Nicholas Rummel"]
-version = "1.0.0-DEV"
+version = "1.0.0"
 
 [deps]
 AdaptiveRegularization = "79adfba0-1eab-50d9-8528-0589417a2bfe"
@@ -24,12 +24,4 @@ Symbolics = "0c5d862f-8b57-4792-8d23-62f2024744c7"
 Tullio = "bc48ee85-29a4-5162-ae0b-a64e1601d4bc"
 
 [compat]
-AdaptiveRegularization = "0.1.0"
-Arpack = "0.5.4"
-FFTW = "1.8.0"
-ForwardDiff = "0.10.38"
-JSOSolvers = "0.11.2"
-ManualNLPModels = "0.1.6"
 NonlinearSolve = "3.15.1"
-OrdinaryDiffEq = "6.90.1"
-Symbolics = "6.18.3"

@@ -138,10 +138,10 @@ A WENDyProblem struct pre-computes and allocates data structures for efficient s
         _tt::AbstractVector{<:Real}, 
         U::AbstractVecOrMat{<:Real}, 
         _f!::Function, 
-        J::Int, 
-        ::Val{lip}=Val(false), 
-        ::Val{DistType}=Val(Normal), 
-        params::WENDyParameters=WENDyParameters(); 
+        J::Int; 
+        linearInParameters::Val{lip}=Val(false), 
+        noiseDist::Val{DistType}=Val(Normal), 
+        params::WENDyParameters=WENDyParameters(), 
         constraints::Union{Nothing,AbstractVector{Tuple{<:Real,<:Real}}}=nothing, 
         ll::LogLevel=Warn
     )
@@ -149,9 +149,10 @@ A WENDyProblem struct pre-computes and allocates data structures for efficient s
 - _tt::AbstractVector{<:Real} : vector of times (equispaced)
 - U::AbstractVecOrMat{<:Real} : Corrupted state variable data 
 - _f!::Function : Right hand-side of the differential equation
+    Must be of the form f!(du, u, p, t)
 - J::Int : number of parameters (to be estimated)
-- ::Val{lip}=Val(false) : (optional) specify whether the right hand side is `linear in parameters' for improved computational efficiency
-- ::Val{DistType}=Val(Normal) : (optional) specify the distribution of the measurement noise. Choose either Val(Normal) for additive Gaussian noise of Val(LogNormal) for multiplicative LogNormal noise.
+- linearInParameters::Val{lip}=Val(false) : (optional) specify whether the right hand side is `linear in parameters' for improved computational efficiency
+- noiseDist::Val{DistType}=Val(Normal) : (optional) specify the distribution of the measurement noise. Choose either Val(Normal) for additive Gaussian noise of Val(LogNormal) for multiplicative LogNormal noise.
 - params::WENDyParameters : (optional) struct of hyper-parameters for the WENDy Algorithm (see the doc for WENDyParameters)
 - constraints=nothing : (optional) Linear box constraints for each parameter, ∀j ∈ [1, ⋯,J], ℓⱼ ≤ pⱼ ≤ uⱼ. Accepts constraints as a list of tuples, [(ℓ₁,u₁), ⋯]. Note: this only is compatible with the TrustRegion solver.
 - ll::LogLevel=Warn : (optional) see additional algorithm information by setting ll=Info

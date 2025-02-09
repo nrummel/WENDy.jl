@@ -1,3 +1,6 @@
 [deps]
 Documenter = "e30172f5-a6a5-5a46-863b-614d45cd2de4"
+LiveServer = "16fef848-5104-11e9-1b77-fb7a48bbb589"
+OrdinaryDiffEq = "1dea7af3-3e70-54e6-95c3-0bf5283fa5ed"
+PlotlyJS = "f0f68f2c-4968-5e81-91da-67840de0976a"
 WENDy = "d405da13-e5c5-4ff7-999e-699e6f93cd5d"

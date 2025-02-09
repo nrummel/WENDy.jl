@@ -13,7 +13,7 @@ end
 tRng  = (0.0, 50.0)
 dt    = 0.1
 u₀    = [1,0,0]
-wstar = [0.2,1.5,0.074,0.113,0.0024]
+pstar = [0.2,1.5,0.074,0.113,0.0024]
 constraints = [
     (1e-4,1.0), 
     (1e-4,2.0),
@@ -21,46 +21,55 @@ constraints = [
     (1e-4,1.0),
     (1e-4,1.0),
 ]
-J     = length(wstar)
+J     = length(pstar)
 D     = length(u₀)
 ## Generate data (one could use empircal data in practice)
 ode = ODEProblem(
     f!, 
     u₀, 
     tRng, 
-    wstar
+    pstar
 )
 tt    = tRng[1]:dt:tRng[end]
 Mp1   = length(tt)
 Ustar = reduce(vcat, um' for um in solve_ode(ode, saveat=dt).u)
-snr   = 0.01
-U     = Ustar .* exp.(snr*randn(size(Ustar)))
+nr   = 0.1
+U     = Ustar .* exp.(nr*randn(size(Ustar)))
 ## Create wendy problem struct
 # because the time domain is larger in this case we want to change the radii of the test functions 
 params = WENDyParameters(
     radiusMinTime  = 0.1,
-    radiusMaxTime  = 25.0,
-    Kmax=300
+    radiusMaxTime  = 25.0
 )
-wendyProb = WENDyProblem(tt, U, f!, J, Val(false)#=Nonlinear in parameters=#, Val(LogNormal)#=LogNormalNoise=#, params; ll=Logging.Info, constraints=constraints);
+wendyProb = WENDyProblem(
+    tt, 
+    U, 
+    f!, 
+    J;
+    noiseDist=Val(LogNormal), # LogNormalNoise
+    params=params,
+    ll=Logging.Info, 
+    constraints=constraints
+);
 ## Solve the wendy problm given an intial guess for the parameters 
-J = length(wstar)
-p₀ = wstar + 0.5*randn(J).*abs.(wstar)
-relErr = norm(p₀ - wstar) / norm(wstar)
+J = length(pstar)
+p₀ = [0.5,1.0,0.5,0.5,0.05]
+relErr = norm(p₀ - pstar) / norm(pstar)
 @info "Initializing with Relative Coefficient Error = $(relErr)"
 @info "Solving wendy problem ..."
-@time what = WENDy.solve(wendyProb, p₀)
-relErr = norm(what - wstar) / norm(wstar)
+@time phat = solve(wendyProb, p₀)
+relErr = norm(phat - pstar) / norm(pstar)
 @info "Relative Coefficient Error = $(relErr)"
 ## plot the resutls 
-odeprob = ODEProblem(f!, u₀, tRng, what)
+odeprob = ODEProblem(f!, u₀, tRng, phat)
 sol = solve_ode(odeprob; saveat=dt)
 Uhat = reduce(vcat, um' for um in sol.u)
+colors = ["red", "blue", "green"]
 plot(
     reduce(vcat, [
-        scatter(x=tt, y=Uhat[:,d], name="estimate"),
-        scatter(x=tt, y=U[:,d], name="data", mode="markers"),
-        scatter(x=tt, y=Ustar[:,d], name="truth")
+        scatter(x=tt, y=U[:,d], marker_color=colors[d], name="data", mode="markers", legendgroup=d,marker_opacity=0.5 ),
+        scatter(x=tt, y=Uhat[:,d],line_color=colors[d], line_dash="dash", name="estimate", legendgroup=d, legendgrouptitle_text="u[$d]"),
+        scatter(x=tt, y=Ustar[:,d],line_color=colors[d], name="truth", legendgroup=d )
     ] for d in 1:D),
-    Layout(title="Results",xaxis_title="time(s)", yaxis_title="State")
+    Layout(title="SIR",xaxis_title="time(s)", yaxis_title="State")
 )

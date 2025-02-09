@@ -89,10 +89,15 @@ end
 
 ## constructor
 function WENDyProblem(
-    _tt::AbstractVector{<:Real}, U::AbstractVecOrMat{<:Real}, _f!::Function, J::Int, 
-    ::Val{lip}=Val(false), ::Val{DistType}=Val(Normal), params::WENDyParameters=WENDyParameters(); 
+    _tt::AbstractVector{<:Real}, 
+    U::AbstractVecOrMat{<:Real}, 
+    _f!::Function, 
+    J::Int;
+    linearInParameters::Val{lip}=Val(false), 
+    noiseDist::Val{DistType}=Val(Normal), params::WENDyParameters=WENDyParameters(),
     constraints::Union{Nothing,AbstractVector{Tuple{T1,T2}}}=nothing,
-    ll::LogLevel=Warn) where {lip, DistType<:Distribution,T1<:Real, T2<:Real}
+    ll::LogLevel=Warn
+) where {lip, DistType<:Distribution,T1<:Real, T2<:Real}
     with_logger(ConsoleLogger(stderr, ll)) do
         @info "Building WENDyProblem"
         if typeof(U) <: AbstractVector 
