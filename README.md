@@ -4,7 +4,7 @@
 
 |**Documentation** |
 |:-----------------:|
-| [![][docs-stable-img]][docs-dev-url] [![][docs-dev-img]][docs-dev-url] | 
+| [![][docs-stable-img]][docs-stable-url] [![][docs-dev-img]][docs-dev-url] | 
 
 
 ## Installation
@@ -27,7 +27,7 @@ pkg> add WENDy
 - Creates efficient Julia functions for the likelihood function and its derivatives with minimal inputs from the end user.
 
 ## Publication
-The work comes from the the [Stephen Becker's](https://amath.colorado.edu/faculty/becker) and the [MathBio Group's](https://www.colorado.edu/project/mathbio/) at University of Colorado Boulder. For further reading find our paper at [arxiv link](https://arxiv.org/).
+The work comes from the the [Stephen Becker's](https://amath.colorado.edu/faculty/becker) and the [MathBio Group's](https://www.colorado.edu/project/mathbio/) at University of Colorado Boulder. For further reading find our paper: [WENDy for Nonlinear-in-Parameters ODEs](https://arxiv.org/abs/2502.08881).
 
 
 [contrib-url]: https://documenter.juliadocs.org/dev/contributing/
