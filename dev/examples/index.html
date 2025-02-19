@@ -28,15 +28,15 @@ U = Ustar + nr*randn(size(Ustar)) # corrupting the data with noise</code></pre><
     J
 )</code></pre><p>The algorithm requires an initial guess for the parameter values. From this initial guess, it will then approximate the maximum likelihood estimator.</p><pre><code class="language-julia hljs">p₀ = [0.5, 0.5]
 @time phat = solve(wendyProb, p₀)
-@show phat</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi"> 16.630222 seconds (35.98 M allocations: 1.841 GiB, 4.17% gc time, 98.36% compilation time)
-phat = [1.0449575584996138, 1.0402883622229024]</code></pre><p>The efficiency of the solver can be improved by specifying that the function <span>$f$</span> is linear in parameters. This is done with the optional argument to the WENDyProblem. </p><pre><code class="language-julia hljs">wendyProb_linear = WENDyProblem(
+@show phat</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi"> 18.072106 seconds (35.98 M allocations: 1.834 GiB, 4.41% gc time, 98.51% compilation time)
+phat = [1.0007442013945924, 0.9943217476063203]</code></pre><p>The efficiency of the solver can be improved by specifying that the function <span>$f$</span> is linear in parameters. This is done with the optional argument to the WENDyProblem. </p><pre><code class="language-julia hljs">wendyProb_linear = WENDyProblem(
     tt,
     U,
     f!,
     J,
     linearInParameters=Val(true), # f! is linear in parameters
 )
-@time (wendyProb_linear, p₀)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">  0.000007 seconds (3 allocations: 352 bytes)</code></pre><p>This problem can be visualized by looking at the data, the true solution of the ODE and the solution given by the estimated parameters. </p><pre><code class="language-julia hljs">using PlotlyJS
+@time (wendyProb_linear, p₀)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">  0.000011 seconds (3 allocations: 352 bytes)</code></pre><p>This problem can be visualized by looking at the data, the true solution of the ODE and the solution given by the estimated parameters. </p><pre><code class="language-julia hljs">using PlotlyJS
 odeprob = ODEProblem(f!, u₀, tRng, phat)
 sol = solve_ode(odeprob; saveat=dt)
 Uhat = reduce(vcat, um&#39; for um in sol.u)
@@ -47,7 +47,7 @@ plot(
         scatter(x=tt, y=Uhat[:], name=&quot;estimate&quot;, line_dash=&quot;dash&quot;, line_color=&quot;black&quot;, line_width=3),
     ],
     Layout(title=&quot;Logistic Growth&quot;,xaxis_title=&quot;time(s)&quot;, yaxis_title=&quot;u(t)&quot;)
-)</code></pre><img src="48d5ce9b.svg" alt="Example block output"/><h2 id="Goodwin"><a class="docs-heading-anchor" href="#Goodwin">Goodwin</a><a id="Goodwin-1"></a><a class="docs-heading-anchor-permalink" href="#Goodwin" title="Permalink"></a></h2><p>A simple example of a system of differential equations which is nonlinear in parameters is the Goodwin model which describes negative feedback control processes . In particular there is a Hill function in the equation for <span>$u_1$</span>. The parameter <span>$p_3$</span> appears in the denominator and <span>$p_4$</span> is the Hill coefficient, and thus this serves as an example of how nonlinearity can effect the performance of the WENDy algorithm. </p><p class="math-container">\[\begin{aligned}
+)</code></pre><img src="325bffda.svg" alt="Example block output"/><h2 id="Goodwin"><a class="docs-heading-anchor" href="#Goodwin">Goodwin</a><a id="Goodwin-1"></a><a class="docs-heading-anchor-permalink" href="#Goodwin" title="Permalink"></a></h2><p>A simple example of a system of differential equations which is nonlinear in parameters is the Goodwin model which describes negative feedback control processes . In particular there is a Hill function in the equation for <span>$u_1$</span>. The parameter <span>$p_3$</span> appears in the denominator and <span>$p_4$</span> is the Hill coefficient, and thus this serves as an example of how nonlinearity can effect the performance of the WENDy algorithm. </p><p class="math-container">\[\begin{aligned}
     \dot{u}_1 &amp;= \frac{p_1}{2.15 + p_3 u_3^{p_4}} - p_2  u_1 \\
     \dot{u}_2 &amp;= p_5u_1- p_6u_2 \\
     \dot{u}_3 &amp;= p_7u_2-p_8u_3
@@ -99,7 +99,7 @@ plot(
         scatter(x=tt, y=Ustar[:,d],line_color=colors[d], name=&quot;truth&quot;, legendgroup=d )
     ] for d in 1:D),
     Layout(title=&quot;Goodwin Example&quot;,xaxis_title=&quot;time(s)&quot;, yaxis_title=&quot;State&quot;)
-)</code></pre><img src="f9014c64.svg" alt="Example block output"/><h2 id="SIR"><a class="docs-heading-anchor" href="#SIR">SIR</a><a id="SIR-1"></a><a class="docs-heading-anchor-permalink" href="#SIR" title="Permalink"></a></h2><p>The susceptible-infected-recovered (SIR) model is pervasive in epidemiology. This system describes an extension that allows for time delayed immunity (TDI) for parasitic deceases where there is a common source for infection.</p><p class="math-container">\[\begin{aligned}
+)</code></pre><img src="06b2d816.svg" alt="Example block output"/><h2 id="SIR"><a class="docs-heading-anchor" href="#SIR">SIR</a><a id="SIR-1"></a><a class="docs-heading-anchor-permalink" href="#SIR" title="Permalink"></a></h2><p>The susceptible-infected-recovered (SIR) model is pervasive in epidemiology. This system describes an extension that allows for time delayed immunity (TDI) for parasitic deceases where there is a common source for infection.</p><p class="math-container">\[\begin{aligned}
     \dot{u}_{1} &amp;= -p_{1}  u_{1} + p_{3}  u_{2} + \tfrac{p_1 e^{-p_1  p_2}}{1 - e^{-p_1  p_2}} u_{3} \\
     \dot{u}_{2} &amp;= p_{1}  u_{1} - p_{3}  u_{2} \\
     &amp; - p_{4}  (1 - e^{-p_{5}  t^2})  u_{2} \\
@@ -150,11 +150,11 @@ wendyProb = WENDyProblem(
 )
 nothing # hide</code></pre><p>In this case we can perturb from truth as an example initial guess for the parameters. In practice, this guess would not be made from prior information of the true parameters.  </p><pre><code class="language-julia hljs">p₀ = pstar + 0.5*randn(J).*abs.(pstar)
 phat = solve(wendyProb, p₀)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">5-element Vector{Float64}:
- 0.19346031527660396
- 1.4984586975397611
- 0.06889426218712355
- 0.11167706769019067
- 0.0024561122544819974</code></pre><p>We can visualize the quality of our estimated parameters by forward simulating and then plotting. </p><pre><code class="language-julia hljs">odeprob = ODEProblem(f!, u₀, tRng, phat)
+ 0.19472570113414062
+ 1.5194817304280899
+ 0.06956024723104205
+ 0.11097415396532201
+ 0.00245065131855221</code></pre><p>We can visualize the quality of our estimated parameters by forward simulating and then plotting. </p><pre><code class="language-julia hljs">odeprob = ODEProblem(f!, u₀, tRng, phat)
 sol = solve_ode(odeprob; saveat=dt)
 Uhat = reduce(vcat, um&#39; for um in sol.u)
 colors = [&quot;red&quot;, &quot;blue&quot;, &quot;green&quot;]
@@ -165,4 +165,4 @@ plot(
         scatter(x=tt, y=Ustar[:,d],line_color=colors[d], name=&quot;truth&quot;, legendgroup=d )
     ] for d in 1:D),
     Layout(title=&quot;SIR&quot;,xaxis_title=&quot;time(s)&quot;, yaxis_title=&quot;State&quot;)
-)</code></pre><img src="aeda4d01.svg" alt="Example block output"/></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../gettingStarted/">« Getting Started</a><a class="docs-footer-nextpage" href="../reference/">Reference »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.8.1 on <span class="colophon-date" title="Wednesday 19 February 2025 20:04">Wednesday 19 February 2025</span>. Using Julia version 1.11.3.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
+)</code></pre><img src="a03389db.svg" alt="Example block output"/></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../gettingStarted/">« Getting Started</a><a class="docs-footer-nextpage" href="../reference/">Reference »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.8.1 on <span class="colophon-date" title="Wednesday 19 February 2025 20:08">Wednesday 19 February 2025</span>. Using Julia version 1.11.3.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
