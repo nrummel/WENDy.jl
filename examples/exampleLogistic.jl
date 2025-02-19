@@ -1,3 +1,9 @@
+if Base.active_project() != joinpath(@__DIR__, "Project.toml")
+    @info "More than WENDy.jl is necessary for plotting and data generation"
+    using Pkg; 
+    Pkg.activate(@__DIR__)
+    Pkg.develop(path=joinpath(@__DIR__, ".."))
+end
 using Random, Logging, LinearAlgebra
 using PlotlyJS
 using WENDy
@@ -39,7 +45,7 @@ wendyProb = WENDyProblem(
 p₀ = [0.5, 0.5]
 relErr = norm(p₀ - pstar) / norm(pstar)
 @info "Init Relative Coefficient Error = $(relErr)"
-@time phat = solve(wendyProb, p₀; alg=WENDy.WLS())
+@time phat = solve(wendyProb, p₀)
 relErr = norm(phat - pstar) / norm(pstar)
 @info "Relative Coefficient Error = $(relErr)"
 ## plot the resutls 

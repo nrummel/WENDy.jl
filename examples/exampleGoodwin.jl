@@ -1,3 +1,9 @@
+if Base.active_project() != joinpath(@__DIR__, "Project.toml")
+    @info "More than WENDy.jl is necessary for plotting and data generation"
+    using Pkg; 
+    Pkg.activate(@__DIR__)
+    Pkg.develop(path=joinpath(@__DIR__, ".."))
+end
 using Random, Logging, LinearAlgebra
 using PlotlyJS
 using WENDy

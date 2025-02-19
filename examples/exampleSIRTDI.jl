@@ -1,3 +1,9 @@
+if Base.active_project() != joinpath(@__DIR__, "Project.toml")
+    @info "More than WENDy.jl is necessary for plotting and data generation"
+    using Pkg; 
+    Pkg.activate(@__DIR__)
+    Pkg.develop(path=joinpath(@__DIR__, ".."))
+end
 using Random, Logging, LinearAlgebra
 using PlotlyJS
 using WENDy
@@ -68,8 +74,8 @@ colors = ["red", "blue", "green"]
 plot(
     reduce(vcat, [
         scatter(x=tt, y=U[:,d], marker_color=colors[d], name="data", mode="markers", legendgroup=d,marker_opacity=0.5 ),
-        scatter(x=tt, y=Uhat[:,d],line_color=colors[d], line_dash="dash", name="estimate", legendgroup=d, legendgrouptitle_text="u[$d]"),
-        scatter(x=tt, y=Ustar[:,d],line_color=colors[d], name="truth", legendgroup=d )
+        scatter(x=tt, y=Ustar[:,d],line_color=colors[d], name="truth", legendgroup=d,line_width=4 ),
+        scatter(x=tt, y=Uhat[:,d],line_color="black", line_dash="dash", line_width=4, name="estimate", legendgroup=d, legendgrouptitle_text="u[$d]"),
     ] for d in 1:D),
     Layout(title="SIR",xaxis_title="time(s)", yaxis_title="State")
 )
