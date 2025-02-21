@@ -1,7 +1,7 @@
 name = "WENDy"
 uuid = "d405da13-e5c5-4ff7-999e-699e6f93cd5d"
 authors = ["Nicholas Rummel"]
-version = "1.0.0"
+version = "1.0.1"
 
 [deps]
 AdaptiveRegularization = "79adfba0-1eab-50d9-8528-0589417a2bfe"

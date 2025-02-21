@@ -68,7 +68,7 @@ wendyProb_linear = WENDyProblem(
 @time (wendyProb_linear, p₀)
 nothing # hide
 ``` 
-This problem can be visualized by looking at the data, the true solution of the ODE and the solution given by the estimated parameters. 
+This problem can be visualized by looking at the data, the true solution of the ODE and the solution given by the estimated parameters.
 ```@example logistic
 using PlotlyJS
 odeprob = ODEProblem(f!, u₀, tRng, phat)

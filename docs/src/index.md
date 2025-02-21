@@ -1,6 +1,6 @@
 # WENDy.jl - Weak Form Estimation of Nonlinear Dynamics
 
-This is the documentation of [WENDy.jl](https://github.com/nrummel/WENDy.jl). The work comes from the the MathBio Group at University of Colorado Boulder. For further reading find our paper at [arxiv link](https://arxiv.org/).
+This is the documentation of [WENDy.jl](https://github.com/nrummel/WENDy.jl). The work comes from the the Applied Math Department at University of Colorado Boulder. For further reading read our paper, [WENDy for Nonlinear-in-Parameter ODEs](https://arxiv.org/abs/2502.08881).
 
 ## Current features
 
