@@ -231,7 +231,7 @@ wendyProb = WENDyProblem(
     params=params,
     constraints=constraints
 )
-nothing # hide 
+nothing # hide
 ```
 In this case we can perturb from truth as an example initial guess for the parameters. In practice, this guess would not be made from prior information of the true parameters.  
 ```@example sir
