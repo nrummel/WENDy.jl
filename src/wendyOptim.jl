@@ -1,5 +1,5 @@
 # constructor 
-function IRLSIter(prob::WENDyProblem, params::WENDyParameters)
+function IRLSIter(prob::WENDyProblem{lip, DistType}, params::WENDyParameters) where {lip, DistType}
     return lip ? LinearIRLSIter(prob, params) : NonLinearIRLSIter(prob, params)
 end
 # constructor
@@ -96,10 +96,10 @@ end
 abstract type AbstractWENDySolver<:Function end 
 struct IRLS<:AbstractWENDySolver end 
 
-function (m::IRLS)(prob::WENDyProblem{lip}, p₀::AbstractVector{<:AbstractFloat}, params::WENDyParameters; 
+function (m::IRLS)(prob::WENDyProblem{lip, DistType}, p₀::AbstractVector{<:AbstractFloat}, params::WENDyParameters; 
     ll::LogLevel=Warn, iterll::LogLevel=Warn, compareIters::Bool=false, 
     maxIt::Int=1000, return_wits::Bool=false
-) where lip
+) where {lip, DistType}
     with_logger(ConsoleLogger(stderr,ll)) do 
         reltol,abstol = params.optimReltol, params.optimAbstol
         @info "Building Iteration "
