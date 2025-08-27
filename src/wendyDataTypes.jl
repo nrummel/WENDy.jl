@@ -18,6 +18,7 @@ Hyper-parameters for the WENDy Algorithm
         nlsAbstol::Real=1e-8,
         nlsReltol::Real=1e-8,
         nlsMaxiters::Int=1000,
+        nlsTimelimit::Real=50.0,
         optimAbstol::Real=1e-8,
         optimReltol::Real=1e-8,
         optimMaxiters::Int=500,
@@ -42,6 +43,7 @@ Hyper-parameters for the WENDy Algorithm
 - nlsAbstol::Real = 1e-8 : nonlinear least squares absolute tolerance (only used in the IRLS WENDy algorithm)
 - nlsReltol::Real = 1e-8 : nonlinear least squares relative tolerance (only used in the IRLS WENDy algorithm)
 - nlsMaxiters::Int = 1000 : nonlinear least squares maximum iterations (only used in the IRLS WENDy algorithm)
+- nlsMaxiters::Real = 50.0 : nonlinear least squares maximum time in seconds (only used in the IRLS WENDy algorithm)
 - optimAbstol::Real = 1e-8 : absolute tolerance (used by all other optimization algorithms)
 - optimReltol::Real = 1e-8 : relative tolerance (used by all other optimization algorithms)
 - optimMaxiters::Int = 200 : maximum iterations (used by all other optimization algorithms)
@@ -65,6 +67,7 @@ Hyper-parameters for the WENDy Algorithm
     nlsAbstol::Real                     = 1e-8
     nlsReltol::Real                     = 1e-8
     nlsMaxiters::Int                    = 1000
+    nlsTimelimit::Real                  = 50.0
     optimAbstol::Real                   = 1e-8
     optimReltol::Real                   = 1e-8
     optimMaxiters::Int                  = 500
@@ -108,6 +111,7 @@ struct NonLinearIRLSIter <: IRLSIter
     reltol::AbstractFloat
     abstol::AbstractFloat
     maxiters::Int
+    timelimit::AbstractFloat
 end 
 ## 
 abstract type CostFunction end

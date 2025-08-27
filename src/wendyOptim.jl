@@ -35,7 +35,7 @@ function NonLinearIRLSIter(prob::WENDyProblem, params::WENDyParameters)
     r! = Residual(prob.data, params)
     ∇r! = JacobianResidual(prob.data, params)
 
-    NonLinearIRLSIter(prob.data.b₀, Rᵀ!, r!, ∇r!, params.nlsReltol,params.nlsAbstol,  params.nlsMaxiters)
+    NonLinearIRLSIter(prob.data.b₀, Rᵀ!, r!, ∇r!, params.nlsReltol, params.nlsAbstol, params.nlsMaxiters, params.nlsTimelimit)
 end
 # method
 function (m::NonLinearIRLSIter)(wnm1::AbstractVector{<:AbstractFloat};ll::LogLevel=Warn)
@@ -75,6 +75,7 @@ function (m::NonLinearIRLSIter)(wnm1::AbstractVector{<:AbstractFloat};ll::LogLev
             LevenbergMarquardt();
             reltol=m.reltol,
             maxiters=m.maxiters,
+            maxtime=m.timelimit,
             verbose=false
         )
         wn = sol.u
@@ -111,6 +112,7 @@ function (m::IRLS)(prob::WENDyProblem{lip, DistType}, p₀::AbstractVector{<:Abs
         resit = zeros(J,maxIt)
         wnm1 = p₀ 
         wn = similar(p₀)
+        startTime = time()
         for n = 1:maxIt 
             @info "Iteration $n"
             dtNl = @elapsed aNl = @allocations wn = iter(wnm1;ll=iterll)
@@ -149,6 +151,11 @@ function (m::IRLS)(prob::WENDyProblem{lip, DistType}, p₀::AbstractVector{<:Abs
                   Convergence Criterion met: 
                     abstol: $resNorm < $abstol
                 """
+                return return_wits ? (wn, n, hcat(p₀,wit)) : (wn,n)
+            elseif time() - startTime > params.optimTimelimit
+                resit = resit[:,1:n] 
+                wit = wit[:,1:n] 
+                @warn "Time limit met $(params.optimTimelimit) s"
                 return return_wits ? (wn, n, hcat(p₀,wit)) : (wn,n)
             end
             wnm1 = wn
