@@ -28,8 +28,8 @@ U = Ustar + nr*randn(size(Ustar)) # corrupting the data with noise</code></pre><
     J
 )</code></pre><p>The algorithm requires an initial guess for the parameter values. From this initial guess, it will then approximate the maximum likelihood estimator.</p><pre><code class="language-julia hljs">p₀ = [0.5, 0.5]
 @time phat = solve(wendyProb, p₀)
-@show phat</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi"> 18.322725 seconds (36.01 M allocations: 1.851 GiB, 4.24% gc time, 98.63% compilation time)
-phat = [0.9936225319358555, 0.994972711099242]</code></pre><p>The efficiency of the solver can be improved by specifying that the function <span>$f$</span> is linear in parameters. This is done with the optional argument to the WENDyProblem. </p><pre><code class="language-julia hljs">wendyProb_linear = WENDyProblem(
+@show phat</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi"> 17.359908 seconds (36.01 M allocations: 1.843 GiB, 4.40% gc time, 98.65% compilation time)
+phat = [1.010839932261622, 1.0093001461893913]</code></pre><p>The efficiency of the solver can be improved by specifying that the function <span>$f$</span> is linear in parameters. This is done with the optional argument to the WENDyProblem. </p><pre><code class="language-julia hljs">wendyProb_linear = WENDyProblem(
     tt,
     U,
     f!,
@@ -47,7 +47,7 @@ plot(
         scatter(x=tt, y=Uhat[:], name=&quot;estimate&quot;, line_dash=&quot;dash&quot;, line_color=&quot;black&quot;, line_width=3),
     ],
     Layout(title=&quot;Logistic Growth&quot;,xaxis_title=&quot;time(s)&quot;, yaxis_title=&quot;u(t)&quot;)
-)</code></pre><img src="cfaede65.svg" alt="Example block output"/><h2 id="Goodwin"><a class="docs-heading-anchor" href="#Goodwin">Goodwin</a><a id="Goodwin-1"></a><a class="docs-heading-anchor-permalink" href="#Goodwin" title="Permalink"></a></h2><p>A simple example of a system of differential equations which is nonlinear in parameters is the Goodwin model which describes negative feedback control processes . In particular there is a Hill function in the equation for <span>$u_1$</span>. The parameter <span>$p_3$</span> appears in the denominator and <span>$p_4$</span> is the Hill coefficient, and thus this serves as an example of how nonlinearity can effect the performance of the WENDy algorithm. </p><p class="math-container">\[\begin{aligned}
+)</code></pre><img src="ebfa6f21.svg" alt="Example block output"/><h2 id="Goodwin"><a class="docs-heading-anchor" href="#Goodwin">Goodwin</a><a id="Goodwin-1"></a><a class="docs-heading-anchor-permalink" href="#Goodwin" title="Permalink"></a></h2><p>A simple example of a system of differential equations which is nonlinear in parameters is the Goodwin model which describes negative feedback control processes . In particular there is a Hill function in the equation for <span>$u_1$</span>. The parameter <span>$p_3$</span> appears in the denominator and <span>$p_4$</span> is the Hill coefficient, and thus this serves as an example of how nonlinearity can effect the performance of the WENDy algorithm. </p><p class="math-container">\[\begin{aligned}
     \dot{u}_1 &amp;= \frac{p_1}{2.15 + p_3 u_3^{p_4}} - p_2  u_1 \\
     \dot{u}_2 &amp;= p_5u_1- p_6u_2 \\
     \dot{u}_3 &amp;= p_7u_2-p_8u_3
@@ -99,7 +99,7 @@ plot(
         scatter(x=tt, y=Ustar[:,d],line_color=colors[d], name=&quot;truth&quot;, legendgroup=d )
     ] for d in 1:D),
     Layout(title=&quot;Goodwin Example&quot;,xaxis_title=&quot;time(s)&quot;, yaxis_title=&quot;State&quot;)
-)</code></pre><img src="9c996cfa.svg" alt="Example block output"/><h2 id="SIR"><a class="docs-heading-anchor" href="#SIR">SIR</a><a id="SIR-1"></a><a class="docs-heading-anchor-permalink" href="#SIR" title="Permalink"></a></h2><p>The susceptible-infected-recovered (SIR) model is pervasive in epidemiology. This system describes an extension that allows for time delayed immunity (TDI) for parasitic deceases where there is a common source for infection.</p><p class="math-container">\[\begin{aligned}
+)</code></pre><img src="cebc8280.svg" alt="Example block output"/><h2 id="SIR"><a class="docs-heading-anchor" href="#SIR">SIR</a><a id="SIR-1"></a><a class="docs-heading-anchor-permalink" href="#SIR" title="Permalink"></a></h2><p>The susceptible-infected-recovered (SIR) model is pervasive in epidemiology. This system describes an extension that allows for time delayed immunity (TDI) for parasitic deceases where there is a common source for infection.</p><p class="math-container">\[\begin{aligned}
     \dot{u}_{1} &amp;= -p_{1}  u_{1} + p_{3}  u_{2} + \tfrac{p_1 e^{-p_1  p_2}}{1 - e^{-p_1  p_2}} u_{3} \\
     \dot{u}_{2} &amp;= p_{1}  u_{1} - p_{3}  u_{2} \\
     &amp; - p_{4}  (1 - e^{-p_{5}  t^2})  u_{2} \\
@@ -149,11 +149,11 @@ wendyProb = WENDyProblem(
     constraints=constraints
 )</code></pre><p>In this case we can perturb from truth as an example initial guess for the parameters. In practice, this guess would not be made from prior information of the true parameters.  </p><pre><code class="language-julia hljs">p₀ = pstar + 0.5*randn(J).*abs.(pstar)
 phat = solve(wendyProb, p₀)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">5-element Vector{Float64}:
- 0.20138736286149853
- 1.4678645755387452
- 0.07369140572333534
- 0.11557858208710108
- 0.002372577042834563</code></pre><p>We can visualize the quality of our estimated parameters by forward simulating and then plotting. </p><pre><code class="language-julia hljs">odeprob = ODEProblem(f!, u₀, tRng, phat)
+ 0.1989642380822542
+ 1.5391470203464366
+ 0.07545799876934003
+ 0.10861892100235065
+ 0.002484258817919851</code></pre><p>We can visualize the quality of our estimated parameters by forward simulating and then plotting. </p><pre><code class="language-julia hljs">odeprob = ODEProblem(f!, u₀, tRng, phat)
 sol = solve_ode(odeprob; saveat=dt)
 Uhat = reduce(vcat, um&#39; for um in sol.u)
 colors = [&quot;red&quot;, &quot;blue&quot;, &quot;green&quot;]
@@ -164,4 +164,4 @@ plot(
         scatter(x=tt, y=Ustar[:,d],line_color=colors[d], name=&quot;truth&quot;, legendgroup=d )
     ] for d in 1:D),
     Layout(title=&quot;SIR&quot;,xaxis_title=&quot;time(s)&quot;, yaxis_title=&quot;State&quot;)
-)</code></pre><img src="9628411c.svg" alt="Example block output"/></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../gettingStarted/">« Getting Started</a><a class="docs-footer-nextpage" href="../reference/">Reference »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.14.1 on <span class="colophon-date" title="Wednesday 3 September 2025 20:32">Wednesday 3 September 2025</span>. Using Julia version 1.11.6.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
+)</code></pre><img src="1b535c93.svg" alt="Example block output"/></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../gettingStarted/">« Getting Started</a><a class="docs-footer-nextpage" href="../reference/">Reference »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.14.1 on <span class="colophon-date" title="Thursday 4 September 2025 00:54">Thursday 4 September 2025</span>. Using Julia version 1.11.6.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
