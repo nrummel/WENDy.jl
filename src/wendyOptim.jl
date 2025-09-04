@@ -347,7 +347,7 @@ return_wits::Bool=false, kwargs...) = nonlinearLeastSquares(wendyProb.wlsq, p₀
 struct HybridTrustRegionOELS<:AbstractWENDySolver end 
 function (m::HybridTrustRegionOELS)(
     wendyProb::WENDyProblem, p₀::AbstractVector{<:Real}, params::WENDyParameters; 
-    return_wits::Bool=false, kwargs...
+    return_wits::Bool=false, fallBackThreshold::Real=1.05, kwargs...
 )
     u₀ = wendyProb.u₀
     what_wendy, iter_wendy, wits_wendy = if return_wits
@@ -363,7 +363,18 @@ function (m::HybridTrustRegionOELS)(
         what_oels, iter_oels = OELS()(wendyProb, vcat(what_wendy,u₀), params, return_wits=false)
         what_oels, iter_oels, nothing
     end 
-    return return_wits ?  (what_oels, iter_wendy+iter_oels, hcat(vcat(wits_wendy, reduce(hcat, u₀ for _ in 1:size(wits_wendy,2))), wits_oels )) : what_oels
+    what = what_oels
+    iters = iter_wendy+iter_oels
+    wits = hcat(vcat(wits_wendy, reduce(hcat, u₀ for _ in 1:size(wits_wendy,2))), wits_oels )
+    # Fallback on WENDy-MLE estimate if the weak likelhood of the oe-ls method is too poor
+    wnll_wendy = wendyProb.wnll.f(what_wendy)
+    wnll_oels = wendyProb.wnll.f(what_oels)
+    if wnll_wendy * fallBackThreshold < wnll_oels
+        what = what_wendy
+        wits = hcat(wits, vcat(what, u₀))
+    end
+
+    return return_wits ?  (what, iters)  : (what, iters, wits)
 end
 # hybrid : wls -> mle(trustRegion)
 struct HybridWLSTrustRegion<:AbstractWENDySolver end 
