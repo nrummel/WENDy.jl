@@ -39,53 +39,7 @@ function _getRhsAndDerivatives_nonlinear(_f!::Function, D::Int, J::Int, K::Int, 
     Hₚ∇ₓf! = _getHₚ∇ₓf(f!, D, J)
     return f!,∇ₓf!,G,∇ₚf!,∇ₚ∇ₓf!,Hₚf!,Hₚ∇ₓf!
 end
-##
-function _forwardSolveResidual(wu0, J, _tt, U, _f!, alg, reltol, abstol, u0Free)
-    _Mp1, D = size(U)
-    try 
-        p,u₀ = if u0Free
-            wu0[1:J], wu0[J+1:end]
-        else 
-            wu0[1:J], U[1,:]
-        end
-        tRng = (_tt[1], _tt[end])
-        dt = (_tt[end] - _tt[1]) / (length(_tt) - 1)
-        odeprob = ODEProblem(_f!, u₀, tRng, p)
-        sol = solve_ode(odeprob, alg; 
-            reltol=reltol, abstol=abstol,
-            saveat=dt, verbose=false
-        )
-        Uhat = reduce(vcat, um' for um in sol.u)
-        r = (Uhat - U) 
-        return r[:]
-    catch 
-        NaN*ones(_Mp1*D)
-    end
-end
 
-function _buildCostFunctions(J::Int, _tt::AbstractVector{<:Real}, _f!::Function, U::AbstractMatrix{<:Real}, data::WENDyInternals, params::WENDyParameters)
-    _Mp1, D = size(U)
-    K, _ = size(data.V)
-    f(wu0) = _forwardSolveResidual(wu0, J, _tt, U, _f!, params.fsAlg, params.fsReltol, params.fsAbstol, params.fsU0Free)
-    oels = LeastSquaresCostFunction(
-        (r, wu0) -> r .= f(wu0), 
-        (jac,wu0) -> ForwardDiff.jacobian!(jac, f, wu0),
-        _Mp1*D
-    )
-
-    wlsq = LeastSquaresCostFunction(
-        WENDy.Residual(data, params), 
-        WENDy.JacobianResidual(data, params),
-        K*D
-    )
-
-    wnll = SecondOrderCostFunction(
-        WeakNLL(data, params),
-        GradientWeakNLL(data, params),
-        HesianWeakNLL(data, params)
-    )
-    return oels, wlsq, wnll
-end
 
 ## constructor
 function WENDyProblem(
@@ -95,9 +49,10 @@ function WENDyProblem(
     J::Int;
     linearInParameters::Val{lip}=Val(false), 
     noiseDist::Val{DistType}=Val(Normal), params::WENDyParameters=WENDyParameters(),
-    constraints::Union{Nothing,AbstractVector{Tuple{T1,T2}}}=nothing,
+    constraints::Union{Nothing,AbstractVector{Tuple{<:Real,<:Real}}}=nothing,
+    priors::Union{Nothing,AbstractVector{<:Distribution}}=nothing,
     ll::LogLevel=Warn
-) where {lip, DistType<:Distribution,T1<:Real, T2<:Real}
+) where {lip, DistType<:Distribution}
     with_logger(ConsoleLogger(stderr, ll)) do
         @info "Building WENDyProblem"
         if typeof(U) <: AbstractVector 
@@ -136,11 +91,65 @@ function WENDyProblem(
         )
         ## Build Cost Functions 
         @info "  Building Cost Functions"
-        oels, wlsq, wnll = _buildCostFunctions(J, _tt, _f!, U, data, params)
+        wlsq = LeastSquaresCostFunction(
+            Residual(data, params), 
+            JacobianResidual(data, params),
+            K*D
+        )
+
+        wnll = SecondOrderCostFunction(
+            WeakNLL(data, params),
+            GradientWeakNLL(data, params),
+            HesianWeakNLL(data, params)
+        )
+
+        priorLoss, wnlp = getNegativeLogPosterior(wnll, priors)
 
         return WENDyProblem{lip, DistType}(
-            D,J,Mp1,K,U[1,:],constraints,
-            data, oels, wlsq, wnll
+            D,J,Mp1,K,constraints,priors,
+            data, wlsq, wnll, priorLoss, wnlp
         )
     end
+end
+## Output Error Least Squares 
+
+function _forwardSolveResidual(wu0, J, tt, U, f!, alg, reltol, abstol, u0Free)
+    _Mp1, D = size(U)
+    try 
+        p,u₀ = if u0Free
+            wu0[1:J], wu0[J+1:end]
+        else 
+            wu0[1:J], U[1,:]
+        end
+        tRng = (tt[1], tt[end])
+        dt = (tt[end] - tt[1]) / (length(tt) - 1)
+        odeprob = ODEProblem(f!, u₀, tRng, p)
+        sol = solve_ode(odeprob, alg; 
+            reltol=reltol, abstol=abstol,
+            saveat=dt, verbose=false
+        )
+        Uhat = reduce(vcat, um' for um in sol.u)
+        r = (Uhat - U) 
+        return r[:]
+    catch 
+        NaN*ones(_Mp1*D)
+    end
+end
+
+function OutputErrorProblem(
+        tt::AbstractVector{<:Real}, 
+        U::AbstractVecOrMat{<:Real}, 
+        f!::Function, 
+        J::Int; 
+        params::OutputErrorParameters=OutputErrorParameters(),
+        ll::LogLevel=Warn
+    )
+    _Mp1, D = size(U)
+    f(wu0) = _forwardSolveResidual(wu0, J, tt, U, f!, params.fsAlg, params.fsReltol, params.fsAbstol, params.fsU0Free)
+    oels = LeastSquaresCostFunction(
+        (r, wu0) -> r .= f(wu0), 
+        (jac,wu0) -> ForwardDiff.jacobian!(jac, f, wu0),
+        _Mp1*D
+    )
+    return OutputErrorProblem(U[1,:], oels)
 end

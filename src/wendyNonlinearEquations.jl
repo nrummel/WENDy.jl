@@ -1,9 +1,9 @@
 # L(p)
 function _L!(
-    L::AbstractMatrix{<:Real},p::AbstractVector{<:Real}, # output/input
-    tt::AbstractVector{<:Real}, X::AbstractMatrix{<:Real}, V::AbstractMatrix{<:Real}, L₀::AbstractMatrix{<:Real}, sig::AbstractVector{<:Real}, # data
+    L,p, # output/input
+    tt, X, V, L₀, sig, # data
     ∇ₓf!::Function, # functions
-    JuF::AbstractArray{<:Real, 3}, _L₁::AbstractArray{<:Real, 4} # buffers
+    JuF, _L₁ # buffers
 ) 
     Mp1, D = size(X)
     K, _ = size(V)
@@ -17,10 +17,10 @@ function _L!(
 end
 # ∇L(p)
 function _∇L!(
-    ∇L::AbstractArray{<:Real,3}, p::AbstractVector{<:Real},
-    tt::AbstractVector{<:Real}, X::AbstractMatrix{<:Real},V::AbstractMatrix{<:Real},sig::AbstractVector{<:Real},
+    ∇L, p,
+    tt, X,V,sig,
     ∇ₚ∇ₓf!::Function,
-    JwJuF::AbstractArray{<:Real,4}, _∇L::AbstractArray{<:Real,5})
+    JwJuF, _∇L)
     Mp1, D = size(X)
     K, _ = size(V)
     J = length(p)
@@ -33,10 +33,10 @@ function _∇L!(
     nothing
 end
 # G(p)
-function _g!(g::AbstractVector, p::AbstractVector, # output/input
-    tt::AbstractVector{<:Real}, X::AbstractMatrix, V::AbstractMatrix, # data
+function _g!(g, p, # output/input
+    tt, X, V, # data
     f!::Function, # function
-    F::AbstractMatrix{<:Real}, G::AbstractMatrix{<:Real} # buffers
+    F, G # buffers
 )
     Mp1, D = size(X)
     K, _ = size(V)
@@ -49,10 +49,10 @@ function _g!(g::AbstractVector, p::AbstractVector, # output/input
 end
 # r(p) = G(p) - b₀
 function _r!(
-    r::AbstractVector,p::AbstractVector, # output/input
-    tt::AbstractVector{<:Real}, X::AbstractMatrix, V::AbstractMatrix, b₀::AbstractVector, # data
+    r,p, # output/input
+    tt, X, V, b₀, # data
     f!::Function, # function
-    F::AbstractMatrix{<:Real}, G::AbstractMatrix{<:Real} # buffers
+    F, G # buffers
 ) 
     _g!(
         r, p, 
@@ -64,10 +64,10 @@ function _r!(
     nothing
 end
 # Weighted residual (Rᵀ)⁻¹(G(p)) - b, where b = (Rᵀ)⁻¹b₀
-function _Rᵀr!(r::AbstractVector, p::AbstractVector, # output/input
-     tt::AbstractVector{<:Real}, X::AbstractMatrix, V::AbstractMatrix, Rᵀ::AbstractMatrix,b::AbstractVector, # Data
+function _Rᵀr!(r, p, # output/input
+     tt, X, V, Rᵀ,b, # Data
      f!::Function, # functions
-     F::AbstractMatrix{<:Real}, G::AbstractMatrix{<:Real}, g::AbstractVector # buffeers   
+     F, G, g # buffeers   
 ) 
     _g!(g, p, tt, X, V, f!, F, G)
     ldiv!(r, LowerTriangular(Rᵀ), g)
@@ -76,10 +76,10 @@ function _Rᵀr!(r::AbstractVector, p::AbstractVector, # output/input
 end
 # ∇r = ∇G
 function _∇r!(
-    ∇r::AbstractMatrix{<:Real}, p::AbstractVector{<:Real}, # output/input
-    tt::AbstractVector{<:Real}, X::AbstractMatrix{<:Real}, V::AbstractMatrix{<:Real}, 
+    ∇r, p, # output/input
+    tt, X, V, 
     ∇ₚf!::Function, # functions
-    JwF::AbstractArray{<:Real, 3}, __∇r::AbstractArray{<:Real, 3}, _∇r::AbstractArray{<:Real, 3} # buffers
+    JwF, __∇r, _∇r # buffers
 ) 
     Mp1, D = size(X)
     K, _ = size(V)
@@ -96,11 +96,11 @@ function _∇r!(
     nothing
 end
 function _Hwnll!(
-    H::AbstractMatrix{<:Real}, p::AbstractVector{<:Real},
-    ∇L::AbstractArray{<:Real, 3}, tt::AbstractVector{<:Real}, X::AbstractMatrix{<:Real}, V::AbstractMatrix{<:Real}, L::AbstractMatrix{<:Real}, S::AbstractMatrix{<:Real}, ∇r::AbstractMatrix{<:Real}, b₀::AbstractVector{<:Real}, sig::AbstractVector{<:Real},
-    r::AbstractVector{<:Real},  
-    Hₚf!::Function, Hₚ∇ₓf!::Function,  S⁻¹r::AbstractVector{<:Real}, 
-    S⁻¹∇r::AbstractMatrix{<:Real}, ∂ⱼLLᵀ::AbstractMatrix{<:Real}, ∇S::AbstractArray{<:Real, 3}, HwF::AbstractArray{<:Real, 4}, _∇²r::AbstractArray{<:Real, 4}, ∇²r::AbstractArray{<:Real, 3}, HwJuF::AbstractArray{<:Real, 5}, _∇²L::AbstractArray{<:Real, 6}, ∇²L::AbstractArray{<:Real, 4}, ∂ⱼL∂ᵢLᵀ::AbstractMatrix{<:Real}, ∂ᵢⱼLLᵀ::AbstractMatrix{<:Real}, ∂ᵢⱼS::AbstractMatrix{<:Real}, S⁻¹∂ⱼS::AbstractMatrix{<:Real}, ∂ᵢSS⁻¹∂ⱼS::AbstractMatrix{<:Real}
+    H, p,
+    ∇L, tt, X, V, L, S, ∇r, b₀, sig,
+    r,  
+    Hₚf!::Function, Hₚ∇ₓf!::Function,  S⁻¹r, 
+    S⁻¹∇r, ∂ⱼLLᵀ, ∇S, HwF, _∇²r, ∇²r, HwJuF, _∇²L, ∇²L, ∂ⱼL∂ᵢLᵀ, ∂ᵢⱼLLᵀ, ∂ᵢⱼS, S⁻¹∂ⱼS, ∂ᵢSS⁻¹∂ⱼS
 )
     Mp1, D = size(X)
     K, _ = size(V)

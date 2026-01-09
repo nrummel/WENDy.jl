@@ -13,8 +13,6 @@ Hyper-parameters for the WENDy Algorithm
         minTestFunInfoNum::Real=0.95,
         Kmax::Int=200,
         Kᵣ::Union{Nothing,Int}=100,
-        fsAbstol::Real=1e-8,
-        fsReltol::Real=1e-8,
         nlsAbstol::Real=1e-8,
         nlsReltol::Real=1e-8,
         nlsMaxiters::Int=1000,
@@ -22,8 +20,6 @@ Hyper-parameters for the WENDy Algorithm
         optimReltol::Real=1e-8,
         optimMaxiters::Int=500,
         optimTimelimit::Real=200.0,
-        fsAlg::OrdinaryDiffEqAlgorithm=Rodas4P(),
-        fsU0Free::Bool=true
     )
 
 # Fields
@@ -46,8 +42,6 @@ Hyper-parameters for the WENDy Algorithm
 - optimReltol::Real = 1e-8 : relative tolerance (used by all other optimization algorithms)
 - optimMaxiters::Int = 200 : maximum iterations (used by all other optimization algorithms)
 - optimTimelimit::Real = 500.0 : maximum time in seconds (used by all other optimization algorithms)
-- fsAlg::OrdinaryDiffEqAlgorithm = Rodas4P() :  forward solve algorithm used by the forward solve nonlinear least squares algorithm
-- fsU0Free::Bool = true : Specifies if the forward solve algorithm should also optimize over the initial condition
 """
 @kwdef struct WENDyParameters   
     diagReg::Real                       = 1.0e-10
@@ -60,8 +54,6 @@ Hyper-parameters for the WENDy Algorithm
     minTestFunInfoNum::Real             = 0.95
     Kmax::Int                           = 200
     Kᵣ::Union{Nothing,Int}              = 100
-    fsAbstol::Real                      = 1e-8
-    fsReltol::Real                      = 1e-8
     nlsAbstol::Real                     = 1e-8
     nlsReltol::Real                     = 1e-8
     nlsMaxiters::Int                    = 1000
@@ -69,9 +61,41 @@ Hyper-parameters for the WENDy Algorithm
     optimReltol::Real                   = 1e-8
     optimMaxiters::Int                  = 500
     optimTimelimit::Real                = 200.0
+end 
+"""
+Hyper-parameters for the Output Error Least Squares Algorithm
+
+# Constructor 
+    WENDyParameters(;   
+        fsAbstol::Real=1e-8,
+        fsReltol::Real=1e-8,
+        optimAbstol::Real=1e-8,
+        optimReltol::Real=1e-8,
+        optimMaxiters::Int=500,
+        optimTimelimit::Real=200.0,
+        fsAlg::OrdinaryDiffEqAlgorithm=Rodas4P(),
+        fsU0Free::Bool=true
+    )
+# Fields
+- fsAbstol::Real = 1e-8 : forward solve absolute tolerance for solving ordinary differential equation
+- fsReltol::Real = 1e-8 : forward solve relative tolerance for solving ordinary differntial equation
+- optimAbstol::Real = 1e-8 : absolute tolerance (used by all other optimization algorithms)
+- optimReltol::Real = 1e-8 : relative tolerance (used by all other optimization algorithms)
+- optimMaxiters::Int = 200 : maximum iterations (used by all other optimization algorithms)
+- optimTimelimit::Real = 500.0 : maximum time in seconds (used by all other optimization algorithms)
+- fsAlg::OrdinaryDiffEqAlgorithm = Rodas4P() :  forward solve algorithm used by the forward solve nonlinear least squares algorithm
+- fsU0Free::Bool = true : Specifies if the forward solve algorithm should also optimize over the initial condition
+"""
+@kwdef struct OutputErrorParameters
+    fsAbstol::Real                      = 1e-8
+    fsReltol::Real                      = 1e-8
     fsAlg::OrdinaryDiffEqAlgorithm      = Rodas4P()
     fsU0Free::Bool                      = true
-end 
+    optimAbstol::Real                   = 1e-8
+    optimReltol::Real                   = 1e-8
+    optimMaxiters::Int                  = 500
+    optimTimelimit::Real                = 200.0
+end
 ##
 struct WENDyInternals{lip, DistType}
     J::Int # number of parameters (to be estimated)
@@ -91,6 +115,7 @@ struct WENDyInternals{lip, DistType}
     Hₚf!::Function
     Hₚ∇ₓf!::Function
 end
+##
 ## IRLS 
 abstract type IRLSIter end 
 ##
@@ -143,6 +168,7 @@ A WENDyProblem struct pre-computes and allocates data structures for efficient s
         noiseDist::Val{DistType}=Val(Normal), 
         params::WENDyParameters=WENDyParameters(), 
         constraints::Union{Nothing,AbstractVector{Tuple{<:Real,<:Real}}}=nothing, 
+        priors::Union{Nothing,AbstractVector{<:Distribution}}=nothing, 
         ll::LogLevel=Warn
     )
 ## Arguments 
@@ -164,22 +190,53 @@ A WENDyProblem struct pre-computes and allocates data structures for efficient s
 - K::Int : number of test functions 
 - u₀::AbstractVector{<:Real} : Initial Condition of the ODE (Necessary for the forward solver)
 - constraints : vector of tuples containing linear constraints for each parameter
+- priors : vector of priors for each parameter
 - data : Internal data structure 
-- oels::LeastSquaresCostFunction : Cost function for the comparison method
 - wlsq::LeastSquaresCostFunction : Cost function for the weak form least squares problem
 - wnll::SecondOrderCostFunction : Cost function for the weak form negative log-likelihood 
-
+- priorLoss::SecondOrderCostFunction : Cost function for the priors alone
+- wnlp::SecondOrderCostFunction : Cost function for the weak form negative log-posterior
 """
 struct WENDyProblem{lip, DistType}
     D::Int # number of state variables
     J::Int # number of parameters (to be estimated)
     Mp1::Int # (Mp1+1) number of data points in time 
     K::Int # number of test functions 
-    u₀::AbstractVector{<:Real}
     constraints::Union{Nothing,AbstractVector{Tuple{<:Real,<:Real}}}
+    priors::Union{Nothing,AbstractVector{<:Distribution}}
     data::WENDyInternals{lip, DistType}
     # Cost functions 
-    oels::LeastSquaresCostFunction
     wlsq::LeastSquaresCostFunction
     wnll::SecondOrderCostFunction 
+    priorLoss::SecondOrderCostFunction 
+    wnlp::SecondOrderCostFunction 
 end 
+"""
+    OutputErrorProblem(...)
+
+A struct that pre-computes and allocates data structures for efficient solving of the parameter inverse problem
+
+# Constructor 
+    OutputErrorProblem(
+        tt::AbstractVector{<:Real}, 
+        U::AbstractVecOrMat{<:Real}, 
+        f!::Function, 
+        J::Int;
+        params::OutputErrorParameters=OutputErrorParameters(),
+        ll::LogLevel=Warn
+    )
+## Arguments 
+- tt::AbstractVector{<:Real} : vector of times (equispaced)
+- U::AbstractVecOrMat{<:Real} : Corrupted state variable data 
+- f!::Function : Right hand-side of the differential equation
+    Must be of the form f!(du, u, p, t)
+- J::Int : number of parameters (to be estimated)
+- params::OutputErrorParameters : (optional) hyper parameters 
+- ll::LogLevel : (optional) log level
+# Fields
+- oels::SecondOrderCostFunction : Cost function for the output error least squares 
+"""
+struct OutputErrorProblem 
+    u₀::AbstractVector{<:Real}
+    oels::LeastSquaresCostFunction 
+end

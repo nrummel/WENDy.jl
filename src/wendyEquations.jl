@@ -1,9 +1,9 @@
 ## Equations that do not depend on if the problem is linear or not in parameters
 """L₀ = V′ ∘ diag(σ₁,⋯,σ_D)"""
 function _L₀!(
-    L₀::AbstractMatrix, # output
-    Vp::AbstractMatrix, sig::AbstractVector, # data
-    __L₀::AbstractArray{<:Real,4}, _L₀::AbstractArray{<:Real,4} # buffers
+    L₀, # output
+    Vp, sig, # data
+    __L₀, _L₀ # buffers
 )
     # TODO should we just use _L₀[k,d,m,d]?
     @tullio __L₀[k,d,d,m] = Vp[k,m]*sig[d]
@@ -16,9 +16,9 @@ end
 Performs diagonal regularization and then  computed the Cholesky factorization of the weak residual's covariance.
 """
 function _R!(
-    R::AbstractMatrix{<:Real}, # output/input
-    L::AbstractMatrix{<:Real}, diagReg::AbstractFloat, # data
-    thisI::AbstractMatrix{<:Real}, Sreg::AbstractMatrix{<:Real}, S::AbstractMatrix{<:Real}; # buffers
+    R, # output/input
+    L, diagReg::AbstractFloat, # data
+    thisI, Sreg, S; # buffers
     doChol::Bool=true, ll::LogLevel=Warn #kwargs
 ) 
     mul!(S, L, L')
@@ -33,7 +33,7 @@ function _R!(
     nothing
 end
 """ weak form negative log likelihood """
-function _wnll(S::AbstractMatrix, r::AbstractVector, S⁻¹r::AbstractVector, constTerm::AbstractFloat)
+function _wnll(S, r, S⁻¹r, constTerm::AbstractFloat)
     F, logDet = try
         F = cholesky(S)
         logDet = 2*sum(log.(diag(F.U)))
@@ -53,9 +53,9 @@ function _wnll(S::AbstractMatrix, r::AbstractVector, S⁻¹r::AbstractVector, co
 end
 """∇m(p) - Gradient of weak form negative log likelihood"""
 function _∇wnll!(
-    ∇m::AbstractVector{<:Real},
-    ∇L::AbstractArray{<:Real,3}, L::AbstractMatrix{<:Real}, S::AbstractMatrix{<:Real}, ∇r::AbstractMatrix{<:Real}, r::AbstractVector{<:Real},
-    S⁻¹r::AbstractVector{<:Real}, ∂ⱼLLᵀ::AbstractMatrix{<:Real}, ∇S::AbstractArray{<:Real,3}
+    ∇m,
+    ∇L, L, S, ∇r, r,
+    S⁻¹r, ∂ⱼLLᵀ, ∇S
 )
     J = length(∇m)
     # TODO: perhaps do this inplace?

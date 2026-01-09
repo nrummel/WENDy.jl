@@ -101,62 +101,93 @@ function (m::IRLS)(prob::WENDyProblem{lip, DistType}, p₀::AbstractVector{<:Abs
     maxIt::Int=1000, return_wits::Bool=false
 ) where {lip, DistType}
     with_logger(ConsoleLogger(stderr,ll)) do 
-        reltol,abstol = params.optimReltol, params.optimAbstol
+        
         @info "Building Iteration "
         iter = IRLSIter(prob, params)
         trueIter =compareIters ? LinearIRLSIter(prob, params) : nothing
         @info "Initializing the linearization least squares solution  ..."
-        J = length(p₀)
-        wit = zeros(J,maxIt)
-        resit = zeros(J,maxIt)
-        wnm1 = p₀ 
-        wn = similar(p₀)
-        for n = 1:maxIt 
-            @info "Iteration $n"
-            dtNl = @elapsed aNl = @allocations wn = iter(wnm1;ll=iterll)
-            if ! (typeof(wn)<:AbstractVector) || any(isnan.(wn))
-                @warn "Optimization method failed"
-                return return_wits ? (wn, n, hcat(p₀, wit[:,1:n-1])) : (wn,n)
-            end
-            resn = wnm1-wn
-            resit[:,n] .= resn
-            wit[:,n] .= wn
-            if !isnothing(trueIter)
-                dtL = @elapsed aL = @allocations w_star = trueIter(wnm1)
-                relErr = norm(w_star-wn) / norm(wn)
-                @info """  Comparing to altnerate iteration
-                    relative Error  = $relErr
-                    this iteration 
-                        $dtNl s, $aNl allocations
-                    other iteration 
-                        $dtL s, $aL allocations
-                """
-            end
-            resNorm = norm(resn)
-            relResNorm = resNorm / norm(wnm1)
-            if relResNorm < reltol
-                resit = resit[:,1:n] 
-                wit = wit[:,1:n] 
-                @info """  
-                  Convergence Criterion met: 
-                    reltol: $relRes < $reltol
-                """
-                return return_wits ? (wn, n, hcat(p₀,wit) ) : (wn,n)
-            elseif resNorm < abstol
-                resit = resit[:,1:n] 
-                wit = wit[:,1:n] 
-                @info """  
-                  Convergence Criterion met: 
-                    abstol: $resNorm < $abstol
-                """
-                return return_wits ? (wn, n, hcat(p₀,wit)) : (wn,n)
-            end
-            wnm1 = wn
-        end
-        @warn "Maxiteration met for IRLS"
-        return return_wits ? (wn, maxIt, hcat(p₀,wit)) : (wn,maxIt)
+        irls(iter, p₀, params, trueIter; iterll=iterll, maxIt=maxIt, return_wits=return_wits)
     end
 end 
+
+function irls(iter, p₀, params, trueIter=nothing; iterll=Warn, maxIt=1000, return_wits=false)
+    reltol,abstol = params.optimReltol, params.optimAbstol
+    J = length(p₀)
+    wit = zeros(J,maxIt)
+    resit = zeros(J,maxIt)
+    wnm1 = p₀ 
+    wn = similar(p₀)
+    for n = 1:maxIt 
+        @info "Iteration $n"
+        dtNl = @elapsed aNl = @allocations wn = iter(wnm1;ll=iterll)
+        if ! (typeof(wn)<:AbstractVector) || any(isnan.(wn))
+            @warn "Optimization method failed"
+            return return_wits ? (wn, n, hcat(p₀, wit[:,1:n-1])) : (wn,n)
+        end
+        resn = wnm1-wn
+        resit[:,n] .= resn
+        wit[:,n] .= wn
+        if !isnothing(trueIter)
+            dtL = @elapsed aL = @allocations w_star = trueIter(wnm1)
+            relErr = norm(w_star-wn) / norm(wn)
+            @info """  Comparing to altnerate iteration
+                relative Error  = $relErr
+                this iteration 
+                    $dtNl s, $aNl allocations
+                other iteration 
+                    $dtL s, $aL allocations
+            """
+        end
+        resNorm = norm(resn)
+        relResNorm = resNorm / norm(wnm1)
+        if relResNorm < reltol
+            resit = resit[:,1:n] 
+            wit = wit[:,1:n] 
+            @info """  
+                Convergence Criterion met: 
+                reltol: $relResNorm < $reltol
+            """
+            return return_wits ? (wn, n, hcat(p₀,wit) ) : (wn,n)
+        elseif resNorm < abstol
+            resit = resit[:,1:n] 
+            wit = wit[:,1:n] 
+            @info """  
+                Convergence Criterion met: 
+                abstol: $resNorm < $abstol
+            """
+            return return_wits ? (wn, n, hcat(p₀,wit)) : (wn,n)
+        end
+        wnm1 = wn
+    end
+    @warn "Maxiteration met for IRLS"
+    return return_wits ? (wn, maxIt, hcat(p₀,wit)) : (wn,maxIt)
+end
+
+
+## BFGS 
+function bfgs(
+    costFun::FirstOrderCostFunction, p₀::AbstractVector{<:Real}, params::WENDyParameters; 
+    return_wits::Bool=false, kwargs...
+)
+    # Unpack optimization params
+    maxIt,reltol,abstol,timelimit = params.optimMaxiters, params.optimReltol, params.optimAbstol, params.optimTimelimit
+    # Call algorithm
+    J = length(p₀)
+    res = optimize(
+        costFun.f, costFun.∇f!, # f, g
+        p₀, LBFGS(), 
+        Optim_Options(
+            x_reltol=reltol, x_abstol=abstol, iterations=maxIt, time_limit=timelimit, 
+            store_trace=return_wits, extended_trace=return_wits, show_trace=true
+        )
+    )
+    # unpack results
+    what = res.minimizer
+    iter = res.iterations
+    return return_wits ? (what, iter, reduce(hcat, t.metadata["x"] for t in res.trace)) : what
+end
+
+### Trust Region
 ## unconstrained
 function _trustRegion_unconstrained(
     costFun::SecondOrderCostFunction, p₀::AbstractVector{<:Real}, params::WENDyParameters; 
@@ -294,6 +325,29 @@ function (m::ARCqK)(
     )
     return return_wits ? (out.solution, out.iter, wits_arc) : out.solution
 end
+## Interior Point Method 
+struct IP<:AbstractWENDySolver end 
+function (m::IP)(
+    wendyProb::WENDyProblem, p₀::AbstractVector{<:Real}, params::WENDyParameters; 
+    return_wits::Bool=false, costFun::Symbol=:wnlp,kwargs...
+)
+    # Unpack optimization params
+    maxIt,reltol,abstol,timelimit = params.optimMaxiters, params.optimReltol, params.optimAbstol, params.optimTimelimit
+    df = TwiceDifferentiable(getfield(wendyProb,costFun).f, getfield(wendyProb,costFun).∇f!, getfield(wendyProb,costFun).Hf!, p₀)
+    l,u = _makeConstraintsRespectPriorSupport(length(p₀), wendyProb.constraints, wendyProb.priors)
+    dfc = TwiceDifferentiableConstraints(l,u)
+    # Call algorithm
+    res = optimize(df, dfc, p₀, IPNewton(), 
+        Optim_Options(
+            x_reltol=reltol, x_abstol=abstol, iterations=maxIt, time_limit=timelimit, 
+            store_trace=return_wits, extended_trace=return_wits
+        )
+    )
+    # unpack results
+    what = res.minimizer
+    iter = res.iterations
+    return return_wits ? (what, iter, reduce(hcat, t.metadata["x"] for t in res.trace)) : what
+end
 ## solver for nonlinear least squares problems
 function nonlinearLeastSquares(costFun::LeastSquaresCostFunction,
     p₀::AbstractVector{<:Real}, 
@@ -337,8 +391,8 @@ function nonlinearLeastSquares(costFun::LeastSquaresCostFunction,
 end
 # Output Error Least Squares
 struct OELS<:AbstractWENDySolver end 
-(m::OELS)(wendyProb::WENDyProblem, p₀::AbstractVector{<:Real}, params::WENDyParameters; 
-return_wits::Bool=false, kwargs...) = nonlinearLeastSquares(wendyProb.oels, vcat(p₀, wendyProb.u₀), params; return_wits=return_wits, kwargs...)
+(m::OELS)(prob::OutputErrorProblem, p₀::AbstractVector{<:Real}, params::WENDyParameters; 
+return_wits::Bool=false, kwargs...) = nonlinearLeastSquares(prob.oels, vcat(p₀, prob.u₀), params; return_wits=return_wits, kwargs...)
 # weak form least squares
 struct WLS<:AbstractWENDySolver end 
 (m::WLS)(wendyProb::WENDyProblem, p₀::AbstractVector{<:Real}, params::WENDyParameters; 
