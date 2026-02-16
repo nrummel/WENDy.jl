@@ -1,3 +1,4 @@
+abstract type ParameterEstimationParameters end
 """
 Hyper-parameters for the WENDy Algorithm
 
@@ -43,7 +44,7 @@ Hyper-parameters for the WENDy Algorithm
 - optimMaxiters::Int = 200 : maximum iterations (used by all other optimization algorithms)
 - optimTimelimit::Real = 500.0 : maximum time in seconds (used by all other optimization algorithms)
 """
-@kwdef struct WENDyParameters   
+@kwdef struct WENDyParameters <: ParameterEstimationParameters  
     diagReg::Real                       = 1.0e-10
     radiusMinTime::Real                 = 0.01
     radiusMaxTime::Real                 = 5.0
@@ -86,7 +87,7 @@ Hyper-parameters for the Output Error Least Squares Algorithm
 - fsAlg::OrdinaryDiffEqAlgorithm = Rodas4P() :  forward solve algorithm used by the forward solve nonlinear least squares algorithm
 - fsU0Free::Bool = true : Specifies if the forward solve algorithm should also optimize over the initial condition
 """
-@kwdef struct OutputErrorParameters
+@kwdef struct OutputErrorParameters <: ParameterEstimationParameters
     fsAbstol::Real                      = 1e-8
     fsReltol::Real                      = 1e-8
     fsAlg::OrdinaryDiffEqAlgorithm      = Rodas4P()
@@ -153,6 +154,7 @@ struct LeastSquaresCostFunction <: CostFunction
     ∇r!::Function 
     KD::Int
 end 
+abstract type ParameterEstimationProblem end
 """
     WENDyProblem{lip, DistType}(...)
 
@@ -197,7 +199,7 @@ A WENDyProblem struct pre-computes and allocates data structures for efficient s
 - priorLoss::SecondOrderCostFunction : Cost function for the priors alone
 - wnlp::SecondOrderCostFunction : Cost function for the weak form negative log-posterior
 """
-struct WENDyProblem{lip, DistType}
+struct WENDyProblem{lip, DistType} <: ParameterEstimationProblem
     D::Int # number of state variables
     J::Int # number of parameters (to be estimated)
     Mp1::Int # (Mp1+1) number of data points in time 
@@ -236,7 +238,7 @@ A struct that pre-computes and allocates data structures for efficient solving o
 # Fields
 - oels::SecondOrderCostFunction : Cost function for the output error least squares 
 """
-struct OutputErrorProblem 
+struct OutputErrorProblem <: ParameterEstimationProblem
     u₀::AbstractVector{<:Real}
     oels::LeastSquaresCostFunction 
 end

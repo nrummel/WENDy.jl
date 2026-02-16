@@ -351,7 +351,7 @@ end
 ## solver for nonlinear least squares problems
 function nonlinearLeastSquares(costFun::LeastSquaresCostFunction,
     p₀::AbstractVector{<:Real}, 
-    params::WENDyParameters; 
+    params::ParameterEstimationParameters; 
     return_wits::Bool=false, kwargs...
 )   
     J = length(p₀)
@@ -391,45 +391,12 @@ function nonlinearLeastSquares(costFun::LeastSquaresCostFunction,
 end
 # Output Error Least Squares
 struct OELS<:AbstractWENDySolver end 
-(m::OELS)(prob::OutputErrorProblem, p₀::AbstractVector{<:Real}, params::WENDyParameters; 
+(m::OELS)(prob::OutputErrorProblem, p₀::AbstractVector{<:Real}, params::OutputErrorParameters; 
 return_wits::Bool=false, kwargs...) = nonlinearLeastSquares(prob.oels, vcat(p₀, prob.u₀), params; return_wits=return_wits, kwargs...)
 # weak form least squares
 struct WLS<:AbstractWENDySolver end 
 (m::WLS)(wendyProb::WENDyProblem, p₀::AbstractVector{<:Real}, params::WENDyParameters; 
 return_wits::Bool=false, kwargs...) = nonlinearLeastSquares(wendyProb.wlsq, p₀, params; return_wits=return_wits, kwargs...)
-# hybrid : MLE (trustRegion) -> oe-ls
-struct HybridTrustRegionOELS<:AbstractWENDySolver end 
-function (m::HybridTrustRegionOELS)(
-    wendyProb::WENDyProblem, p₀::AbstractVector{<:Real}, params::WENDyParameters; 
-    return_wits::Bool=false, fallBackThreshold::Real=1.05, kwargs...
-)
-    u₀ = wendyProb.u₀
-    what_wendy, iter_wendy, wits_wendy = if return_wits
-        TrustRegion()(wendyProb, p₀, params, return_wits=true)
-    else 
-        what_wendy, iter_wendy = TrustRegion()(wendyProb, p₀, params, return_wits=false)
-        what_wendy, iter_wendy, nothing
-    end 
-
-    what_oels, iter_oels, wits_oels = if return_wits 
-        OELS()(wendyProb, what_wendy, params, return_wits=true)
-    else 
-        what_oels, iter_oels = OELS()(wendyProb, vcat(what_wendy,u₀), params, return_wits=false)
-        what_oels, iter_oels, nothing
-    end 
-    what = what_oels
-    iters = iter_wendy+iter_oels
-    wits = hcat(vcat(wits_wendy, reduce(hcat, u₀ for _ in 1:size(wits_wendy,2))), wits_oels )
-    # Fallback on WENDy-MLE estimate if the weak likelhood of the oe-ls method is too poor
-    wnll_wendy = wendyProb.wnll.f(what_wendy)
-    wnll_oels = wendyProb.wnll.f(what_oels)
-    if wnll_wendy * fallBackThreshold < wnll_oels
-        what = what_wendy
-        wits = hcat(wits, vcat(what, u₀))
-    end
-
-    return return_wits ?  (what, iters)  : (what, iters, wits)
-end
 # hybrid : wls -> mle(trustRegion)
 struct HybridWLSTrustRegion<:AbstractWENDySolver end 
 function (m::HybridWLSTrustRegion)(
@@ -471,7 +438,6 @@ Solve the inverse problem for the unknown parameters
     - IRLS : WENDy generalized least squares solver via iterative reweighted least squares 
     - TrustRegion : (default) optimize over the weak form negative log-likelihood with a trust region solver. This approximates the maximum likelhood estimator. Note: this is the only solver that will respect the constraints
     - ARCqK : optimize over the weak form negative log-likelihood with adaptive regularized cubics algorithm
-    - HybridTrustRegionOELS : hybrid solver that first optimizes with the trust region solver then passes the result as an intialization to the output error least squares problem
     - HybridWLSTrustRegion : hybrid solver that first optimizes with the weak form least squares solver then passes the result as an intialization to the trust region weak form negative log-likelihood solver
 """
 function solve(wendyProb::WENDyProblem, p₀::AbstractVector{<:Real}, params::WENDyParameters=WENDyParameters(); alg::AbstractWENDySolver=TrustRegion(), forceAlg::Bool=false, kwargs...)
@@ -484,4 +450,8 @@ function solve(wendyProb::WENDyProblem, p₀::AbstractVector{<:Real}, params::WE
         end
     end
     alg(wendyProb, p₀, params; kwargs... )
+end
+
+function solve(wendyProb::OutputErrorProblem, p₀::AbstractVector{<:Real}, params::OutputErrorParameters=OutputErrorParameters(); kwargs...)
+    OELS()(wendyProb, p₀, params; kwargs... )
 end
