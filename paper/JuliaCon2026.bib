@@ -1,0 +1,227 @@
+@article{BezansonEdelmanKarpinskiEtAl2017SIAMRev,
+  title = {Julia: {{A Fresh Approach}} to {{Numerical Computing}}},
+  shorttitle = {Julia},
+  author = {Bezanson, Jeff and Edelman, Alan and Karpinski, Stefan and Shah, Viral B.},
+  year = 2017,
+  month = jan,
+  journal = {SIAM Rev.},
+  volume = {59},
+  number = {1},
+  pages = {65--98},
+  issn = {0036-1445, 1095-7200},
+  doi = {10.1137/141000671},
+  urldate = {2024-10-21},
+  langid = {english},
+  file = {/Users/niru8088/Zotero/storage/8RGRCK72/Bezanson et al. - 2017 - Julia A Fresh Approach to Numerical Computing.pdf}
+}
+
+@article{BortzMessengerDukic2023BullMathBiol,
+  title = {Direct {{Estimation}} of {{Parameters}} in {{ODE Models Using WENDy}}: {{Weak-form Estimation}} of {{Nonlinear Dynamics}}},
+  author = {Bortz, David M. and Messenger, Daniel A. and Dukic, Vanja},
+  year = 2023,
+  journal = {Bulletin of Mathematical Biology},
+  volume = {85},
+  number = {110},
+  doi = {10.1007/S11538-023-01208-6},
+  abstract = {We introduce the Weak-form Estimation of Nonlinear Dynamics (WENDy) method for estimating model parameters for non-linear systems of ODEs. Without relying on any numerical differential equation solvers, WENDy computes accurate estimates and is robust to large (biologically relevant) levels of measurement noise. For low dimensional systems with modest amounts of data, WENDy is competitive with conventional forward solver-based nonlinear least squares methods in terms of speed and accuracy. For both higher dimensional systems and stiff systems, WENDy is typically both faster (often by orders of magnitude) and more accurate than forward solver-based approaches. The core mathematical idea involves an efficient conversion of the strong form representation of a model to its weak form, and then solving a regression problem to perform parameter inference. The core statistical idea rests on the Errors-In-Variables framework, which necessitates the use of the iteratively reweighted least squares algorithm. Further improvements are obtained by using orthonormal test functions, created from a set of C{$\infty$} bump functions of varying support sizes.We demonstrate the high robustness and computational efficiency by applying WENDy to estimate parameters in some common models from population biology, neuroscience, and biochemistry, including logistic growth, Lotka-Volterra, FitzHugh-Nagumo, Hindmarsh-Rose, and a Protein Transduction Benchmark model. Software and code for reproducing the examples is available at https://github.com/ MathBioCU/WENDy.},
+  keywords = {BonnevilleChap2024,enricoNSF2023,nihmabs2023,tran01},
+  file = {/Users/niru8088/Zotero/storage/SF54J7E4/Bortz et al. - 2023 - Direct Estimation of Parameters in ODE Models Usin.pdf}
+}
+
+@article{GowdaMaCheliEtAl2021ACMCommunComputAlgebra,
+  title = {High-Performance Symbolic-Numerics via Multiple Dispatch},
+  author = {Gowda, Shashi and Ma, Yingbo and Cheli, Alessandro and Gw{\'o}{\'z}zd{\'z}, Maja and Shah, Viral B. and Edelman, Alan and Rackauckas, Christopher},
+  year = 2021,
+  month = sep,
+  journal = {ACM Communications in Computer Algebra},
+  volume = {55},
+  number = {3},
+  pages = {92--96},
+  issn = {1932-2240},
+  doi = {10.1145/3511528.3511535},
+  urldate = {2024-10-21},
+  abstract = {As mathematical computing becomes more democratized in high-level languages, high-performance symbolic-numeric systems are necessary for domain scientists and engineers to get the best performance out of their machine without deep knowledge of code optimization. Naturally, users need different term types either to have different algebraic properties for them, or to use efficient data structures. To this end, we developed Symbolics.jl, an extendable symbolic system which uses dynamic multiple dispatch to change behavior depending on the domain needs. In this work we detail an underlying abstract term interface which allows for speed without sacrificing generality. We show that by formalizing a generic API on actions independent of implementation, we can retroactively add optimized data structures to our system without changing the pre-existing term rewriters. We showcase how this can be used to optimize term construction and give a 113x acceleration on general symbolic transformations. Further, we show that such a generic API allows for complementary term-rewriting implementations. Exploiting this feature, we demonstrate the ability to swap between classical term-rewriting simplifiers and e-graphbased term-rewriting simplifiers. We illustrate how this symbolic system improves numerical computing tasks by showcasing an e-graph ruleset which minimizes the number of CPU cycles during expression evaluation, and demonstrate how it simplifies a real-world reaction-network simulation to halve the runtime. Additionally, we show a reaction-diffusion partial differential equation solver which is able to be automatically converted into symbolic expressions via multiple dispatch tracing, which is subsequently accelerated and parallelized to give a 157x simulation speedup. Together, this presents Symbolics.jl as a next-generation symbolic-numeric computing environment geared towards modeling and simulation.},
+  langid = {english},
+  file = {/Users/niru8088/Zotero/storage/QTPG35YD/Gowda et al. - 2021 - High-performance symbolic-numerics via multiple dispatch.pdf}
+}
+
+@article{KMogensenNRiseth2018JOSS,
+  title = {Optim: {{A}} Mathematical Optimization Package for {{Julia}}},
+  shorttitle = {Optim},
+  author = {K Mogensen, Patrick and N Riseth, Asbj{\o}rn},
+  year = 2018,
+  month = apr,
+  journal = {JOSS},
+  volume = {3},
+  number = {24},
+  pages = {615},
+  issn = {2475-9066},
+  doi = {10.21105/joss.00615},
+  urldate = {2024-07-16},
+  abstract = {Optim provides a range of optimization capabilities written in the Julia programming language (Bezanson et al. 2017). Our aim is to enable researchers, users, and other Julia packages to solve optimization problems without writing such algorithms themselves. The package supports optimization on manifolds, functions of complex numbers, and input types such as arbitrary precision vectors and matrices. We have implemented routines for derivative free, first-order, and second-order optimization methods. The user can provide derivatives themselves, or request that they are calculated using automatic differentiation or finite difference methods. The main focus of the package has currently been on unconstrained optimization, however, box-constrained optimization is supported, and a more comprehensive support for constraints is underway. Similar to Optim, the C library NLopt (Johnson 2008) contains a collection of nonlinear optimization routines. In Python, scipy.optimize supports many of the same algorithms as Optim does, and Pymanopt (Townsend, Niklas, and Weichwald 2016) is a toolbox for manifold optimization. Within the Julia community, the packages BlackBoxOptim.jl and Optimize.jl provide optimization capabilities focusing on derivative-free and large-scale smooth problems respectively. The packages Convex.jl and JuMP.jl (Dunning, Huchette, and Lubin 2017) define modelling languages for which users can formulate optimization problems. In contrast to the previously mentioned optimization codes, Convex and JuMP work as abstraction layers between the user and solvers from a other packages.},
+  copyright = {http://creativecommons.org/licenses/by/4.0/},
+  langid = {english},
+  file = {/Users/niru8088/Zotero/storage/YGTIJ8L8/K Mogensen and N Riseth - 2018 - Optim A mathematical optimization package for Jul.pdf}
+}
+
+@article{MessengerBortz2021JComputPhys,
+  title = {Weak {{SINDy For Partial Differential Equations}}},
+  author = {Messenger, Daniel A. and Bortz, David M.},
+  year = 2021,
+  month = oct,
+  journal = {Journal of Computational Physics},
+  volume = {443},
+  pages = {110525},
+  doi = {10.1016/j.jcp.2021.110525},
+  urldate = {2020-07-07},
+  abstract = {We extend the WSINDy (Weak SINDy) method of sparse recovery introduced previously by the authors (arXiv:2005.04339) to the setting of partial differential equations (PDEs). As in the case of ODE discovery, the weak form replaces pointwise approximation of derivatives with local integrations against test functions and achieves effective machine-precision recovery of weights from noise-free data (i.e. below the tolerance of the simulation scheme) as well as natural robustness to noise without the use of noise filtering. The resulting WSINDy\_PDE algorithm uses separable test functions implemented efficiently via convolutions for discovery of PDE models with computational complexity \$O(NM)\$ from data points with \$M = N\textasciicircum\textbraceleft D+1\textbraceright\$ points, or \$N\$ points in each of \$D+1\$ dimensions. We demonstrate on several notoriously challenging PDEs the speed and accuracy with which WSINDy\_PDE recovers the correct models from datasets with surprisingly large levels noise (often with levels of noise much greater than 10\%).},
+  keywords = {BonnevilleChap2024,enricoNSF2023,tran01},
+  file = {/Users/niru8088/Zotero/storage/AI345IWM/Messenger and Bortz - 2021 - Weak SINDy For Partial Differential Equations.pdf}
+}
+
+@article{MessengerBortz2021MultiscaleModelSimul,
+  title = {Weak {{SINDy}}: {{Galerkin-Based Data-Driven Model Selection}}},
+  shorttitle = {Weak {{SINDy}}},
+  author = {Messenger, Daniel A. and Bortz, David M.},
+  year = 2021,
+  journal = {Multiscale Modeling \& Simulation},
+  volume = {19},
+  number = {3},
+  pages = {1474--1497},
+  doi = {10.1137/20M1343166},
+  urldate = {2020-07-07},
+  abstract = {We present a weak formulation and discretization of the system discovery problem from noisy measurement data. This method of learning differential equations from data fits into a new class of algorithms that replace pointwise derivative approximations with linear transformations and a variance reduction technique. Our approach improves on the standard SINDy algorithm by orders of magnitude. We first show that in the noise-free regime, this so-called Weak SINDy (WSINDy) framework is capable of recovering the dynamic coefficients to very high accuracy, with the number of significant digits equal to the tolerance of the data simulation scheme. Next we show that the weak form naturally accounts for white noise by identifying the correct nonlinearities with coefficient error scaling favorably with the signal-to-noise ratio while significantly reducing the size of linear systems in the algorithm. In doing so, we combine the ease of implementation of the SINDy algorithm with the natural noise-reduction of integration to arrive at a more robust and user-friendly method of sparse recovery that correctly identifies systems in both small-noise and large-noise regimes.},
+  keywords = {BonnevilleChap2024,enricoNSF2023,tran01},
+  file = {/Users/niru8088/Zotero/storage/VW597SWH/Messenger and Bortz - 2021 - Weak SINDy Galerkin-Based Data-Driven Model Selec.pdf}
+}
+
+@article{MessengerTranDukicEtAl2024SIAMNews,
+  title = {The {{Weak Form Is Stronger Than You Think}}},
+  author = {Messenger, Daniel A. and Tran, April and Dukic, Vanja and Bortz, David M.},
+  year = 2024,
+  month = oct,
+  journal = {SIAM News},
+  volume = {57},
+  number = {8},
+  file = {/Users/niru8088/Zotero/storage/9QFAFN8G/sn_october2024.pdf;/Users/niru8088/Zotero/storage/WWJFGEK9/Messenger et al. - 2024 - The Weak Form Is Stronger Than You Think.pdf}
+}
+
+@misc{Michael2026,
+  title = {Tullio.Jl},
+  author = {Michael, Abbott},
+  year = 2026,
+  month = feb,
+  abstract = {Tullio is a very flexible einsum macro. It understands many array operations written in index notation -- not just matrix multiplication and permutations, but also convolutions, stencils, scatter/gather, and broadcasting. For example:}
+}
+
+@misc{MigotOrbanSoaresSiqueira2024,
+  title = {{{JSOSolvers}}.Jl: {{JuliaSmoothOptimizers}} Optimization Solvers},
+  author = {Migot, Tangi and Orban, Dominique and Soares Siqueira, Abel},
+  year = 2024,
+  month = oct,
+  doi = {10.5281/ZENODO.3991143},
+  urldate = {2024-12-13},
+  abstract = {JuliaSmoothOptimizers optimization solvers},
+  copyright = {Mozilla Public License 2.0},
+  howpublished = {Zenodo}
+}
+
+@article{PalHoltorfLarssonEtAl2024arXiv240316341,
+  title = {{{NonlinearSolve}}.Jl: {{High-Performance}} and {{Robust Solvers}} for {{Systems}} of {{Nonlinear Equations}} in {{Julia}}},
+  shorttitle = {{{NonlinearSolve}}.Jl},
+  author = {Pal, Avik and Holtorf, Flemming and Larsson, Axel and Loman, Torkel and Utkarsh and Sch{\"a}efer, Frank and Qu, Qingyu and Edelman, Alan and Rackauckas, Chris},
+  year = 2024,
+  month = mar,
+  journal = {arXiv:2403.16341},
+  eprint = {2403.16341},
+  primaryclass = {cs, math},
+  urldate = {2024-06-21},
+  abstract = {Efficiently solving nonlinear equations underpins numerous scientific and engineering disciplines, yet scaling these solutions for complex system models remains a challenge. This paper presents NonlinearSolve.jl -- a suite of high-performance open-source nonlinear equation solvers implemented natively in the Julia programming language. NonlinearSolve.jl distinguishes itself by offering a unified API that accommodates a diverse range of solver specifications alongside features such as automatic algorithm selection based on runtime analysis, support for GPU-accelerated computation through static array kernels, and the utilization of sparse automatic differentiation and Jacobian-free Krylov methods for large-scale problem-solving. Through rigorous comparison with established tools such as Sundials and MINPACK, NonlinearSolve.jl demonstrates unparalleled robustness and efficiency, achieving significant advancements in solving benchmark problems and challenging real-world applications. The capabilities of NonlinearSolve.jl unlock new potentials in modeling and simulation across various domains, making it a valuable addition to the computational toolkit of researchers and practitioners alike.},
+  archiveprefix = {arXiv},
+  langid = {english},
+  keywords = {Mathematics - Numerical Analysis},
+  file = {/Users/niru8088/Zotero/storage/M3BE33JY/Pal et al. - 2024 - NonlinearSolve.jl High-Performance and Robust Sol.pdf}
+}
+
+@article{RackauckasNie2017JORS,
+  title = {{{DifferentialEquations}}.Jl -- {{A Performant}} and {{Feature-Rich Ecosystem}} for {{Solving Differential Equations}} in {{Julia}}},
+  author = {Rackauckas, Christopher and Nie, Qing},
+  year = 2017,
+  month = may,
+  journal = {JORS},
+  volume = {5},
+  number = {1},
+  pages = {15},
+  issn = {2049-9647},
+  doi = {10.5334/jors.151},
+  urldate = {2024-10-21},
+  copyright = {http://creativecommons.org/licenses/by/4.0},
+  langid = {english},
+  file = {/Users/niru8088/Zotero/storage/GF7GUYR4/Rackauckas and Nie - 2017 - DifferentialEquations.jl – A Performant and Feature-Rich Ecosystem for Solving Differential Equation.pdf}
+}
+
+@article{RevelsLubinPapamarkou2016arXiv160707892,
+  title = {Forward-{{Mode Automatic Differentiation}} in {{Julia}}},
+  author = {Revels, Jarrett and Lubin, Miles and Papamarkou, Theodore},
+  year = 2016,
+  month = jul,
+  journal = {arXiv:1607.07892},
+  eprint = {1607.07892},
+  primaryclass = {cs},
+  urldate = {2024-10-21},
+  abstract = {We present ForwardDiff, a Julia package for forward-mode automatic differentiation (AD) featuring performance competitive with low-level languages like C++. Unlike recently developed AD tools in other popular high-level languages such as Python and MATLAB, ForwardDiff takes advantage of just-in-time (JIT) compilation to transparently recompile AD-unaware user code, enabling efficient support for higher-order differentiation and differentiation using custom number types (including complex numbers). For gradient and Jacobian calculations, ForwardDiff provides a variant of vector-forward mode that avoids expensive heap allocation and makes better use of memory bandwidth than traditional vector mode. In our numerical experiments, we demonstrate that for nontrivially large dimensions, ForwardDiff's gradient computations can be faster than a reverse-mode implementation from the Python-based autograd package. We also illustrate how ForwardDiff is used effectively within JuMP, a modeling language for optimization. According to our usage statistics, 41 unique repositories on GitHub depend on ForwardDiff, with users from diverse fields such as astronomy, optimization, finite element analysis, and statistics. This document is an extended abstract that has been accepted for presentation at the AD2016 7th International Conference on Algorithmic Differentiation.},
+  archiveprefix = {arXiv},
+  langid = {english},
+  keywords = {Computer Science - Mathematical Software},
+  file = {/Users/niru8088/Zotero/storage/NKRNW77S/Revels et al. - 2016 - Forward-Mode Automatic Differentiation in Julia.pdf}
+}
+
+@misc{RummelMessengerBeckerEtAl2025arXiv250208881b,
+  title = {{{WENDy}} for {{Nonlinear-in-Parameters ODEs}}},
+  author = {Rummel, Nic and Messenger, Daniel A. and Becker, Stephen and Dukic, Vanja and Bortz, David M.},
+  year = 2025,
+  month = oct,
+  number = {arXiv:2502.08881},
+  eprint = {2502.08881},
+  primaryclass = {cs},
+  publisher = {arXiv},
+  doi = {10.48550/arXiv.2502.08881},
+  urldate = {2026-02-13},
+  abstract = {The Weak-form Estimation of Non-linear Dynamics (WENDy) framework is a recently developed approach for parameter estimation and inference of systems of ordinary differential equations (ODEs). Prior work demonstrated WENDy to be robust, computationally efficient, and accurate, but only works for ODEs which are linear-in-parameters. In this work, we derive a novel extension to accommodate systems of a more general class of ODEs that are nonlinear-in-parameters. Our new WENDy-MLE algorithm approximates a maximum likelihood estimator via local non-convex optimization methods. This is made possible by the availability of analytic expressions for the likelihood function and its first and second order derivatives. WENDy-MLE has better accuracy, a substantially larger domain of convergence, and is often faster than other weak form methods and the conventional output error least squares method. Moreover, we extend the framework to accommodate data corrupted by multiplicative log-normal noise. The WENDy.jl algorithm is efficiently implemented in Julia. In order to demonstrate the practical benefits of our approach, we present extensive numerical results comparing our method, other weak form methods, and output error least squares on a suite of benchmark systems of ODEs in terms of accuracy, precision, bias, and coverage.},
+  archiveprefix = {arXiv},
+  keywords = {Computer Science - Machine Learning,Statistics - Machine Learning,Statistics - Methodology},
+  file = {/Users/niru8088/Zotero/storage/NN85ABI4/Rummel et al. - 2025 - WENDy for Nonlinear-in-Parameters ODEs.pdf;/Users/niru8088/Zotero/storage/LKL7MD9J/2502.html}
+}
+
+@misc{TranBortz2025arXiv250703206a,
+  title = {Weak {{Form Scientific Machine Learning}}: {{Test Function Construction}} for {{System Identification}}},
+  shorttitle = {Weak {{Form Scientific Machine Learning}}},
+  author = {Tran, April and Bortz, David},
+  year = 2025,
+  month = jul,
+  number = {arXiv:2507.03206},
+  eprint = {2507.03206},
+  primaryclass = {math},
+  publisher = {arXiv},
+  doi = {10.48550/arXiv.2507.03206},
+  urldate = {2025-10-06},
+  abstract = {Weak form Scientific Machine Learning (WSciML) is a recently developed framework for data-driven modeling and scientific discovery. It leverages the weak form of equation error residuals to provide enhanced noise robustness in system identification via convolving model equations with test functions, reformulating the problem to avoid direct differentiation of data. The performance, however, relies on wisely choosing a set of compactly supported test functions. In this work, we mathematically motivate a novel data-driven method for constructing Single-scale-Local reference functions for creating the set of test functions. Our approach numerically approximates the integration error introduced by the quadrature and identifies the support size for which the error is minimal, without requiring access to the model parameter values. Through numerical experiments across various models, noise levels, and temporal resolutions, we demonstrate that the selected supports consistently align with regions of minimal parameter estimation error. We also compare the proposed method against the strategy for constructing Multi-scale-Global (and orthogonal) test functions introduced in our prior work, demonstrating the improved computational efficiency.},
+  archiveprefix = {arXiv},
+  keywords = {Computer Science - Machine Learning,Computer Science - Numerical Analysis,Mathematics - Numerical Analysis},
+  file = {/Users/niru8088/Zotero/storage/YGL2RH97/Tran and Bortz - 2025 - Weak Form Scientific Machine Learning Test Function Construction for System Identification.pdf;/Users/niru8088/Zotero/storage/SRVU93M8/2507.html}
+}
+
+@article{TranHeMessengerEtAl2024ComputMethodsApplMechEng,
+  title = {Weak-{{Form Latent Space Dynamics Identification}}},
+  author = {Tran, April and He, Xiaolong and Messenger, Daniel A. and Choi, Youngsoo and Bortz, David M.},
+  year = 2024,
+  month = jul,
+  journal = {Computer Methods in Applied Mechanics and Engineering},
+  volume = {427},
+  pages = {116998},
+  doi = {10.1016/j.cma.2024.116998},
+  abstract = {Recent work in data-driven modeling has demonstrated that a weak formulation of model equations enhances the noise robustness of a wide range of computational methods. In this paper, we demonstrate the power of the weak form to enhance the LaSDI (Latent Space Dynamics Identification) algorithm, a recently developed data-driven reduced order modeling technique.},
+  langid = {english},
+  keywords = {BonnevilleChap2024,Computer Science - Computational Engineering Finance and Science,Computer Science - Machine Learning,Electrical Engineering and Systems Science - Systems and Control,Mathematics - Numerical Analysis},
+  file = {/Users/niru8088/Zotero/storage/ZFWFDHGP/Tran et al. - 2024 - Weak-Form Latent Space Dynamics Identification.pdf}
+}

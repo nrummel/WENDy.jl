@@ -1,0 +1,84 @@
+\begin{thebibliography}{10}
+
+\bibitem{BezansonEdelmanKarpinskiEtAl2017SIAMRev}
+Jeff Bezanson, Alan Edelman, Stefan Karpinski, and Viral~B. Shah.
+Julia: {{A Fresh Approach}} to {{Numerical Computing}}.
+{\em SIAM Rev.}, 59(1):65--98, January 2017.
+\href{http://dx.doi.org/10.1137/141000671}{doi:10.1137/141000671}.
+
+\bibitem{BortzMessengerDukic2023BullMathBiol}
+David~M. Bortz, Daniel~A. Messenger, and Vanja Dukic.
+Direct {{Estimation}} of {{Parameters}} in {{ODE Models Using WENDy}}: {{Weak-form Estimation}} of {{Nonlinear Dynamics}}.
+{\em Bulletin of Mathematical Biology}, 85(110), 2023.
+\href{http://dx.doi.org/10.1007/S11538-023-01208-6}{doi:10.1007/S11538-023-01208-6}.
+
+\bibitem{GowdaMaCheliEtAl2021ACMCommunComputAlgebra}
+Shashi Gowda, Yingbo Ma, Alessandro Cheli, Maja Gw{\'o}{\'z}zd{\'z}, Viral~B. Shah, Alan Edelman, and Christopher Rackauckas.
+High-performance symbolic-numerics via multiple dispatch.
+{\em ACM Communications in Computer Algebra}, 55(3):92--96, September 2021.
+\href{http://dx.doi.org/10.1145/3511528.3511535}{doi:10.1145/3511528.3511535}.
+
+\bibitem{KMogensenNRiseth2018JOSS}
+Patrick K~Mogensen and Asbj{\o}rn N~Riseth.
+Optim: {{A}} mathematical optimization package for {{Julia}}.
+{\em JOSS}, 3(24):615, April 2018.
+\href{http://dx.doi.org/10.21105/joss.00615}{doi:10.21105/joss.00615}.
+
+\bibitem{MessengerBortz2021JComputPhys}
+Daniel~A. Messenger and David~M. Bortz.
+Weak {{SINDy For Partial Differential Equations}}.
+{\em Journal of Computational Physics}, 443:110525, October 2021.
+\href{http://dx.doi.org/10.1016/j.jcp.2021.110525}{doi:10.1016/j.jcp.2021.110525}.
+
+\bibitem{MessengerBortz2021MultiscaleModelSimul}
+Daniel~A. Messenger and David~M. Bortz.
+Weak {{SINDy}}: {{Galerkin-Based Data-Driven Model Selection}}.
+{\em Multiscale Modeling \& Simulation}, 19(3):1474--1497, 2021.
+\href{http://dx.doi.org/10.1137/20M1343166}{doi:10.1137/20M1343166}.
+
+\bibitem{MessengerTranDukicEtAl2024SIAMNews}
+Daniel~A. Messenger, April Tran, Vanja Dukic, and David~M. Bortz.
+The {{Weak Form Is Stronger Than You Think}}.
+{\em SIAM News}, 57(8), October 2024.
+
+\bibitem{Michael2026}
+Abbott Michael.
+Tullio.jl, February 2026.
+
+\bibitem{MigotOrbanSoaresSiqueira2024}
+Tangi Migot, Dominique Orban, and Abel Soares~Siqueira.
+{{JSOSolvers}}.jl: {{JuliaSmoothOptimizers}} optimization solvers.
+Zenodo, October 2024.
+\href{http://dx.doi.org/10.5281/ZENODO.3991143}{doi:10.5281/ZENODO.3991143}.
+
+\bibitem{PalHoltorfLarssonEtAl2024arXiv240316341}
+Avik Pal, Flemming Holtorf, Axel Larsson, Torkel Loman, Utkarsh, Frank Sch{\"a}efer, Qingyu Qu, Alan Edelman, and Chris Rackauckas.
+{{NonlinearSolve}}.jl: {{High-Performance}} and {{Robust Solvers}} for {{Systems}} of {{Nonlinear Equations}} in {{Julia}}.
+{\em arXiv:2403.16341}, March 2024.
+2403.16341.
+
+\bibitem{RackauckasNie2017JORS}
+Christopher Rackauckas and Qing Nie.
+{{DifferentialEquations}}.jl -- {{A Performant}} and {{Feature-Rich Ecosystem}} for {{Solving Differential Equations}} in {{Julia}}.
+{\em JORS}, 5(1):15, May 2017.
+\href{http://dx.doi.org/10.5334/jors.151}{doi:10.5334/jors.151}.
+
+\bibitem{RevelsLubinPapamarkou2016arXiv160707892}
+Jarrett Revels, Miles Lubin, and Theodore Papamarkou.
+Forward-{{Mode Automatic Differentiation}} in {{Julia}}.
+{\em arXiv:1607.07892}, July 2016.
+1607.07892.
+
+\bibitem{RummelMessengerBeckerEtAl2025arXiv250208881b}
+Nic Rummel, Daniel~A. Messenger, Stephen Becker, Vanja Dukic, and David~M. Bortz.
+{{WENDy}} for {{Nonlinear-in-Parameters ODEs}}, October 2025.
+\href{http://dx.doi.org/10.48550/arXiv.2502.08881}{doi:10.48550/arXiv.2502.08881}.
+2502.08881.
+
+\bibitem{TranHeMessengerEtAl2024ComputMethodsApplMechEng}
+April Tran, Xiaolong He, Daniel~A. Messenger, Youngsoo Choi, and David~M. Bortz.
+Weak-{{Form Latent Space Dynamics Identification}}.
+{\em Computer Methods in Applied Mechanics and Engineering}, 427:116998, July 2024.
+\href{http://dx.doi.org/10.1016/j.cma.2024.116998}{doi:10.1016/j.cma.2024.116998}.
+
+\end{thebibliography}

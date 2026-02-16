@@ -1,0 +1,29 @@
+title: "WENDy.jl"
+keywords:
+  - Julia
+  - Parameter Estimation
+  - Optimization
+  - Differential Equations
+authors:
+  - name: Nicholas Rummel
+    orcid: 0009-0005-2943-6953
+    affiliation: 1
+  - name: Stephen Becker
+    orcid: 0009-0005-2943-6953
+    affiliation: 1
+  - name: Daniel Messenger
+    orcid: 0000-0002-8275-7888
+    affliation: 2
+  - name: Vanja Dukic
+    orcid: 0000-0002-0348-0834
+    affiliation: 1
+  - name: David M. Bortz
+    orcid: 0000-0003-1163-7317
+    affiliation: 1
+affiliations:
+  - name: University of Colorado Boulder
+    index: 1
+  - name: Los Alamos National Laboratory
+    index: 2
+date: 9 January 2026
+bibliography: ref.bib
