@@ -83,23 +83,23 @@ The weak form of a differential equation is obtained by taking the inner product
     - \langle\dot{\testFun}, \stateVar \rangle  = \langle \testFun, \mathbf{f}(\stateVar,\timeVec,\params) \rangle.
 \end{equation}
 
-Given data on a uniform grid $\bigl\{(\mathrm{t}_m, \mathrm{u}_m)\bigr\}_{m=0}^M$ and selecting specific test functions $\{\testFun\}_{k=1}^K$, the inner products can be approximated through quadrature. This can be written succinctly by introducing a data matrix $\stateMat \in \mathbb{R}^{(M+1)\times D}$, a test function matrix $\testFunMat \in \mathbb{R}^{K\times (M+1)}$, the vector valued function $\mathbf{F}: \mathbb{R}^{(M+1)\times D}\times \mathbb{R}^{M+1} \times \mathbb{R}^J \rightarrow \mathbb{R}^{(M+1)\times D}$ which naturally extends to $\mathbf{f}$, and a quadrature matrix $\quadMat\in \mathbb{R}^{(M+1)\times (M+1)}$
+Given data on a uniform grid $\bigl\{(\mathrm{t}_m, \mathrm{u}_m)\bigr\}_{m=0}^M$ and selecting specific test functions $\{\testFun\}_{k=1}^K$, the inner products can be approximated through quadrature. This can be written succinctly by introducing a data matrix $\stateMat \in \mathbb{R}^{(M+1)\times D}$, a test function matrix $\testFunMat \in \mathbb{R}^{K\times (M+1)}$, the matrix-valued function $\mathbf{F}: \mathbb{R}^{(M+1)\times D}\times \mathbb{R}^{M+1} \times \mathbb{R}^J \rightarrow \mathbb{R}^{(M+1)\times D}$ which naturally extends to $\mathbf{f}$, and a quadrature matrix $\quadMat\in \mathbb{R}^{(M+1)\times (M+1)}$
 \begin{equation}\label{eq:weakFormDisc}
     - \testFunMat \quadMat \stateMat \approx \dot{\testFunMat} \quadMat \mathbf{F}(\stateMat,\timeVec,\params) .
 \end{equation}
 Moving all the parameters to the right hand side, we can define an expression for the \emph{weak residual} 
 \begin{equation}\label{eq:wres}
-    \mathbf{r}(\params) := \vecOp\left[\dot{\testFunMat} \quadMat \mathbf{F}(\stateMat,\timeVec,\params) + \testFunMat \quadMat \stateMat\right] \in \mathbb{R}^{(M+1)D}
+    \mathbf{r}(\params) := \vecOp\left[\dot{\testFunMat} \quadMat \mathbf{F}(\stateMat,\timeVec,\params) + \testFunMat \quadMat \stateMat\right] \in \mathbb{R}^{KD}
 \end{equation}
 where $\vecOp$ vectorizes the matrix expression on the right hand side of \cref{eq:weakFormDisc}. Because the quadrature  \emph{approximates} the underlying integrals, and the data has been \emph{corrupted by noise}, one can expect $r$ to be \emph{small}, albeit not zero,  when evaluated at the true parameters.
 
 By leveraging a known distribution of additive Gaussian noise and a linearization, one can obtain that the scaled weak residual is approximately distributed as a Gaussian 
 \begin{equation}\label{eq:weakResDist}
-   S(\params)^{-\nicefrac{1}{2}} r(\params) \stackrel{approx}{\sim} \mathcal{N}(0, I).
+   \mathbf{S}(\params)^{-\nicefrac{1}{2}} \mathbf{r}(\params) \stackrel{approx}{\sim} \mathcal{N}(0, I).
 \end{equation}
-where the specific form of the covariance matrix $S$ and more details can be found in \citep{RummelMessengerBeckerEtAl2025arXiv250208881b}. A similar expression is obtained in the case of multiplicative Log-Normal noise. The WENDy-MLE algorithm leverages \cref{eq:weakResDist} to obtain the approximate maximum likelihood estimator (A-MLE) via optimization
+where the specific form of the covariance matrix $\mathbf{S}$ and more details can be found in \citep{RummelMessengerBeckerEtAl2025arXiv250208881b}. A similar expression is obtained in the case of multiplicative Log-Normal noise. The WENDy-MLE algorithm leverages \cref{eq:weakResDist} to obtain the approximate maximum likelihood estimator (A-MLE) via optimization
 \begin{equation}\label{eq:mle}
-    \hat{\params} = \underset{\params}{\argmin}\Bigl( \logdet\bigl(S(\params)\bigr) + r(\params)^\top S(\params)^{-1}r(\params)\Bigr).
+    \hat{\params} = \underset{\params}{\argmin}\Bigl( \logdet\bigl(\mathbf{S}(\params)\bigr) + \mathbf{r}(\params)^\top \mathbf{S}(\params)^{-1}\mathbf{r}(\params)\Bigr).
 \end{equation}
 Julia makes it possible to obtain first and second order derivatives of the objective function prior to performing optimization through symbolic computations and our custom implementation. This allows for efficient use of second order routines such as Trust Region methods. 
 
