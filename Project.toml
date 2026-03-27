@@ -1,7 +1,7 @@
 name = "WENDy"
 uuid = "d405da13-e5c5-4ff7-999e-699e6f93cd5d"
-authors = ["Nicholas Rummel"]
 version = "1.0.3"
+authors = ["Nicholas Rummel"]
 
 [deps]
 AdaptiveRegularization = "79adfba0-1eab-50d9-8528-0589417a2bfe"
@@ -40,6 +40,6 @@ OrdinaryDiffEq = "~6.91"
 Printf = "~1.11"
 Random = "~1.11"
 Statistics = "~1.11"
-Symbolics = "~6.28"
+Symbolics = "~6.28, 7"
 Tullio = "~0.3"
 julia = "1.8"
