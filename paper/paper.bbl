@@ -8,12 +8,14 @@ Julia: {{A Fresh Approach}} to {{Numerical Computing}}.
 
 \bibitem{BortzMessengerDukic2023BullMathBiol}
 David~M. Bortz, Daniel~A. Messenger, and Vanja Dukic.
-Direct {{Estimation}} of {{Parameters}} in {{ODE Models Using WENDy}}: {{Weak-form Estimation}} of {{Nonlinear Dynamics}}.
+Direct {{Estimation}} of {{Parameters}} in {{ODE Models Using WENDy}}:
+  {{Weak-form Estimation}} of {{Nonlinear Dynamics}}.
 {\em Bulletin of Mathematical Biology}, 85(110), 2023.
 \href{http://dx.doi.org/10.1007/S11538-023-01208-6}{doi:10.1007/S11538-023-01208-6}.
 
 \bibitem{GowdaMaCheliEtAl2021ACMCommunComputAlgebra}
-Shashi Gowda, Yingbo Ma, Alessandro Cheli, Maja Gw{\'o}{\'z}zd{\'z}, Viral~B. Shah, Alan Edelman, and Christopher Rackauckas.
+Shashi Gowda, Yingbo Ma, Alessandro Cheli, Maja Gw{\'o}{\'z}zd{\'z}, Viral~B.
+  Shah, Alan Edelman, and Christopher Rackauckas.
 High-performance symbolic-numerics via multiple dispatch.
 {\em ACM Communications in Computer Algebra}, 55(3):92--96, September 2021.
 \href{http://dx.doi.org/10.1145/3511528.3511535}{doi:10.1145/3511528.3511535}.
@@ -52,14 +54,17 @@ Zenodo, October 2024.
 \href{http://dx.doi.org/10.5281/ZENODO.3991143}{doi:10.5281/ZENODO.3991143}.
 
 \bibitem{PalHoltorfLarssonEtAl2024arXiv240316341}
-Avik Pal, Flemming Holtorf, Axel Larsson, Torkel Loman, Utkarsh, Frank Sch{\"a}efer, Qingyu Qu, Alan Edelman, and Chris Rackauckas.
-{{NonlinearSolve}}.jl: {{High-Performance}} and {{Robust Solvers}} for {{Systems}} of {{Nonlinear Equations}} in {{Julia}}.
+Avik Pal, Flemming Holtorf, Axel Larsson, Torkel Loman, Utkarsh, Frank
+  Sch{\"a}efer, Qingyu Qu, Alan Edelman, and Chris Rackauckas.
+{{NonlinearSolve}}.jl: {{High-Performance}} and {{Robust Solvers}} for
+  {{Systems}} of {{Nonlinear Equations}} in {{Julia}}.
 {\em arXiv:2403.16341}, March 2024.
 2403.16341.
 
 \bibitem{RackauckasNie2017JORS}
 Christopher Rackauckas and Qing Nie.
-{{DifferentialEquations}}.jl -- {{A Performant}} and {{Feature-Rich Ecosystem}} for {{Solving Differential Equations}} in {{Julia}}.
+{{DifferentialEquations}}.jl -- {{A Performant}} and {{Feature-Rich Ecosystem}}
+  for {{Solving Differential Equations}} in {{Julia}}.
 {\em JORS}, 5(1):15, May 2017.
 \href{http://dx.doi.org/10.5334/jors.151}{doi:10.5334/jors.151}.
 
@@ -70,15 +75,18 @@ Forward-{{Mode Automatic Differentiation}} in {{Julia}}.
 1607.07892.
 
 \bibitem{RummelMessengerBeckerEtAl2025arXiv250208881b}
-Nic Rummel, Daniel~A. Messenger, Stephen Becker, Vanja Dukic, and David~M. Bortz.
+Nic Rummel, Daniel~A. Messenger, Stephen Becker, Vanja Dukic, and David~M.
+  Bortz.
 {{WENDy}} for {{Nonlinear-in-Parameters ODEs}}, October 2025.
 \href{http://dx.doi.org/10.48550/arXiv.2502.08881}{doi:10.48550/arXiv.2502.08881}.
 2502.08881.
 
 \bibitem{TranHeMessengerEtAl2024ComputMethodsApplMechEng}
-April Tran, Xiaolong He, Daniel~A. Messenger, Youngsoo Choi, and David~M. Bortz.
+April Tran, Xiaolong He, Daniel~A. Messenger, Youngsoo Choi, and David~M.
+  Bortz.
 Weak-{{Form Latent Space Dynamics Identification}}.
-{\em Computer Methods in Applied Mechanics and Engineering}, 427:116998, July 2024.
+{\em Computer Methods in Applied Mechanics and Engineering}, 427:116998, July
+  2024.
 \href{http://dx.doi.org/10.1016/j.cma.2024.116998}{doi:10.1016/j.cma.2024.116998}.
 
 \end{thebibliography}

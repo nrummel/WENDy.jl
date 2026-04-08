@@ -60,17 +60,17 @@ The Weak-form Estimation of Non-linear Dynamics (WENDy) framework is a recently 
 
 The code was designed to provide a mostly automated process; this facilitates an application friendly interface. We utilize symbolic programming to obtain an analytic expressions for the likelihood function and its first and second order derivatives. Moreover, unlike the prior algorithms which focus only on additive Gaussian noise, we extend the framework to accommodate  data corrupted by either multiplicative log-normal noise or additive Gaussian noise. The \href{https://github.com/nrummel/WENDy.jl}{WENDy.jl} package efficiently and accessibly implements many weak form methods that were previously unavailable to the Julia community. 
 
-\section{Statement of Need}
+\section{Statement of need}
 Julia has a bountiful ecosystem of numerical solvers that can directly solve ordinary differential equations \citep{BezansonEdelmanKarpinskiEtAl2017SIAMRev,RackauckasNie2017JORS}. Furthermore, considerable effort has been made to facilitate automatic differentiation \citep{RevelsLubinPapamarkou2016arXiv160707892}. This supports downstream optimization routines that can be used for control, optimal design, and, more pertinently to this work, parameter estimation. However, in spite of these efficiencies, using forward simulation at every iteration of an optimization routine can rapidly increase the computational cost, especially in high-dimensional or stiff systems. For chaotic systems, using forward simulation also can introduce numerical instability. In contrast, weak form methods do not suffer in this way. Thus, to tackle more challenging systems, alternative approaches such as weak form methods become attractive. These methods do not rely on forward simulation of the differential equations to accomplish estimation. Instead, by optimizing the \emph{equation error} rather than the \emph{output error}, weak form methods efficiently optimize the parameters irrespectively of the challenge of forward simulation of the system.
 
-\section{Research Impact Statement}
+\section{Research impact statement}
 
 Interest in weak form methods have been revitalized in the last decade \citep{MessengerTranDukicEtAl2024SIAMNews}. These methods are used in broader applications beyond parameter estimation; WSINDy uses sparse regularization to simultaneously identify the governing equations of ordinary differential equations \citep{MessengerBortz2021MultiscaleModelSimul} and partial differential equations \citep{MessengerBortz2021JComputPhys} that are linear in parameters. Furthermore, WSINDy has been used in conjunction with dimensionality reduction techniques to effectively identify reduced order models \citep{TranHeMessengerEtAl2024ComputMethodsApplMechEng}.
 WENDy.jl brings many existing weak form methods \citep{BortzMessengerDukic2023BullMathBiol} into the Julia ecosystem as well as integrates novel approaches for systems that are non-linear in parameters and have an error structure beyond simple additive {\it iid}  Gaussian noise. 
 
 Specifically, in this work we construct an analytic expression for an approximation of a likelihood function, build Julia functions for the likelihood, its first, and its second order derivatives with symbolic programming, and then perform second order optimization to estimate parameters. All algorithms were extended to accommodate systems of ordinary differential equations that are both linear or nonlinear in parameters. In the linear in parameters case, we leverage computational advantages where available. Also, the code effectively handles data that has been corrupted by both additive Gaussian and multiplicative LogNormal noise.
 
-\section{Mathematics}
+\section{State of the field}
 
 The underlying purpose of our approach is to obtain an estimator for unknown parameters $\params \in \mathbb{R}^J$ in an ordinary differential equation of the form 
 \begin{equation} \label{eq:ode}
@@ -103,7 +103,7 @@ where the specific form of the covariance matrix $\mathbf{S}$ and more details c
 \end{equation}
 Julia makes it possible to obtain first and second order derivatives of the objective function prior to performing optimization through symbolic computations and our custom implementation. This allows for efficient use of second order routines such as Trust Region methods. 
 
-\section{Software Design}
+\section{Software design}
 
 \href{https://github.com/nrummel/WENDy.jl}{WENDy.jl} \citep{RummelMessengerBeckerEtAl2025arXiv250208881b} is the first implementation of these weak form methods in Julia. The package utilizes  other Julia packages such as \href{https://github.com/mcabbott/Tullio.jl}{Tullio.jl} \citep{Michael2026},  \href{https://github.com/JuliaSymbolics/Symbolics.jl}{Symbolics.jl} \citep{GowdaMaCheliEtAl2021ACMCommunComputAlgebra}, \href{https://github.com/SciML/Optim.jl}{Optim.jl} \citep{KMogensenNRiseth2018JOSS}, \href{https://github.com/JuliaSmoothOptimizers/JSOSolvers.jl}{JSOSolvers.jl} \citep{MigotOrbanSoaresSiqueira2024}, and \href{https://github.com/SciML/NonlinearSolve.jl}{NonlinearSolve.jl} \citep{PalHoltorfLarssonEtAl2024arXiv240316341} to aid in custom implementation of novel mathematical algorithms. The code was designed so that users can simply define a struct
 % \vspace{.5cm}

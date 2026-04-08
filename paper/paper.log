@@ -1,4 +1,4 @@
-This is pdfTeX, Version 3.141592653-2.6-1.40.26 (TeX Live 2024) (preloaded format=pdflatex 2024.8.28)  25 FEB 2026 17:08
+This is pdfTeX, Version 3.141592653-2.6-1.40.26 (TeX Live 2024) (preloaded format=pdflatex 2024.8.28)  8 APR 2026 14:59
 entering extended mode
  restricted \write18 enabled.
  file:line:error style messages enabled.
@@ -1148,92 +1148,92 @@ Underfull \hbox (badness 1728) in paragraph at lines 4--8
  []
 
 
-Underfull \hbox (badness 1552) in paragraph at lines 10--14
+Underfull \hbox (badness 1552) in paragraph at lines 10--15
 []\T1/ptm/m/n/9 David M. Bortz, Daniel A. Mes-sen-ger, and Vanja Du-
  []
 
 
-Underfull \hbox (badness 2644) in paragraph at lines 10--14
+Underfull \hbox (badness 2644) in paragraph at lines 10--15
 \T1/ptm/m/n/9 ing WENDy: Weak-form Es-ti-ma-tion of Non-lin-ear Dy-
  []
 
 
-Underfull \hbox (badness 6978) in paragraph at lines 16--20
+Underfull \hbox (badness 6978) in paragraph at lines 17--22
 []\T1/ptm/m/n/9 Shashi Gowda, Yingbo Ma, Alessan-dro Cheli, Maja
  []
 
 
-Underfull \hbox (badness 2512) in paragraph at lines 16--20
+Underfull \hbox (badness 2512) in paragraph at lines 17--22
 \T1/ptm/m/n/9 Gwó¹zd¹, Vi-ral B. Shah, Alan Edel-man, and Christo-
  []
 
 
-Underfull \hbox (badness 7308) in paragraph at lines 16--20
+Underfull \hbox (badness 7308) in paragraph at lines 17--22
 \T1/ptm/m/n/9 pher Rack-auckas. High-performance symbolic-numerics
  []
 
 
-Underfull \hbox (badness 10000) in paragraph at lines 16--20
+Underfull \hbox (badness 10000) in paragraph at lines 17--22
 \T1/ptm/m/n/9 via mul-ti-ple dis-patch. \T1/ptm/m/it/9 ACM Com-mu-ni-ca-tions in
  []
 
 
-Underfull \hbox (badness 10000) in paragraph at lines 16--20
+Underfull \hbox (badness 10000) in paragraph at lines 17--22
 \T1/ptm/m/it/9 Com-puter Al-ge-bra\T1/ptm/m/n/9 , 55(3):92--96, Septem-ber 2021.
  []
 
 
-Underfull \hbox (badness 10000) in paragraph at lines 28--32
+Underfull \hbox (badness 10000) in paragraph at lines 30--34
 []\T1/ptm/m/n/9 Daniel A. Mes-sen-ger and David M. Bortz. Weak
  []
 
 
-Underfull \hbox (badness 5519) in paragraph at lines 28--32
+Underfull \hbox (badness 5519) in paragraph at lines 30--34
 \T1/ptm/m/n/9 SINDy For Par-tial Dif-fer-en-tial Equa-tions. \T1/ptm/m/it/9 Jour-nal of
  []
 
 
-Underfull \hbox (badness 10000) in paragraph at lines 28--32
+Underfull \hbox (badness 10000) in paragraph at lines 30--34
 \T1/ptm/m/it/9 Com-pu-ta-tional Physics\T1/ptm/m/n/9 , 443:110525, Oc-to-ber 2021.
  []
 
 
-Underfull \hbox (badness 10000) in paragraph at lines 34--38
+Underfull \hbox (badness 10000) in paragraph at lines 36--40
 \T1/ptm/m/n/9 Galerkin-Based Data-Driven Model Se-lec-tion. \T1/ptm/m/it/9 Mul-ti-
  []
 
 
-Underfull \hbox (badness 3895) in paragraph at lines 34--38
+Underfull \hbox (badness 3895) in paragraph at lines 36--40
 \T1/ptm/m/it/9 scale Mod-el-ing & Sim-u-la-tion\T1/ptm/m/n/9 , 19(3):1474--1497, 2021.
  []
 
 
-Underfull \hbox (badness 1337) in paragraph at lines 67--71
+Underfull \hbox (badness 1337) in paragraph at lines 72--76
 []\T1/ptm/m/n/9 Jarrett Rev-els, Miles Lu-bin, and Theodore Pa-pa-markou.
  []
 
 
-Underfull \hbox (badness 10000) in paragraph at lines 67--71
+Underfull \hbox (badness 10000) in paragraph at lines 72--76
 \T1/ptm/m/n/9 Forward-Mode Au-to-matic Dif-fer-en-ti-a-tion in Ju-lia.
  []
 
 
-Underfull \hbox (badness 5446) in paragraph at lines 73--77
+Underfull \hbox (badness 5446) in paragraph at lines 78--83
 []\T1/ptm/m/n/9 Nic Rum-mel, Daniel A. Mes-sen-ger, Stephen Becker,
  []
 
 
-Underfull \hbox (badness 10000) in paragraph at lines 73--77
+Underfull \hbox (badness 10000) in paragraph at lines 78--83
 \T1/ptm/m/n/9 Vanja Du-kic, and David M. Bortz. WENDy for
  []
 
 
-Underfull \hbox (badness 10000) in paragraph at lines 73--77
+Underfull \hbox (badness 10000) in paragraph at lines 78--83
 \T1/ptm/m/n/9 Nonlinear-in-Parameters ODEs, Oc-to-ber 2025.
  []
 
 
-Underfull \hbox (badness 7256) in paragraph at lines 79--83
+Underfull \hbox (badness 7256) in paragraph at lines 85--91
 \T1/ptm/m/n/9 soo Choi, and David M. Bortz. Weak-Form La-tent
  []
 
@@ -1250,8 +1250,18 @@ Underfull \hbox (badness 10000) has occurred while \output is active
 LaTeX2e <2023-11-01> patch level 1
 L3 programming layer <2024-02-20>
  ***********
-Package rerunfilecheck Info: File `paper.out' has not changed.
-(rerunfilecheck)             Checksum: C41A52BF40E0EEBD32C5D317BE07B692;1013.
+
+
+LaTeX Warning: Label(s) may have changed. Rerun to get cross-references right.
+
+
+Package rerunfilecheck Warning: File `paper.out' has changed.
+(rerunfilecheck)                Rerun to get outlines right
+(rerunfilecheck)                or use package `bookmark'.
+
+Package rerunfilecheck Info: Checksums for `paper.out':
+(rerunfilecheck)             Before: C41A52BF40E0EEBD32C5D317BE07B692;1013
+(rerunfilecheck)             After:  053C8ED2328601B422FCCFCC2D1FCC64;1057.
  ) 
 Here is how much of TeX's memory you used:
  20327 strings out of 474116
@@ -1262,7 +1272,7 @@ Here is how much of TeX's memory you used:
  1141 hyphenation exceptions out of 8191
  90i,12n,93p,1341b,4206s stack positions out of 10000i,1000n,20000p,200000b,200000s
 </usr/local/texlive/2024/texmf-dist/fonts/type1/public/amsfonts/cm/cmbx6.pfb></usr/local/texlive/2024/texmf-dist/fonts/type1/public/amsfonts/cm/cmbx9.pfb></usr/local/texlive/2024/texmf-dist/fonts/type1/public/amsfonts/cmextra/cmex9.pfb></usr/local/texlive/2024/texmf-dist/fonts/type1/public/amsfonts/cm/cmmi6.pfb></usr/local/texlive/2024/texmf-dist/fonts/type1/public/amsfonts/cm/cmmi9.pfb></usr/local/texlive/2024/texmf-dist/fonts/type1/public/amsfonts/cmextra/cmmib9.pfb></usr/local/texlive/2024/texmf-dist/fonts/type1/public/amsfonts/cm/cmr5.pfb></usr/local/texlive/2024/texmf-dist/fonts/type1/public/amsfonts/cm/cmr6.pfb></usr/local/texlive/2024/texmf-dist/fonts/type1/public/amsfonts/cm/cmr9.pfb></usr/local/texlive/2024/texmf-dist/fonts/type1/public/amsfonts/cm/cmsy10.pfb></usr/local/texlive/2024/texmf-dist/fonts/type1/public/amsfonts/latxfont/lcircle1.pfb></usr/local/texlive/2024/texmf-dist/fonts/type1/public/amsfonts/symbols/msbm10.pfb></usr/local/texlive/2024/texmf-dist/fonts/type1/urw/courier/ucrr8a.pfb></usr/local/texlive/2024/texmf-dist/fonts/type1/urw/times/utmb8a.pfb></usr/local/texlive/2024/texmf-dist/fonts/type1/urw/times/utmr8a.pfb></usr/local/texlive/2024/texmf-dist/fonts/type1/urw/times/utmri8a.pfb>
-Output written on paper.pdf (3 pages, 217448 bytes).
+Output written on paper.pdf (3 pages, 217397 bytes).
 PDF statistics:
  240 PDF objects out of 1000 (max. 8388607)
  195 compressed objects within 2 object streams
