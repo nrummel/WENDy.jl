@@ -204,7 +204,7 @@ struct WENDyProblem{lip, DistType} <: ParameterEstimationProblem
     J::Int # number of parameters (to be estimated)
     Mp1::Int # (Mp1+1) number of data points in time 
     K::Int # number of test functions 
-    constraints::Union{Nothing,AbstractVector{Tuple{<:Real,<:Real}}}
+    constraints::Union{Nothing,AbstractVector{<:Tuple{<:Real,<:Real}}}
     priors::Union{Nothing,AbstractVector{<:Distribution}}
     data::WENDyInternals{lip, DistType}
     # Cost functions 

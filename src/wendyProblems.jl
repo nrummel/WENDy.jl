@@ -49,7 +49,7 @@ function WENDyProblem(
     J::Int;
     linearInParameters::Val{lip}=Val(false), 
     noiseDist::Val{DistType}=Val(Normal), params::WENDyParameters=WENDyParameters(),
-    constraints::Union{Nothing,AbstractVector{Tuple{<:Real,<:Real}}}=nothing,
+    constraints::Union{Nothing,AbstractVector{<:Tuple{<:Real,<:Real}}}=nothing,
     priors::Union{Nothing,AbstractVector{<:Distribution}}=nothing,
     ll::LogLevel=Warn
 ) where {lip, DistType<:Distribution}
