@@ -85,7 +85,7 @@ The weak form of a differential equation is obtained by taking the inner product
 
 Given data on a uniform grid $\bigl\{(\mathrm{t}_m, \mathrm{u}_m)\bigr\}_{m=0}^M$ and selecting specific test functions $\{\testFun\}_{k=1}^K$, the inner products can be approximated through quadrature. This can be written succinctly by introducing a data matrix $\stateMat \in \mathbb{R}^{(M+1)\times D}$, a test function matrix $\testFunMat \in \mathbb{R}^{K\times (M+1)}$, the matrix-valued function $\mathbf{F}: \mathbb{R}^{(M+1)\times D}\times \mathbb{R}^{M+1} \times \mathbb{R}^J \rightarrow \mathbb{R}^{(M+1)\times D}$ which naturally extends to $\mathbf{f}$, and a quadrature matrix $\quadMat\in \mathbb{R}^{(M+1)\times (M+1)}$
 \begin{equation}\label{eq:weakFormDisc}
-    - \testFunMat \quadMat \stateMat \approx \dot{\testFunMat} \quadMat \mathbf{F}(\stateMat,\timeVec,\params) .
+    - \dot{\testFunMat} \quadMat \stateMat \approx \testFunMat \quadMat \mathbf{F}(\stateMat,\timeVec,\params) .
 \end{equation}
 Moving all the parameters to the right hand side, we can define an expression for the \emph{weak residual} 
 \begin{equation}\label{eq:wres}
@@ -146,7 +146,7 @@ Data is observed on a uniform grid $\bigl\{(m\Delta t, \mathrm{u}_m) \bigr\}_{m=
 \begin{equation*}
     \mathrm{u}_m = u(t_m) \eta_m, \; \forall m \in \{0,1,\cdots, M\}
 \end{equation*}
-where $\log(\eta_m) \stackrel{iid}{\sim} N(0, \rho^2)$, and the true parameters are $\params^* = [2.25, 7.0]^\top$. For the experiment shown below, the hyperparameters are set to $T = 10, M = 100, \Delta t = \nicefrac{1}{10}, \rho = \nicefrac{1}{2}$. One instance of the data, the estimated trajectory, and the true trajectory is plotted in \cref{fig:LogisticGrowth_TrajectoryWithData}.
+where $\log(\eta_m) \stackrel{iid}{\sim} N(0, \rho^2)$, and the true parameters are $\params^* = [2.25, 7.0]^\top$. For the experiment shown below, the hyperparameters are set to $T = 10, M = 100, \Delta t = \nicefrac{1}{10}, \rho = \nicefrac{1}{5}$. One instance of the data, the estimated trajectory, and the true trajectory is plotted in \cref{fig:LogisticGrowth_TrajectoryWithData}.
 
 \begin{figure}[ht!]
     \centering
@@ -154,7 +154,8 @@ where $\log(\eta_m) \stackrel{iid}{\sim} N(0, \rho^2)$, and the true parameters 
     \caption{WENDy.jl estimates the parameters given data corrupted with multiplicative noise. The observation data is shown with blue markers, the state's trajectory with the estimated parameters is shown with gold line, and the state's trajectory with the true parameters is shown with the dashed black line.}
     \label{fig:LogisticGrowth_TrajectoryWithData}
 \end{figure}
-WENDy.jl obtains the A-MLE from an initial guess of $\params_0 = [2.72, 3.67]^\top$ and performing optimization of \cref{eq:mle}. In this example, our estimated parameters have a coefficient relative error of 12\% and a relative average forward solve error of 4.1\%. As a quick point of reference, a standard output error least squares algorithm resulted in a coefficient relative error  14\% and a relative average forward solve error of 5.6\%. For more extensive examples, comparisons, and numerical results see \citep{RummelMessengerBeckerEtAl2025arXiv250208881b}.
+\input{LogisticGrowthExample.tex}
+To generate these results, see \emph{juliaCon2026\_extendAbstractResults.jl} in the Git repository. For more extensive examples, comparisons, and numerical results see \citep{RummelMessengerBeckerEtAl2025arXiv250208881b}.
 % Figures can be included like this:
 % ![Caption for example figure.\label{fig:example}](figure.png)
 % and referenced from text using \autoref{fig:example}.
