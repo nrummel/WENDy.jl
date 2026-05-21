@@ -22,7 +22,7 @@ J      = length(pstar)
 p₀     = [3, 3] + randn(J) 
 @info "p* = $pstar"
 @info "p₀ = $p₀"
-f!(du, u, w, t) = du[1] = w[1] * u[1] - w[2] * u[1]^2
+f!(du, u, p, t) = du[1] = p[1] * u[1] - p[2] * u[1]^2
 params  = WENDyParameters(;Kmax=1000)
 Mp1     = 101
 tt      = range(tRng..., length=Mp1)
@@ -48,9 +48,9 @@ end
 # Output Error for comparison point
 @info "========================================================================="
 oeProb = WENDy.OutputErrorProblem(tt,U,f!, J)
-phat_OE = WENDy.solve(oeProb, p₀)
-u0hat_OE = phat_OE[J+1:end]
-phat_OE = phat_OE[1:J]
+puhat_OE = WENDy.solve(oeProb, p₀)
+u0hat_OE = puhat_OE[J+1:end]
+phat_OE = puhat_OE[1:J]
 @info "Output Error"
 relErr_OE = norm(phat_OE - pstar) / norm(pstar)
 @info @sprintf "  Relation Coefficient error %.2g" relErr_OE
