@@ -147,7 +147,7 @@ function irls(iter, p₀, params, trueIter=nothing; iterll=Warn, maxIt=1000, ret
                 Convergence Criterion met: 
                 reltol: $relResNorm < $reltol
             """
-            return return_wits ? (wn, n, hcat(p₀,wit) ) : (wn,n)
+            return return_wits ? (wn, n, hcat(p₀,wit) ) : wn
         elseif resNorm < abstol
             resit = resit[:,1:n] 
             wit = wit[:,1:n] 
@@ -155,36 +155,12 @@ function irls(iter, p₀, params, trueIter=nothing; iterll=Warn, maxIt=1000, ret
                 Convergence Criterion met: 
                 abstol: $resNorm < $abstol
             """
-            return return_wits ? (wn, n, hcat(p₀,wit)) : (wn,n)
+            return return_wits ? (wn, n, hcat(p₀,wit)) : wn
         end
         wnm1 = wn
     end
     @warn "Maxiteration met for IRLS"
-    return return_wits ? (wn, maxIt, hcat(p₀,wit)) : (wn,maxIt)
-end
-
-
-## BFGS 
-function bfgs(
-    costFun::FirstOrderCostFunction, p₀::AbstractVector{<:Real}, params::WENDyParameters; 
-    return_wits::Bool=false, kwargs...
-)
-    # Unpack optimization params
-    maxIt,reltol,abstol,timelimit = params.optimMaxiters, params.optimReltol, params.optimAbstol, params.optimTimelimit
-    # Call algorithm
-    J = length(p₀)
-    res = optimize(
-        costFun.f, costFun.∇f!, # f, g
-        p₀, LBFGS(), 
-        Optim_Options(
-            x_reltol=reltol, x_abstol=abstol, iterations=maxIt, time_limit=timelimit, 
-            store_trace=return_wits, extended_trace=return_wits, show_trace=true
-        )
-    )
-    # unpack results
-    what = res.minimizer
-    iter = res.iterations
-    return return_wits ? (what, iter, reduce(hcat, t.metadata["x"] for t in res.trace)) : what
+    return return_wits ? (wn, maxIt, hcat(p₀,wit)) : wn
 end
 
 ### Trust Region
@@ -212,7 +188,7 @@ function _trustRegion_unconstrained(
 end
 ## constrained
 function _trustRegion_constrained(
-    costFun::SecondOrderCostFunction, p₀::AbstractVector{<:Real}, params::WENDyParameters, constraints::AbstractVector{Tuple{<:Real,<:Real}}; 
+    costFun::SecondOrderCostFunction, p₀::AbstractVector{<:Real}, params::WENDyParameters, constraints::AbstractVector{<:Tuple{<:Real,<:Real}}; 
     return_wits::Bool=false, kwargs...
 )
     J = length(p₀)
@@ -397,27 +373,6 @@ return_wits::Bool=false, kwargs...) = nonlinearLeastSquares(prob.oels, vcat(p₀
 struct WLS<:AbstractWENDySolver end 
 (m::WLS)(wendyProb::WENDyProblem, p₀::AbstractVector{<:Real}, params::WENDyParameters; 
 return_wits::Bool=false, kwargs...) = nonlinearLeastSquares(wendyProb.wlsq, p₀, params; return_wits=return_wits, kwargs...)
-# hybrid : wls -> mle(trustRegion)
-struct HybridWLSTrustRegion<:AbstractWENDySolver end 
-function (m::HybridWLSTrustRegion)(
-    wendyProb::WENDyProblem, p₀::AbstractVector{<:Real}, params::WENDyParameters; 
-    return_wits::Bool=false, kwargs...
-)
-    what_wlsq, iter_wlsq, wits_wlsq = if return_wits 
-        WLS()(wendyProb, p₀, params, return_wits=true)
-    else 
-        what_wlsq, iter_wlsq = WLS()(wendyProb, what_wendy, params, return_wits=false)
-        what_wlsq, iter_wlsq, nothing
-    end 
-    what_wendy, iter_wendy, wits_wendy = if return_wits
-        TrustRegion()(wendyProb, what_wlsq, params, return_wits=true)
-    else 
-        what_wendy, iter_wendy = TrustRegion()(wendyProb, p₀, params, return_wits=false)
-        what_wendy, iter_wendy, nothing
-    end 
-
-    return return_wits ?  (what_wendy, iter_wlsq + iter_wendy, hcat(wits_wlsq,wits_wendy )) : what_wendy
-end
 """ 
 Solve the inverse problem for the unknown parameters
     solve(
@@ -433,12 +388,10 @@ Solve the inverse problem for the unknown parameters
 - p₀::AbstractVector{<:Real} : Inital guess for the parameters
 - params::WENDyParameters : hyperparameters for the WENDy Algorithm 
 - alg::AbstractWENDySolver=TrustRegion() : (optional) Choice of solver 
-    - OELS : output error least squares
     - WLS : weak form least squares 
     - IRLS : WENDy generalized least squares solver via iterative reweighted least squares 
     - TrustRegion : (default) optimize over the weak form negative log-likelihood with a trust region solver. This approximates the maximum likelhood estimator. Note: this is the only solver that will respect the constraints
     - ARCqK : optimize over the weak form negative log-likelihood with adaptive regularized cubics algorithm
-    - HybridWLSTrustRegion : hybrid solver that first optimizes with the weak form least squares solver then passes the result as an intialization to the trust region weak form negative log-likelihood solver
 """
 function solve(wendyProb::WENDyProblem, p₀::AbstractVector{<:Real}, params::WENDyParameters=WENDyParameters(); alg::AbstractWENDySolver=TrustRegion(), forceAlg::Bool=false, kwargs...)
     if !forceAlg && !isa(alg, OELS) 
@@ -451,7 +404,23 @@ function solve(wendyProb::WENDyProblem, p₀::AbstractVector{<:Real}, params::WE
     end
     alg(wendyProb, p₀, params; kwargs... )
 end
+""" 
+Solve for the unknown parameters via output error least squares. 
+    solve(
+        wendyProb::OutputErrorProblem, 
+        p₀::AbstractVector{<:Real},
+        params::WENDyParameters=WENDyParameters(); 
+        kwargs...
+    )
 
+# Arguments 
+- wendyProblem::WENDyProblem : An instance of a WENDyProblem for the ODE that you wish to estimate parameters for 
+- p₀::AbstractVector{<:Real} : Inital guess for the parameters
+- params::WENDyParameters : hyperparameters that will specify tolerances of the optimization solver
+
+NOTE: 
+  The initial condition u₀ will also be optimized over, the first element of the noisey data will be used as the first guess for the initial condtion before optimization begins. 
+"""
 function solve(wendyProb::OutputErrorProblem, p₀::AbstractVector{<:Real}, params::OutputErrorParameters=OutputErrorParameters(); kwargs...)
     OELS()(wendyProb, p₀, params; kwargs... )
 end

@@ -6,7 +6,6 @@ function _L₁!(
     ∇ₓf!::Function, 
     JuF::AbstractArray{<:Real, 3}, _∂ⱼL::AbstractArray{<:Real, 4}, ∂ⱼL::AbstractArray{<:Real, 4}, eⱼ::AbstractVector{<:Real}
 )
-∂ⱼL
     Mp1,D = size(X)
     K,_ = size(V)
     J = length(eⱼ)
