@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - paper
     tags: ['*']
   pull_request:
     branches: 
