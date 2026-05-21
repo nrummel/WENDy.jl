@@ -83,6 +83,28 @@ plot(
     Layout(title="Logistic Growth",xaxis_title="time(s)", yaxis_title="u(t)")
 )
 ``` 
+### Manually Specifying The Weak-form Method 
+There is the ability to manually which weak-form method one would like to use in order to estimate the parameters. Provided that one has already constructed a `WENDyProblem` struct, then when calling solve, one can specify the algorithm:
+```@example logistic
+using WENDy: WLS, IRLS, TrustRegion, ARCqK
+solve(wendyProb, p₀; alg=WLS()) # Solve the (unweighted) weak-form least squares problem 
+solve(wendyProb, p₀; alg=IRLS()) # Solves WENDy iterative re-weighted least squares 
+# Both of the methods below optimize over the WENDy-MLE lost
+solve(wendyProb, p₀; alg=TrustRegion()) # trust region method (for constrained or unconstrained problems)
+solve(wendyProb, p₀; alg=ARCqK()) # adaptive regularized cubics (only for unconstrained problems)
+nothing # hide 
+```
+
+### Comparing to an Output Error Method
+One can compare the weak-form methods to the standard Output Error Least Squares approach by building an `OutputErrorProblem` and then calling `solve`. This will build the necessary loss with automatic differentiation to provide a Jacobian of the residual. Then, the will solve the code via the Levenberg–Marquardt solver.
+
+```@example logistic
+oeProb = WENDy.OutputErrorProblem(tt,U,f!, J)
+phat_OE = WENDy.solve(oeProb, p₀)
+u0hat_OE = phat_OE[J+1:end]
+phat_OE = phat_OE[1:J]
+```
+
 ## Goodwin 
 A simple example of a system of differential equations which is nonlinear in parameters is the Goodwin model which describes negative feedback control processes . In particular there is a Hill function in the equation for $$u_1$$. The parameter $$p_3$$ appears in the denominator and $$p_4$$ is the Hill coefficient, and thus this serves as an example of how nonlinearity can effect the performance of the WENDy algorithm. 
 ```math 
