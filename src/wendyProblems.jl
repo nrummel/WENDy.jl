@@ -144,6 +144,10 @@ function OutputErrorProblem(
         params::OutputErrorParameters=OutputErrorParameters(),
         ll::LogLevel=Warn
     )
+    if typeof(U) <: AbstractVector 
+        @info "  Reshaping U to be an (M+1)x1 matrix"
+        U = reshape(U, (length(U),1))
+    end
     _Mp1, D = size(U)
     f(wu0) = _forwardSolveResidual(wu0, J, tt, U, f!, params.fsAlg, params.fsReltol, params.fsAbstol, params.fsU0Free)
     oels = LeastSquaresCostFunction(
@@ -152,4 +156,45 @@ function OutputErrorProblem(
         _Mp1*D
     )
     return OutputErrorProblem(U[1,:], oels)
+end
+
+import Base.show 
+
+function Base.show(io::IO, x::WENDyProblem{lip, NoiseDist}) where {lip, NoiseDist}
+    println(io, "WENDyProblem")
+    if lip
+        println(io, "  Linear-in-Parameters")
+    else 
+        println(io, "  Nonlinear-in-Parameters")
+    end
+    if NoiseDist == Normal
+        println(io, "  Additive Gaussian Noise")
+    else 
+        println(io, "  Multiplicative LogNormal Noise")
+    end
+end
+
+function Base.show(io::IO, x::OutputErrorProblem) <:
+    println(io, "OutputErrorProblem")
+    print(io,   "  Loss Functions : oels")
+end
+
+
+function Base.show(io::IO, ::MIME"text/plain", x::WENDyProblem{lip, NoiseDist}) where {lip, NoiseDist}
+    println(io, "WENDyProblem")
+    if lip
+        println(io, "  Linear-in-Parameters")
+    else 
+        println(io, "  Nonlinear-in-Parameters")
+    end
+    if NoiseDist == Normal
+        println(io, "  Additive Gaussian Noise")
+    else 
+        println(io, "  Multiplicative LogNormal Noise")
+    end
+end
+
+function Base.show(io::IO, ::MIME"text/plain", x::OutputErrorProblem) <:
+    println(io, "OutputErrorProblem")
+    print(io,   "  Loss Functions : oels")
 end
