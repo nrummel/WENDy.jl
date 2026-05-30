@@ -27,12 +27,7 @@ u₀ = [0.01]
 pstar = [1.0, 1.0]
 J = length(pstar)
 
-ode = ODEProblem(
-    f!, 
-    u₀, 
-    tRng, 
-    pstar
-)
+ode = ODEProblem(f!, u₀, tRng, pstar)
 tt = tRng[1]:dt:tRng[end]
 Ustar = reduce(vcat, um for um in solve_ode(ode, saveat=dt).u)
 nr = 0.1 # noise ratio
@@ -41,31 +36,24 @@ nothing # hide
 ```
 Now, that we have the data we are ready to build a WENDy Problem and then solve it. 
 ```@example logistic
-wendyProb = WENDyProblem(
-    tt, 
-    U, 
-    f!, 
-    J
-)
+wendyProb = WENDyProblem(tt, U, f!, J)
 nothing # hide
 ```
 The algorithm requires an initial guess for the parameter values. From this initial guess, it will then approximate the maximum likelihood estimator.
 ```@example logistic
 p₀ = [0.5, 0.5]
+solve(wendyProb, p₀) # hide
 @time phat = solve(wendyProb, p₀)
-@show phat 
 nothing # hide
 ```
 The efficiency of the solver can be improved by specifying that the function $$f$$ is linear in parameters. This is done with the optional argument to the WENDyProblem. 
 ```@example logistic
 wendyProb_linear = WENDyProblem(
-    tt, 
-    U, 
-    f!, 
-    J, 
+    tt, U, f!, J, 
     linearInParameters=Val(true), # f! is linear in parameters 
 )
-@time (wendyProb_linear, p₀)
+solve(wendyProb_linear, p₀) # hide
+@time solve(wendyProb_linear, p₀)
 nothing # hide
 ``` 
 This problem can be visualized by looking at the data, the true solution of the ODE and the solution given by the estimated parameters.
@@ -83,7 +71,7 @@ plot(
     Layout(title="Logistic Growth",xaxis_title="time(s)", yaxis_title="u(t)")
 )
 ``` 
-### Manually Specifying The Weak-form Method 
+### Manually Specifying The Weak-form Method
 There is the ability to manually which weak-form method one would like to use in order to estimate the parameters. Provided that one has already constructed a `WENDyProblem` struct, then when calling solve, one can specify the algorithm:
 ```@example logistic
 using WENDy: WLS, IRLS, TrustRegion, ARCqK
@@ -96,17 +84,17 @@ nothing # hide
 ```
 
 ### Comparing to an Output Error Method
-One can compare the weak-form methods to the standard Output Error Least Squares approach by building an `OutputErrorProblem` and then calling `solve`. This will build the necessary loss with automatic differentiation to provide a Jacobian of the residual. Then, the will solve the code via the Levenberg–Marquardt solver.
+One can compare the weak-form methods to the standard Output Error Least Squares approach by building an `OutputErrorProblem` and then calling `solve`. This will build the necessary loss with automatic differentiation to provide a Jacobian of the residual. Then, the will solve the code via the Levenberg–Marquardt solver. Note that the output error solver needs to optimize both the initial condition and the parameters for the best results. Thus, this solver returns both an estimate for initial condition $\hat{u}(t_0)$ and the parameters $\hat{p}$.
 
 ```@example logistic
 oeProb = WENDy.OutputErrorProblem(tt,U,f!, J)
-phat_OE = WENDy.solve(oeProb, p₀)
-u0hat_OE = phat_OE[J+1:end]
-phat_OE = phat_OE[1:J]
+uhatphat_OE = WENDy.solve(oeProb, p₀) 
+u0hat_OE = uhatphat_OE[J+1:end]
+phat_OE = uhatphat_OE[1:J]
 ```
 
 ## Goodwin 
-A simple example of a system of differential equations which is nonlinear in parameters is the Goodwin model which describes negative feedback control processes . In particular there is a Hill function in the equation for $$u_1$$. The parameter $$p_3$$ appears in the denominator and $$p_4$$ is the Hill coefficient, and thus this serves as an example of how nonlinearity can effect the performance of the WENDy algorithm. 
+A simple example of a system of differential equations which is nonlinear in parameters is the Goodwin model which describes negative feedback control processes. In particular there is a Hill function in the equation for $$u_1$$. The parameter $$p_3$$ appears in the denominator and $$p_4$$ is the Hill coefficient, and thus this serves as an example of how nonlinearity can effect the performance of the WENDy algorithm. 
 ```math 
 \begin{aligned}
     \dot{u}_1 &= \frac{p_1}{2.15 + p_3 u_3^{p_4}} - p_2  u_1 \\
@@ -114,7 +102,7 @@ A simple example of a system of differential equations which is nonlinear in par
     \dot{u}_3 &= p_7u_2-p_8u_3
 \end{aligned}
 ```
-We again can generate data to see how WENDy can estimate parameters. In this case it is realistic to for there to be LogNormal measurement error, so we choose this to be the distribution of the noise.
+We again can generate data to see how WENDy can estimate parameters. In this case, LogNormal measurement error is more realistic as the state variable only can take on positive values, so we choose this to be the distribution of the noise.
 ```@example goodwin
 using Random, Logging, LinearAlgebra # hide
 using PlotlyJS # hide
@@ -135,12 +123,7 @@ pstar = [3.4884, 0.0969, 1.0, 10, 0.0969, 0.0581, 0.0969, 0.0775]
 J     = length(pstar)
 D     = length(u₀)
 
-ode = ODEProblem(
-    f!, 
-    u₀, 
-    tRng, 
-    pstar
-)
+ode = ODEProblem(f!, u₀, tRng, pstar)
 tt    = tRng[1]:dt:tRng[end]
 Mp1   = length(tt)
 Ustar = reduce(vcat, um' for um in solve_ode(ode, saveat=dt).u)
@@ -154,11 +137,7 @@ params = WENDyParameters(
     radiusMinTime=dt, 
     radiusMaxTime=tRng[end]/5
 ); # be sure to set the min and max testFunction radii to something reasonable
-wendyProb = WENDyProblem(
-    tt, 
-    U, 
-    f!, 
-    J;
+wendyProb = WENDyProblem(tt, U, f!, J;
     noiseDist=Val(LogNormal), # multiplicative LogNormal noise
     params=params, 
 );
@@ -187,7 +166,7 @@ plot(
 )
 ```
 ## SIR 
-The susceptible-infected-recovered (SIR) model is pervasive in epidemiology. This system describes an extension that allows for time delayed immunity (TDI) for parasitic deceases where there is a common source for infection.
+The susceptible-infected-recovered (SIR) model is pervasive in epidemiology. This system describes an extension that allows for time delayed immunity (TDI) for parasitic diseases where there is a common source for infection.
 ```math
 \begin{aligned}
     \dot{u}_{1} &= -p_{1}  u_{1} + p_{3}  u_{2} + \tfrac{p_1 e^{-p_1  p_2}}{1 - e^{-p_1  p_2}} u_{3} \\
@@ -217,12 +196,7 @@ pstar = [0.2,1.5,0.074,0.113,0.0024]
 J     = length(pstar)
 D     = length(u₀)
 ## Generate data (one could use empircal data in practice)
-ode = ODEProblem(
-    f!, 
-    u₀, 
-    tRng, 
-    pstar
-)
+ode = ODEProblem(f!, u₀, tRng, pstar)
 tt    = tRng[1]:dt:tRng[end]
 Mp1   = length(tt)
 Ustar = reduce(vcat, um' for um in solve_ode(ode, saveat=dt).u)
@@ -231,7 +205,7 @@ U     = Ustar .* exp.(nr*randn(size(Ustar)))
 nothing # hide
 ```
 
-The time domain `[0,50]` so in this case it is best to adjust the parameters for the radii of the test functions. Also, we can define constraints for the parameters considered in optimization.
+In this example the time domain is `[0,50]`, so in this case it is best to adjust the parameters for the radii of the test functions. Also, we can define constraints for the parameters considered in optimization.
 ```@example sir
 params = WENDyParameters(
     radiusMinTime  = 0.1,
@@ -245,10 +219,7 @@ constraints = [
     (1e-4,1.0),
 ]
 wendyProb = WENDyProblem(
-    tt, 
-    U, 
-    f!, 
-    J;
+    tt, U, f!, J;
     noiseDist=Val(LogNormal), # LogNormalNoise
     params=params,
     constraints=constraints
