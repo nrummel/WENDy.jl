@@ -196,6 +196,8 @@ A WENDyProblem struct pre-computes and allocates data structures for efficient s
 - data : Internal data structure 
 - wlsq::LeastSquaresCostFunction : Cost function for the weak form least squares problem
 - wnll::SecondOrderCostFunction : Cost function for the weak form negative log-likelihood 
+- priorLoss::SecondOrderCostFunction : Cost function for the priors alone
+- wnlp::SecondOrderCostFunction : Cost function for the weak form negative log-posterior
 """
 struct WENDyProblem{lip, DistType} <: ParameterEstimationProblem
     D::Int # number of state variables
@@ -208,6 +210,8 @@ struct WENDyProblem{lip, DistType} <: ParameterEstimationProblem
     # Cost functions 
     wlsq::LeastSquaresCostFunction
     wnll::SecondOrderCostFunction 
+    priorLoss::SecondOrderCostFunction 
+    wnlp::SecondOrderCostFunction 
 end 
 """
     OutputErrorProblem(...)
