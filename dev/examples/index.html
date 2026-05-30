@@ -17,11 +17,11 @@ tt = tRng[1]:dt:tRng[end]
 Ustar = reduce(vcat, um for um in solve_ode(ode, saveat=dt).u)
 nr = 0.1 # noise ratio
 U = Ustar + nr*randn(size(Ustar)) # corrupting the data with noise</code></pre><p>Now, that we have the data we are ready to build a WENDy Problem and then solve it. </p><pre><code class="language-julia hljs">wendyProb = WENDyProblem(tt, U, f!, J)</code></pre><p>The algorithm requires an initial guess for the parameter values. From this initial guess, it will then approximate the maximum likelihood estimator.</p><pre><code class="language-julia hljs">p₀ = [0.5, 0.5]
-@time phat = solve(wendyProb, p₀)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">  0.276071 seconds (1.64 k allocations: 110.617 MiB, 9.86% gc time)</code></pre><p>The efficiency of the solver can be improved by specifying that the function <span>$f$</span> is linear in parameters. This is done with the optional argument to the WENDyProblem. </p><pre><code class="language-julia hljs">wendyProb_linear = WENDyProblem(
+@time phat = solve(wendyProb, p₀)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">  0.839238 seconds (1.25 k allocations: 92.887 MiB, 76.22% gc time)</code></pre><p>The efficiency of the solver can be improved by specifying that the function <span>$f$</span> is linear in parameters. This is done with the optional argument to the WENDyProblem. </p><pre><code class="language-julia hljs">wendyProb_linear = WENDyProblem(
     tt, U, f!, J,
     linearInParameters=Val(true), # f! is linear in parameters
 )
-@time solve(wendyProb_linear, p₀)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">  0.195591 seconds (1.36 k allocations: 51.362 MiB, 10.11% gc time)</code></pre><p>This problem can be visualized by looking at the data, the true solution of the ODE and the solution given by the estimated parameters.</p><pre><code class="language-julia hljs">using PlotlyJS
+@time solve(wendyProb_linear, p₀)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">  0.182069 seconds (1.07 k allocations: 47.071 MiB)</code></pre><p>This problem can be visualized by looking at the data, the true solution of the ODE and the solution given by the estimated parameters.</p><pre><code class="language-julia hljs">using PlotlyJS
 odeprob = ODEProblem(f!, u₀, tRng, phat)
 sol = solve_ode(odeprob; saveat=dt)
 Uhat = reduce(vcat, um&#39; for um in sol.u)
@@ -32,7 +32,7 @@ plot(
         scatter(x=tt, y=Uhat[:], name=&quot;estimate&quot;, line_dash=&quot;dash&quot;, line_color=&quot;black&quot;, line_width=3),
     ],
     Layout(title=&quot;Logistic Growth&quot;,xaxis_title=&quot;time(s)&quot;, yaxis_title=&quot;u(t)&quot;)
-)</code></pre><img src="1b5c02ff.svg" alt="Example block output"/><h3 id="Manually-Specifying-The-Weak-form-Method"><a class="docs-heading-anchor" href="#Manually-Specifying-The-Weak-form-Method">Manually Specifying The Weak-form Method</a><a id="Manually-Specifying-The-Weak-form-Method-1"></a><a class="docs-heading-anchor-permalink" href="#Manually-Specifying-The-Weak-form-Method" title="Permalink"></a></h3><p>There is the ability to manually which weak-form method one would like to use in order to estimate the parameters. Provided that one has already constructed a <code>WENDyProblem</code> struct, then when calling solve, one can specify the algorithm:</p><pre><code class="language-julia hljs">using WENDy: WLS, IRLS, TrustRegion, ARCqK
+)</code></pre><img src="db22b702.svg" alt="Example block output"/><h3 id="Manually-Specifying-The-Weak-form-Method"><a class="docs-heading-anchor" href="#Manually-Specifying-The-Weak-form-Method">Manually Specifying The Weak-form Method</a><a id="Manually-Specifying-The-Weak-form-Method-1"></a><a class="docs-heading-anchor-permalink" href="#Manually-Specifying-The-Weak-form-Method" title="Permalink"></a></h3><p>There is the ability to manually which weak-form method one would like to use in order to estimate the parameters. Provided that one has already constructed a <code>WENDyProblem</code> struct, then when calling solve, one can specify the algorithm:</p><pre><code class="language-julia hljs">using WENDy: WLS, IRLS, TrustRegion, ARCqK
 solve(wendyProb, p₀; alg=WLS()) # Solve the (unweighted) weak-form least squares problem
 solve(wendyProb, p₀; alg=IRLS()) # Solves WENDy iterative re-weighted least squares
 # Both of the methods below optimize over the WENDy-MLE lost
@@ -42,8 +42,8 @@ nothing # hide</code></pre><h3 id="Comparing-to-an-Output-Error-Method"><a class
 uhatphat_OE = WENDy.solve(oeProb, p₀)
 u0hat_OE = uhatphat_OE[J+1:end]
 phat_OE = uhatphat_OE[1:J]</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">2-element Vector{Float64}:
- 0.9922809634111993
- 0.9731029326509977</code></pre><h2 id="Goodwin"><a class="docs-heading-anchor" href="#Goodwin">Goodwin</a><a id="Goodwin-1"></a><a class="docs-heading-anchor-permalink" href="#Goodwin" title="Permalink"></a></h2><p>A simple example of a system of differential equations which is nonlinear in parameters is the Goodwin model which describes negative feedback control processes. In particular there is a Hill function in the equation for <span>$u_1$</span>. The parameter <span>$p_3$</span> appears in the denominator and <span>$p_4$</span> is the Hill coefficient, and thus this serves as an example of how nonlinearity can effect the performance of the WENDy algorithm. </p><p class="math-container">\[\begin{aligned}
+ 1.0178955229279436
+ 1.0103019596613356</code></pre><h2 id="Goodwin"><a class="docs-heading-anchor" href="#Goodwin">Goodwin</a><a id="Goodwin-1"></a><a class="docs-heading-anchor-permalink" href="#Goodwin" title="Permalink"></a></h2><p>A simple example of a system of differential equations which is nonlinear in parameters is the Goodwin model which describes negative feedback control processes. In particular there is a Hill function in the equation for <span>$u_1$</span>. The parameter <span>$p_3$</span> appears in the denominator and <span>$p_4$</span> is the Hill coefficient, and thus this serves as an example of how nonlinearity can effect the performance of the WENDy algorithm. </p><p class="math-container">\[\begin{aligned}
     \dot{u}_1 &amp;= \frac{p_1}{2.15 + p_3 u_3^{p_4}} - p_2  u_1 \\
     \dot{u}_2 &amp;= p_5u_1- p_6u_2 \\
     \dot{u}_3 &amp;= p_7u_2-p_8u_3
@@ -86,7 +86,7 @@ plot(
         scatter(x=tt, y=Ustar[:,d],line_color=colors[d], name=&quot;truth&quot;, legendgroup=d )
     ] for d in 1:D),
     Layout(title=&quot;Goodwin Example&quot;,xaxis_title=&quot;time(s)&quot;, yaxis_title=&quot;State&quot;)
-)</code></pre><img src="21fb6f2e.svg" alt="Example block output"/><h2 id="SIR"><a class="docs-heading-anchor" href="#SIR">SIR</a><a id="SIR-1"></a><a class="docs-heading-anchor-permalink" href="#SIR" title="Permalink"></a></h2><p>The susceptible-infected-recovered (SIR) model is pervasive in epidemiology. This system describes an extension that allows for time delayed immunity (TDI) for parasitic diseases where there is a common source for infection.</p><p class="math-container">\[\begin{aligned}
+)</code></pre><img src="e9dd0d41.svg" alt="Example block output"/><h2 id="SIR"><a class="docs-heading-anchor" href="#SIR">SIR</a><a id="SIR-1"></a><a class="docs-heading-anchor-permalink" href="#SIR" title="Permalink"></a></h2><p>The susceptible-infected-recovered (SIR) model is pervasive in epidemiology. This system describes an extension that allows for time delayed immunity (TDI) for parasitic diseases where there is a common source for infection.</p><p class="math-container">\[\begin{aligned}
     \dot{u}_{1} &amp;= -p_{1}  u_{1} + p_{3}  u_{2} + \tfrac{p_1 e^{-p_1  p_2}}{1 - e^{-p_1  p_2}} u_{3} \\
     \dot{u}_{2} &amp;= p_{1}  u_{1} - p_{3}  u_{2} \\
     &amp; - p_{4}  (1 - e^{-p_{5}  t^2})  u_{2} \\
@@ -128,11 +128,11 @@ wendyProb = WENDyProblem(
     constraints=constraints
 )</code></pre><p>In this case we can perturb from truth as an example initial guess for the parameters. In practice, this guess would not be made from prior information of the true parameters.  </p><pre><code class="language-julia hljs">p₀ = pstar + 0.5*randn(J).*abs.(pstar)
 phat = solve(wendyProb, p₀)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">5-element Vector{Float64}:
- 0.19130047481658302
- 1.5148929727921119
- 0.06819397210051897
- 0.11426227424759364
- 0.0023782106843527164</code></pre><p>We can visualize the quality of our estimated parameters by forward simulating and then plotting. </p><pre><code class="language-julia hljs">odeprob = ODEProblem(f!, u₀, tRng, phat)
+ 0.19701375484737343
+ 1.5010423276813671
+ 0.07060398105072807
+ 0.11067120901217632
+ 0.0025231354534355622</code></pre><p>We can visualize the quality of our estimated parameters by forward simulating and then plotting. </p><pre><code class="language-julia hljs">odeprob = ODEProblem(f!, u₀, tRng, phat)
 sol = solve_ode(odeprob; saveat=dt)
 Uhat = reduce(vcat, um&#39; for um in sol.u)
 colors = [&quot;red&quot;, &quot;blue&quot;, &quot;green&quot;]
@@ -143,4 +143,4 @@ plot(
         scatter(x=tt, y=Ustar[:,d],line_color=colors[d], name=&quot;truth&quot;, legendgroup=d )
     ] for d in 1:D),
     Layout(title=&quot;SIR&quot;,xaxis_title=&quot;time(s)&quot;, yaxis_title=&quot;State&quot;)
-)</code></pre><img src="640a78b1.svg" alt="Example block output"/></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../gettingStarted/">« Getting Started</a><a class="docs-footer-nextpage" href="../reference/">Reference »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.17.0 on <span class="colophon-date" title="Saturday 30 May 2026 11:41">Saturday 30 May 2026</span>. Using Julia version 1.12.6.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
+)</code></pre><img src="449a4e52.svg" alt="Example block output"/></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../gettingStarted/">« Getting Started</a><a class="docs-footer-nextpage" href="../reference/">Reference »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.17.0 on <span class="colophon-date" title="Saturday 30 May 2026 12:20">Saturday 30 May 2026</span>. Using Julia version 1.12.6.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
