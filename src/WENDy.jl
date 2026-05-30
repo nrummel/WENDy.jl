@@ -1,5 +1,5 @@
 module WENDy
-    __precompile__(false)
+    # __precompile__(false)
     ## external dependencies
     # optimization algorithms
     using NonlinearSolve: NonlinearLeastSquaresProblem, NonlinearFunction, LevenbergMarquardt # nonlinear least squares
@@ -28,7 +28,6 @@ module WENDy
     include("wendyTestFunctions.jl")
     include("wendyNoise.jl")
     include("wendySymbolics.jl")
-    include("wendyPriors.jl")
     include("wendyEquations.jl")
     include("wendyLinearEquations.jl")
     include("wendyNonlinearEquations.jl")

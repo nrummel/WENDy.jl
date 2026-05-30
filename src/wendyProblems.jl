@@ -103,11 +103,9 @@ function WENDyProblem(
             HesianWeakNLL(data, params)
         )
 
-        priorLoss, wnlp = getNegativeLogPosterior(wnll, priors)
-
         return WENDyProblem{lip, DistType}(
             D,J,Mp1,K,constraints,priors,
-            data, wlsq, wnll, priorLoss, wnlp
+            data, wlsq, wnll
         )
     end
 end
