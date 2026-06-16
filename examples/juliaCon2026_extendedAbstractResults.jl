@@ -58,7 +58,7 @@ fsRelErr_OE, Uhat_OE = fsErr(phat_OE)
 @info @sprintf "  Average Relative Forward Solver Error %.2g" fsRelErr_OE
 # Build and solve wendy problem 
 wendyProb = WENDyProblem(tt, U, f!, J; noiseDist=Val(LogNormal), ll=Warn)
-phat_MLE, iters, P = solve(wendyProb, p₀, params; alg=WENDy.IP(), costFun=:wnll,return_wits=true);
+phat_MLE, iters, P = solve(wendyProb, p₀, params; costFun=:wnll,return_wits=true);
 # relative error 
 relErr_MLE = norm(phat_MLE - pstar) / norm(pstar)
 @info "WENDy MLE"

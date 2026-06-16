@@ -301,29 +301,6 @@ function (m::ARCqK)(
     )
     return return_wits ? (out.solution, out.iter, wits_arc) : out.solution
 end
-## Interior Point Method 
-struct IP<:AbstractWENDySolver end 
-function (m::IP)(
-    wendyProb::WENDyProblem, p₀::AbstractVector{<:Real}, params::WENDyParameters; 
-    return_wits::Bool=false, costFun::Symbol=:wnlp,kwargs...
-)
-    # Unpack optimization params
-    maxIt,reltol,abstol,timelimit = params.optimMaxiters, params.optimReltol, params.optimAbstol, params.optimTimelimit
-    df = TwiceDifferentiable(getfield(wendyProb,costFun).f, getfield(wendyProb,costFun).∇f!, getfield(wendyProb,costFun).Hf!, p₀)
-    l,u = _makeConstraintsRespectPriorSupport(length(p₀), wendyProb.constraints, wendyProb.priors)
-    dfc = TwiceDifferentiableConstraints(l,u)
-    # Call algorithm
-    res = optimize(df, dfc, p₀, IPNewton(), 
-        Optim_Options(
-            x_reltol=reltol, x_abstol=abstol, iterations=maxIt, time_limit=timelimit, 
-            store_trace=return_wits, extended_trace=return_wits
-        )
-    )
-    # unpack results
-    what = res.minimizer
-    iter = res.iterations
-    return return_wits ? (what, iter, reduce(hcat, t.metadata["x"] for t in res.trace)) : what
-end
 ## solver for nonlinear least squares problems
 function nonlinearLeastSquares(costFun::LeastSquaresCostFunction,
     p₀::AbstractVector{<:Real}, 
