@@ -1,7 +1,7 @@
 name = "WENDy"
 uuid = "d405da13-e5c5-4ff7-999e-699e6f93cd5d"
-authors = ["Nicholas Rummel"]
 version = "1.1.0"
+authors = ["Nicholas Rummel"]
 
 [deps]
 AdaptiveRegularization = "79adfba0-1eab-50d9-8528-0589417a2bfe"
@@ -28,7 +28,7 @@ Tullio = "bc48ee85-29a4-5162-ae0b-a64e1601d4bc"
 AdaptiveRegularization = "~0.1.1"
 Arpack = "~0.5.4"
 Distributions = "~0.25.125"
-FFTW = "~1.8.1"
+FFTW = "~1.8.1, 1"
 ForwardDiff = "~0.10.39"
 ImageFiltering = "~0.7.12"
 JSOSolvers = "~0.13.2"
