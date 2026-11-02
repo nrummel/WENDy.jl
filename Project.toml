@@ -1,7 +1,7 @@
 name = "WENDy"
 uuid = "d405da13-e5c5-4ff7-999e-699e6f93cd5d"
-authors = ["Nicholas Rummel"]
 version = "1.1.0"
+authors = ["Nicholas Rummel"]
 
 [deps]
 AdaptiveRegularization = "79adfba0-1eab-50d9-8528-0589417a2bfe"
@@ -33,7 +33,7 @@ ForwardDiff = "~0.10.39"
 ImageFiltering = "~0.7.12"
 JSOSolvers = "~0.13.2"
 ManualNLPModels = "~0.2.0"
-NLSolversBase = "7.10.0"
+NLSolversBase = "7.10.0, 8"
 NonlinearSolve = "3.15.2"
 Optim = "~1.11.0"
 OrdinaryDiffEq = "~6.91.0"
