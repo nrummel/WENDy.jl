@@ -12,26 +12,6 @@ function _L₀!(
     @views L₀ .= reshape(_L₀,K*D,Mp1*D)
     nothing 
 end
-""" 
-Performs diagonal regularization and then  computed the Cholesky factorization of the weak residual's covariance.
-"""
-function _R!(
-    R::AbstractMatrix{<:Real}, # output/input
-    L::AbstractMatrix{<:Real}, diagReg::AbstractFloat, # data
-    thisI::AbstractMatrix{<:Real}, Sreg::AbstractMatrix{<:Real}, S::AbstractMatrix{<:Real}; # buffers
-    doChol::Bool=true, ll::LogLevel=Warn #kwargs
-) 
-    mul!(S, L, L')
-    @views Sreg .= thisI
-    mul!(Sreg, S, I, (1-diagReg), diagReg)
-    @views R .= Sreg
-    if !doChol 
-        return nothing 
-    end 
-    cholesky!(Symmetric(R))
-    @views R .= UpperTriangular(R)
-    nothing
-end
 """
 ∇m(p) - Gradient of weak form negative log likelihood in adjoint form. With y = S⁻¹r and
 ∂ⱼS = (1-δ)(∂ⱼLLᵀ + L∂ⱼLᵀ):

@@ -63,17 +63,6 @@ function _r!(
     @views r .-= b₀
     nothing
 end
-# Weighted residual (Rᵀ)⁻¹(G(p)) - b, where b = (Rᵀ)⁻¹b₀
-function _Rᵀr!(r::AbstractVector, p::AbstractVector, # output/input
-     tt::AbstractVector{<:Real}, X::AbstractMatrix, V::AbstractMatrix, Rᵀ::AbstractMatrix,b::AbstractVector, # Data
-     f!::Function, # functions
-     F::AbstractMatrix{<:Real}, G::AbstractMatrix{<:Real}, g::AbstractVector # buffeers   
-) 
-    _g!(g, p, tt, X, V, f!, F, G)
-    ldiv!(r, LowerTriangular(Rᵀ), g)
-    @views r .-= b
-    nothing
-end
 # ∇r = ∇G
 function _∇r!(
     ∇r::AbstractMatrix{<:Real}, p::AbstractVector{<:Real}, # output/input

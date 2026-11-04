@@ -52,6 +52,17 @@ WENDy.jl allows for the user to make use of several different solvers. This is d
 - For the maximum likelihood estimator one should select either:
     - `TrustRegion()` : (Default) Allows for both constrained and unconstrained problems
     - `ARCqK()` : Only for the unconstrained, but may lead to a different solution
-- `OELS()` : A common technique is to minimize the output error. WENDy.jl provides a simple forward solve least squares solver for comparison. 
 - `IRLS()` : This is (in general) a more computationally efficient solver that still incorporates covariance information from the weak form residual, but frames a generalized least squares problem instead of a maximum likelihood estimator. 
 - `WLS()` : This simple minimizes the norm of the weak form residual by posing either linear or nonlinear least squares problem. This is the most appropriate if there is no noise in the system. 
+- `HybridTrustRegionOELS(oe)` : Runs `TrustRegion()` and then uses the result to initialize the output error least squares problem `oe` (see below).
+- `HybridWLSTrustRegion()` : Runs `WLS()` and then uses the result to initialize `TrustRegion()`.
+
+## Output Error Least Squares
+A common technique is to minimize the output error, i.e. the difference between the data and a forward solve of the ODE. WENDy.jl provides a simple forward solve least squares solver for comparison as its own problem type:
+```julia
+oe = OutputErrorProblem(tt, U, f!, J; params=params)
+ŵ = solve(oe, p₀) # [p̂; û₀] when params.fsU0Free (the default), otherwise p̂
+```
+
+## Evaluating the Weak Form Likelihood
+The weak form negative log-likelihood and its derivatives can be evaluated directly with `wnll(prob, p)`, `∇wnll!(g, prob, p)` and `Hwnll!(H, prob, p)`, and the weak residual with `weakResidual!(r, prob, p)`, `weakJacobian!(∇r, prob, p)` and `weakCovariance(prob, p)`.

@@ -88,72 +88,88 @@ const CASES = [
         gref = ForwardDiff.gradient(f, p)
         Href = ForwardDiff.hessian(f, p)
         @testset "$(c.name)" begin
-            @test prob.wnll.f(p) ≈ f(p) rtol=1e-10
-            # gradient: the implementation chosen for this problem and the adjoint form (always valid)
-            ∇f! = prob.wnll.∇f!
-            @test ∇f! isa (c.lip ? WENDy.LinearGradientWeakNLL : WENDy.AdjointGradientWeakNLL)
-            g = zeros(J); ∇f!(g, p)
-            @test g ≈ gref rtol=1e-8
-            @test ∇f!(p) ≈ g
-            adjointCache = WENDy.WeakNLLCache(prob.data, c.params; P=nothing)
-            gₐ = zeros(J); WENDy.GradientWeakNLL(prob.data, c.params; cache=adjointCache)(gₐ, p)
-            @test gₐ ≈ gref rtol=1e-8
-            # hessian: same two implementations
-            Hf! = prob.wnll.Hf!
-            @test Hf! isa (c.lip ? WENDy.LinearHesianWeakNLL : WENDy.AdjointHesianWeakNLL)
-            H = zeros(J,J); Hf!(H, p)
-            @test H ≈ Href rtol=1e-8
+            # linear problems use the blocks of LLᵀ, nonlinear ones build S from L(p)
+            @test isnothing(prob.ws.P) == !c.lip
+            # a workspace that builds S from L(p) is always valid, so compare both
+            wsL = WENDy.WENDyWorkspace(prob.data, c.params; useBlocks=false)
+            @test wnll(prob, p) ≈ f(p) rtol=1e-10
+            @test WENDy.wnll(wsL, p) ≈ f(p) rtol=1e-10
+            g = zeros(J); gₗ = zeros(J)
+            @test ∇wnll!(g, prob, p) ≈ gref rtol=1e-8
+            @test WENDy.∇wnll!(gₗ, wsL, p) ≈ gref rtol=1e-8
+            H = zeros(J,J); Hₗ = zeros(J,J)
+            @test Hwnll!(H, prob, p) ≈ Href rtol=1e-8
             @test issymmetric(H)
-            @test Hf!(p) ≈ H
-            Hₐ = zeros(J,J); WENDy.HesianWeakNLL(prob.data, c.params; cache=adjointCache)(Hₐ, p)
-            @test Hₐ ≈ Href rtol=1e-8
-            @test WENDy.WeakNLL(prob.data, c.params; cache=adjointCache)(p) ≈ f(p) rtol=1e-10
-            # approximate hessian (no log-det curvature), both implementations
+            @test WENDy.Hwnll!(Hₗ, wsL, p) ≈ Href rtol=1e-8
+            # approximate hessian (no log-det curvature)
             Happroxref = approxH_ref(prob, c.params, p)
-            Hf!(H, p; approx=true); @test H ≈ Happroxref rtol=1e-8
+            @test Hwnll!(H, prob, p; approx=true) ≈ Happroxref rtol=1e-8
             @test issymmetric(H)
-            WENDy.HesianWeakNLL(prob.data, c.params; cache=adjointCache)(Hₐ, p; approx=true)
-            @test Hₐ ≈ Happroxref rtol=1e-8
-            # shared cache: one cache, never stale
-            cache = prob.wnll.f.cache
-            @test cache === ∇f!.cache === Hf!.cache
+            @test WENDy.Hwnll!(Hₗ, wsL, p; approx=true) ≈ Happroxref rtol=1e-8
+            # weak residual, its jacobian and covariance
+            L, r = Lr_ref(prob, p)
+            KD = prob.K*prob.D
+            @test weakResidual!(zeros(KD), prob, p) ≈ r rtol=1e-12
+            @test weakJacobian!(zeros(KD, J), prob, p) ≈ ForwardDiff.jacobian(q -> Lr_ref(prob, q)[2], p) rtol=1e-8
+            @test weakCovariance(prob, p) ≈ S_ref(c.params, L) rtol=1e-12
+            # the workspace is never stale
             p₂ = c.pstar .* (1 .+ 0.1 .* randn(MersenneTwister(3), J))
             g₂ref = ForwardDiff.gradient(f, p₂)
             H₂ref = ForwardDiff.hessian(f, p₂)
             for _ in 1:2 # alternate p and p₂ so every call follows a call at the other point
-                @test prob.wnll.f(p₂) ≈ f(p₂) rtol=1e-10
-                ∇f!(g, p);  @test g ≈ gref rtol=1e-8
-                Hf!(H, p₂); @test H ≈ H₂ref rtol=1e-8
-                @test prob.wnll.f(p) ≈ f(p) rtol=1e-10
-                ∇f!(g, p₂); @test g ≈ g₂ref rtol=1e-8
-                Hf!(H, p);  @test H ≈ Href rtol=1e-8
+                @test wnll(prob, p₂) ≈ f(p₂) rtol=1e-10
+                @test ∇wnll!(g, prob, p) ≈ gref rtol=1e-8
+                @test Hwnll!(H, prob, p₂) ≈ H₂ref rtol=1e-8
+                weakResidual!(zeros(KD), prob, p₂) # must not disturb the cached state at p
+                @test wnll(prob, p) ≈ f(p) rtol=1e-10
+                @test ∇wnll!(g, prob, p₂) ≈ g₂ref rtol=1e-8
+                @test Hwnll!(H, prob, p) ≈ Href rtol=1e-8
             end
             # optimizers often mutate the same array in place
             q = copy(p)
-            ∇f!(g, q)
+            ∇wnll!(g, prob, q)
             q .= p₂
-            ∇f!(g, q); @test g ≈ g₂ref rtol=1e-8
-            # after f and ∇f at p, Hf at p reuses the factorization rather than recomputing it
-            prob.wnll.f(p); ∇f!(g, p)
-            F = cache.F
-            Hf!(H, p)
-            @test cache.F === F
+            @test ∇wnll!(g, prob, q) ≈ g₂ref rtol=1e-8
+            # after m and ∇m at p, Hm at p reuses the factorization rather than recomputing it
+            wnll(prob, p); ∇wnll!(g, prob, p)
+            F = prob.ws.F
+            Hwnll!(H, prob, p)
+            @test prob.ws.F === F
             @test H ≈ Href rtol=1e-8
         end
     end
-    @testset "Logistic solve recovers parameters" begin
+    @testset "Logistic solvers" begin
         c = CASES[1]
         tt, U = simulate(c.f!, c.u₀, c.tRng, c.dt, c.pstar, c.dist, c.nr)
         prob = with_logger(NullLogger()) do
             WENDyProblem(tt, U, c.f!, 2; linearInParameters=Val(true), params=c.params)
         end
-        p̂ = with_logger(NullLogger()) do
-            solve(prob, [0.5, 0.5], c.params)
-        end
-        @test norm(p̂ - c.pstar)/norm(c.pstar) < 0.05
-        p̂ₐ = with_logger(NullLogger()) do
-            solve(prob, [0.5, 0.5], WENDyParameters(Kmax=25, approxHessian=true))
-        end
+        oe = OutputErrorProblem(tt, U, c.f!, 2; params=c.params)
+        p₀ = [0.5, 0.5]
+        quiet(f) = with_logger(f, NullLogger())
+        relErr(p̂) = norm(p̂[1:2] - c.pstar)/norm(c.pstar)
+        p̂ = quiet(() -> solve(prob, p₀, c.params))
+        @test relErr(p̂) < 0.05
+        @test norm(∇wnll!(zeros(2), prob, p̂)) < 1e-3*norm(∇wnll!(zeros(2), prob, p₀))
+        # approximate hessian
+        p̂ₐ = quiet(() -> solve(prob, p₀, WENDyParameters(Kmax=25, approxHessian=true)))
         @test norm(p̂ₐ - p̂)/norm(p̂) < 1e-6
+        # other weak form solvers
+        for alg in (WENDy.ARCqK(), WENDy.IRLS(), WENDy.WLS(), WENDy.HybridWLSTrustRegion())
+            @test relErr(quiet(() -> solve(prob, p₀, c.params; alg=alg))) < 0.1
+            what, iters, wits = quiet(() -> solve(prob, p₀, c.params; alg=alg, return_wits=true))
+            @test relErr(what) < 0.1 && iters > 0 && size(wits, 1) == 2
+        end
+        # output error least squares estimates [p; u₀] by default
+        ŵ = quiet(() -> solve(oe, p₀))
+        @test length(ŵ) == 3 && relErr(ŵ) < 0.05
+        @test norm(oeResidual!(zeros(length(U)), oe, ŵ)) < norm(oeResidual!(zeros(length(U)), oe, vcat(p₀, oe.u₀)))
+        @test length(quiet(() -> solve(oe, p₀, WENDyParameters(fsU0Free=false)))) == 2
+        # hybrid: weak form MLE then output error
+        ŵₕ = quiet(() -> solve(prob, p₀, c.params; alg=WENDy.HybridTrustRegionOELS(oe)))
+        @test ŵₕ ≈ quiet(() -> solve(oe, p̂)) rtol=1e-8
+        what, iters, wits = quiet(() -> solve(prob, p₀, c.params; alg=WENDy.HybridTrustRegionOELS(oe), return_wits=true))
+        @test what ≈ ŵₕ rtol=1e-8
+        @test size(wits, 1) == 3
     end
 end

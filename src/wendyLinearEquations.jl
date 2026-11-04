@@ -49,16 +49,6 @@ function _r!(
     @views r .-= b₀
     nothing
 end
-# Weighted residual (Rᵀ)⁻¹(G(p)) - b, where b = (Rᵀ)⁻¹b₀
-function _Rᵀr!(r::AbstractVector, p::AbstractVector, # output/input
-     G::AbstractMatrix{<:Real}, Rᵀ::AbstractMatrix, b::AbstractVector, # Data
-     g::AbstractVector # buffeers   
-) 
-    _g!(g, p, G)
-    ldiv!(r, LowerTriangular(Rᵀ), g)
-    @views r .-= b
-    nothing
-end
 ## LLᵀ blocks - because L(p) = L₀ + ∑ⱼpⱼL₁ⱼ, with q = [1; p] and L̃ = [L₀, L₁₁, ⋯, L₁ⱼ]
 # LLᵀ = ∑ₐᵦ qₐqᵦ L̃ₐL̃ᵦᵀ, so we store P[:,a,b] = vec(L̃ₐL̃ᵦᵀ) once and never touch the Mp1*D dimension again
 function _LLᵀBlocks!(

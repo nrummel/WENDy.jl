@@ -39,56 +39,71 @@ function _getRhsAndDerivatives_nonlinear(_f!::Function, D::Int, J::Int, K::Int, 
     Hₚ∇ₓf! = _getHₚ∇ₓf(f!, D, J)
     return f!,∇ₓf!,G,∇ₚf!,∇ₚ∇ₓf!,Hₚf!,Hₚ∇ₓf!
 end
-##
-function _forwardSolveResidual(wu0, J, _tt, U, _f!, alg, reltol, abstol, u0Free)
-    _Mp1, D = size(U)
-    try 
-        p,u₀ = if u0Free
-            wu0[1:J], wu0[J+1:end]
-        else 
-            wu0[1:J], U[1,:]
-        end
-        tRng = (_tt[1], _tt[end])
-        dt = (_tt[end] - _tt[1]) / (length(_tt) - 1)
-        odeprob = ODEProblem(_f!, u₀, tRng, p)
-        sol = solve_ode(odeprob, alg; 
-            reltol=reltol, abstol=abstol,
-            saveat=dt, verbose=false
-        )
-        Uhat = reduce(vcat, um' for um in sol.u)
-        r = (Uhat - U) 
-        return r[:]
-    catch 
-        NaN*ones(_Mp1*D)
+"""
+    WENDyProblem{lip, DistType}(...)
+
+A WENDyProblem holds the weak form of the parameter inverse problem: the data, test functions, the symbolic 
+right hand side and its derivatives, and a workspace for evaluating the weak form negative log-likelihood 
+(see wnll, ∇wnll!, Hwnll!) and the weak residual (see weakResidual!, weakJacobian!, weakCovariance).
+For the output error (forward solve) least squares problem see OutputErrorProblem.
+
+# Constructor 
+    WENDyProblem(
+        _tt::AbstractVector{<:Real}, 
+        U::AbstractVecOrMat{<:Real}, 
+        _f!::Function, 
+        J::Int; 
+        linearInParameters::Val{lip}=Val(false), 
+        noiseDist::Val{DistType}=Val(Normal), 
+        params::WENDyParameters=WENDyParameters(), 
+        constraints::Union{Nothing,AbstractVector{Tuple{<:Real,<:Real}}}=nothing, 
+        ll::LogLevel=Warn
+    )
+## Arguments 
+- _tt::AbstractVector{<:Real} : vector of times (equispaced)
+- U::AbstractVecOrMat{<:Real} : Corrupted state variable data 
+- _f!::Function : Right hand-side of the differential equation
+    Must be of the form f!(du, u, p, t)
+- J::Int : number of parameters (to be estimated)
+- linearInParameters::Val{lip}=Val(false) : (optional) specify whether the right hand side is `linear in parameters' for improved computational efficiency
+- noiseDist::Val{DistType}=Val(Normal) : (optional) specify the distribution of the measurement noise. Choose either Val(Normal) for additive Gaussian noise of Val(LogNormal) for multiplicative LogNormal noise.
+- params::WENDyParameters : (optional) struct of hyper-parameters for the WENDy Algorithm (see the doc for WENDyParameters)
+- constraints=nothing : (optional) Linear box constraints for each parameter, ∀j ∈ [1, ⋯,J], ℓⱼ ≤ pⱼ ≤ uⱼ. Accepts constraints as a list of tuples, [(ℓ₁,u₁), ⋯]. Note: this only is compatible with the TrustRegion solver.
+- ll::LogLevel=Warn : (optional) see additional algorithm information by setting ll=Info
+
+It can also be rebuilt from its internal data (e.g. data that was saved) with 
+    WENDyProblem(data::WENDyInternals, params::WENDyParameters; constraints=nothing, ll=Warn)
+
+# Fields
+- D::Int : number of state variables
+- J::Int : number of parameters (to be estimated)
+- Mp1::Int : (Mp1+1) number of data points in time 
+- K::Int : number of test functions 
+- constraints : vector of tuples containing linear constraints for each parameter
+- data::WENDyInternals : data, test functions and the symbolic right hand side and its derivatives
+- ws::WENDyWorkspace : shared state and buffers for m(p), ∇m(p) and Hm(p)
+"""
+struct WENDyProblem{lip, DistType}
+    D::Int # number of state variables
+    J::Int # number of parameters (to be estimated)
+    Mp1::Int # (Mp1+1) number of data points in time 
+    K::Int # number of test functions 
+    constraints::Union{Nothing,AbstractVector{Tuple{<:Real,<:Real}}}
+    data::WENDyInternals{lip, DistType}
+    ws::WENDyWorkspace
+end
+## constructor from the internal data
+function WENDyProblem(
+    data::WENDyInternals{lip, DistType}, params::WENDyParameters; 
+    constraints::Union{Nothing,AbstractVector{<:Tuple{<:Real,<:Real}}}=nothing, ll::LogLevel=Warn
+) where {lip, DistType}
+    with_logger(ConsoleLogger(stderr, ll)) do
+        @info "  Building workspace"
+        Mp1, D = size(data.X)
+        K, _ = size(data.V)
+        WENDyProblem{lip, DistType}(D, data.J, Mp1, K, constraints, data, WENDyWorkspace(data, params))
     end
 end
-
-function _buildCostFunctions(J::Int, _tt::AbstractVector{<:Real}, _f!::Function, U::AbstractMatrix{<:Real}, data::WENDyInternals, params::WENDyParameters)
-    _Mp1, D = size(U)
-    K, _ = size(data.V)
-    f(wu0) = _forwardSolveResidual(wu0, J, _tt, U, _f!, params.fsAlg, params.fsReltol, params.fsAbstol, params.fsU0Free)
-    oels = LeastSquaresCostFunction(
-        (r, wu0) -> r .= f(wu0), 
-        (jac,wu0) -> ForwardDiff.jacobian!(jac, f, wu0),
-        _Mp1*D
-    )
-
-    wlsq = LeastSquaresCostFunction(
-        WENDy.Residual(data, params), 
-        WENDy.JacobianResidual(data, params),
-        K*D
-    )
-
-    # m(p), ∇m(p) and Hm(p) share S(p), its factorization, r(p), etc. through one cache 
-    cache = WeakNLLCache(data, params)
-    wnll = SecondOrderCostFunction(
-        WeakNLL(data, params; cache=cache),
-        GradientWeakNLL(data, params; cache=cache),
-        HesianWeakNLL(data, params; cache=cache)
-    )
-    return oels, wlsq, wnll
-end
-
 ## constructor
 function WENDyProblem(
     _tt::AbstractVector{<:Real}, 
@@ -136,13 +151,45 @@ function WENDyProblem(
             G, # only used in the linear case
             ∇ₚf!,∇ₚ∇ₓf!,Hₚf!,Hₚ∇ₓf! # only used in the nonlinear case
         )
-        ## Build Cost Functions 
-        @info "  Building Cost Functions"
-        oels, wlsq, wnll = _buildCostFunctions(J, _tt, _f!, U, data, params)
-
-        return WENDyProblem{lip, DistType}(
-            D,J,Mp1,K,U[1,:],constraints,
-            data, oels, wlsq, wnll
-        )
+        return WENDyProblem(data, params; constraints=constraints, ll=ll)
     end
 end
+## weak form negative log-likelihood, its gradient and hessian
+"""
+    wnll(prob::WENDyProblem, p)
+
+Weak form negative log-likelihood m(p) = ½rᵀS⁻¹r + ½log|S| + (KD/2)log(2π), where r(p) is the weak residual and S(p) its covariance
+"""
+wnll(prob::WENDyProblem, p::AbstractVector{<:Real}) = wnll(prob.ws, p)
+"""
+    ∇wnll!(g, prob::WENDyProblem, p)
+
+Gradient of the weak form negative log-likelihood, written into (and returned in) g
+"""
+∇wnll!(g::AbstractVector{<:Real}, prob::WENDyProblem, p::AbstractVector{<:Real}) = ∇wnll!(g, prob.ws, p)
+"""
+    Hwnll!(H, prob::WENDyProblem, p; approx=false)
+
+Hessian of the weak form negative log-likelihood, written into (and returned in) H. With approx = true the curvature 
+of the log-determinant term is left out (see approxHessian in WENDyParameters)
+"""
+Hwnll!(H::AbstractMatrix{<:Real}, prob::WENDyProblem, p::AbstractVector{<:Real}; approx::Bool=false) = Hwnll!(H, prob.ws, p; approx=approx)
+## weak residual, its jacobian and covariance
+"""
+    weakResidual!(r, prob::WENDyProblem, p)
+
+Weak residual r(p) = G(p) - b₀, written into r
+"""
+weakResidual!(r::AbstractVector{<:Real}, prob::WENDyProblem, p::AbstractVector{<:Real}) = _evalr!(r, prob.ws, p)
+"""
+    weakJacobian!(∇r, prob::WENDyProblem, p)
+
+Jacobian of the weak residual wrt p, written into ∇r
+"""
+weakJacobian!(∇r::AbstractMatrix{<:Real}, prob::WENDyProblem, p::AbstractVector{<:Real}) = _eval∇r!(∇r, prob.ws, p)
+"""
+    weakCovariance(prob::WENDyProblem, p)
+
+Covariance of the weak residual S(p) = (1-δ)L(p)L(p)ᵀ + δI (a copy)
+"""
+weakCovariance(prob::WENDyProblem, p::AbstractVector{<:Real}) = copy(_update!(prob.ws, p).S)

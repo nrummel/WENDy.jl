@@ -29,11 +29,11 @@ module WENDy
     include("wendyEquations.jl")
     include("wendyLinearEquations.jl")
     include("wendyNonlinearEquations.jl")
-    include("wendyMethods.jl")
-    include("wendyLinearMethods.jl")
-    include("wendyNonlinearMethods.jl")
+    include("wendyWorkspace.jl")
     include("wendyProblems.jl")
+    include("wendyOutputError.jl")
     include("wendyOptim.jl")
 
-    export WENDyProblem, WENDyParameters, solve, Normal, LogNormal
+    export WENDyProblem, OutputErrorProblem, WENDyParameters, solve, Normal, LogNormal
+    export wnll, ∇wnll!, Hwnll!, weakResidual!, weakJacobian!, weakCovariance, oeResidual!, oeJacobian!
 end # module WENDy
