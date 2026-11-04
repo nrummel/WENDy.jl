@@ -80,7 +80,8 @@ const CASES = [
             g = zeros(J); ∇f!(g, p)
             @test g ≈ gref rtol=1e-8
             @test ∇f!(p) ≈ g
-            gₐ = zeros(J); WENDy.AdjointGradientWeakNLL(prob.data, c.params)(gₐ, p)
+            adjointCache = WENDy.WeakNLLCache(prob.data, c.params; P=nothing)
+            gₐ = zeros(J); WENDy.GradientWeakNLL(prob.data, c.params; cache=adjointCache)(gₐ, p)
             @test gₐ ≈ gref rtol=1e-8
             # hessian: same two implementations
             Hf! = prob.wnll.Hf!
@@ -89,8 +90,34 @@ const CASES = [
             @test H ≈ Href rtol=1e-8
             @test issymmetric(H)
             @test Hf!(p) ≈ H
-            Hₐ = zeros(J,J); WENDy.AdjointHesianWeakNLL(prob.data, c.params)(Hₐ, p)
+            Hₐ = zeros(J,J); WENDy.HesianWeakNLL(prob.data, c.params; cache=adjointCache)(Hₐ, p)
             @test Hₐ ≈ Href rtol=1e-8
+            @test WENDy.WeakNLL(prob.data, c.params; cache=adjointCache)(p) ≈ f(p) rtol=1e-10
+            # shared cache: one cache, never stale
+            cache = prob.wnll.f.cache
+            @test cache === ∇f!.cache === Hf!.cache
+            p₂ = c.pstar .* (1 .+ 0.1 .* randn(MersenneTwister(3), J))
+            g₂ref = ForwardDiff.gradient(f, p₂)
+            H₂ref = ForwardDiff.hessian(f, p₂)
+            for _ in 1:2 # alternate p and p₂ so every call follows a call at the other point
+                @test prob.wnll.f(p₂) ≈ f(p₂) rtol=1e-10
+                ∇f!(g, p);  @test g ≈ gref rtol=1e-8
+                Hf!(H, p₂); @test H ≈ H₂ref rtol=1e-8
+                @test prob.wnll.f(p) ≈ f(p) rtol=1e-10
+                ∇f!(g, p₂); @test g ≈ g₂ref rtol=1e-8
+                Hf!(H, p);  @test H ≈ Href rtol=1e-8
+            end
+            # optimizers often mutate the same array in place
+            q = copy(p)
+            ∇f!(g, q)
+            q .= p₂
+            ∇f!(g, q); @test g ≈ g₂ref rtol=1e-8
+            # after f and ∇f at p, Hf at p reuses the factorization rather than recomputing it
+            prob.wnll.f(p); ∇f!(g, p)
+            F = cache.F
+            Hf!(H, p)
+            @test cache.F === F
+            @test H ≈ Href rtol=1e-8
         end
     end
     @testset "Logistic solve recovers parameters" begin

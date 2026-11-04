@@ -175,41 +175,26 @@ function (m::LinearJacobianResidual)(::AbstractVector{<:Real}, Rᵀ::AbstractMat
 end 
 ## ∇m(p) - gradient of Maholinobis distance from the precomputed blocks of LLᵀ
 struct LinearGradientWeakNLL<:GradientWeakNLL
-    # output
+    # output 
     ∇m::AbstractVector{<:Real}
-    # data
-    P::AbstractArray{<:Real,3}
+    # shared state (holds the blocks of LLᵀ)
+    cache::WeakNLLCache
+    # data 
     G::AbstractMatrix{<:Real}
-    b₀::AbstractVector{<:Real}
-    diagReg::Real
-    # buffers
-    S::AbstractMatrix{<:Real}
-    S⁻¹::AbstractMatrix{<:Real}
-    r::AbstractVector{<:Real}
-    S⁻¹r::AbstractVector{<:Real}
+    # buffers 
     Qⱼ::AbstractMatrix{<:Real}
-    q::AbstractVector{<:Real}
 end
-# constructor: P are the precomputed blocks of LLᵀ (see _LLᵀBlocks)
-function LinearGradientWeakNLL(data::WENDyInternals{true,<:Distribution}, params::WENDyParameters, P::AbstractArray{<:Real,3})
-    _, D = size(data.X)
-    K, _ = size(data.V)
-    J = data.J
-    KD = K*D
-    # output
-    ∇m = zeros(J)
-    LinearGradientWeakNLL(
-        ∇m,
-        P, data.G, data.b₀, params.diagReg,
-        zeros(KD, KD), zeros(KD, KD), zeros(KD), zeros(KD), zeros(KD, KD), zeros(J+1)
-    )
+function LinearGradientWeakNLL(data::WENDyInternals{true,<:Distribution}, params::WENDyParameters, cache::WeakNLLCache)
+    KD = length(data.b₀)
+    LinearGradientWeakNLL(zeros(data.J), cache, data.G, zeros(KD, KD))
 end
 # method inplace
 function (m::LinearGradientWeakNLL)(∇m::AbstractVector{<:Real}, p::AbstractVector{<:Real})
+    c = _update!(m.cache, p)
     _∇wnll!(
-        ∇m, p,
-        m.P, m.G, m.b₀, m.diagReg,
-        m.S, m.S⁻¹, m.r, m.S⁻¹r, m.Qⱼ, m.q
+        ∇m, 
+        c.q, c.P, m.G, c.S⁻¹r, _S⁻¹!(c), c.diagReg,
+        m.Qⱼ
     )
 end
 # method mutate internal data
@@ -221,46 +206,35 @@ end
 struct LinearHesianWeakNLL<:HesianWeakNLL
     # output 
     H::AbstractMatrix{<:Real}
+    # shared state (holds the blocks of LLᵀ)
+    cache::WeakNLLCache
     # data 
-    P::AbstractArray{<:Real,3}
     G::AbstractMatrix{<:Real}
-    b₀::AbstractVector{<:Real}
-    diagReg::Real
     # buffers 
-    S::AbstractMatrix{<:Real}
-    S⁻¹::AbstractMatrix{<:Real}
-    r::AbstractVector{<:Real}
-    S⁻¹r::AbstractVector{<:Real}
     S⁻¹G::AbstractMatrix{<:Real}
     Qⱼ::AbstractMatrix{<:Real}
     ∂ⱼS::AbstractMatrix{<:Real}
     ∇Sy::AbstractMatrix{<:Real}
     S⁻¹∇Sy::AbstractMatrix{<:Real}
     S⁻¹∇S::AbstractArray{<:Real,3}
-    q::AbstractVector{<:Real}
+    S⁻¹_yyᵀ::AbstractMatrix{<:Real}
 end
-# constructor: P are the precomputed blocks of LLᵀ (see _LLᵀBlocks)
-function LinearHesianWeakNLL(data::WENDyInternals{true,<:Distribution}, params::WENDyParameters, P::AbstractArray{<:Real,3}) 
-    _, D = size(data.X)
-    K, _ = size(data.V)
+function LinearHesianWeakNLL(data::WENDyInternals{true,<:Distribution}, params::WENDyParameters, cache::WeakNLLCache) 
     J = data.J
-    KD = K*D
-    # ouput 
-    H = zeros(J,J)
+    KD = length(data.b₀)
     LinearHesianWeakNLL(
-        H,
-        P, data.G, data.b₀, params.diagReg,
-        zeros(KD, KD), zeros(KD, KD), zeros(KD), zeros(KD), zeros(KD, J), 
-        zeros(KD, KD), zeros(KD, KD), zeros(KD, J), zeros(KD, J), zeros(KD, KD, J), zeros(J+1)
+        zeros(J,J),
+        cache, data.G,
+        zeros(KD, J), zeros(KD, KD), zeros(KD, KD), zeros(KD, J), zeros(KD, J), zeros(KD, KD, J), zeros(KD, KD)
     )
 end
 # method inplace
 function (m::LinearHesianWeakNLL)(H::AbstractMatrix{<:Real}, p::AbstractVector{<:Real})
+    c = _update!(m.cache, p)
     _Hwnll!(
-        H, p,
-        m.P, m.G, m.b₀, m.diagReg,
-        m.S, m.S⁻¹, m.r, m.S⁻¹r, m.S⁻¹G, 
-        m.Qⱼ, m.∂ⱼS, m.∇Sy, m.S⁻¹∇Sy, m.S⁻¹∇S, m.q
+        H, 
+        c.q, c.P, m.G, c.F, _S⁻¹!(c), c.S⁻¹r, c.diagReg,
+        m.S⁻¹G, m.Qⱼ, m.∂ⱼS, m.∇Sy, m.S⁻¹∇Sy, m.S⁻¹∇S, m.S⁻¹_yyᵀ
     )
 end
 # method mutate internal data

@@ -32,25 +32,6 @@ function _R!(
     @views R .= UpperTriangular(R)
     nothing
 end
-""" weak form negative log likelihood """
-function _wnll(S::AbstractMatrix, r::AbstractVector, S⁻¹r::AbstractVector, constTerm::AbstractFloat)
-    F, logDet = try
-        F = cholesky(S)
-        logDet = 2*sum(log.(diag(F.U)))
-        F, logDet 
-    catch
-        F = lu(S)
-        logDet = sum(log.(filter!(x-> x >0, diag(F.U))))
-        F, logDet 
-    end
-    ldiv!(S⁻¹r, F, r)
-    mdist = dot(r, S⁻¹r)
-    #constTerm
-    1/2*(
-        mdist 
-        + logDet 
-    ) + constTerm
-end
 """
 ∇m(p) - Gradient of weak form negative log likelihood in adjoint form. With y = S⁻¹r and
 ∂ⱼS = (1-δ)(∂ⱼLLᵀ + L∂ⱼLᵀ):
@@ -60,25 +41,13 @@ so ∂ⱼm = ∂ⱼrᵀy + (1-δ)⟨∂ⱼL, S⁻¹L - y(Lᵀy)ᵀ⟩. This need
 and solving against it for every j.
 """
 function _∇wnll!(
-    ∇m::AbstractVector{<:Real},
-    ∇L::AbstractArray{<:Real,3}, L::AbstractMatrix{<:Real}, S::AbstractMatrix{<:Real}, ∇r::AbstractMatrix{<:Real}, r::AbstractVector{<:Real}, diagReg::Real,
-    S⁻¹r::AbstractVector{<:Real}, S⁻¹L::AbstractMatrix{<:Real}, Lᵀy::AbstractVector{<:Real}
+    ∇m::AbstractVector{<:Real}, # output
+    ∇L::AbstractArray{<:Real,3}, ∇r::AbstractMatrix{<:Real}, y::AbstractVector{<:Real}, M::AbstractMatrix{<:Real}, diagReg::Real # data (y = S⁻¹r, M = S⁻¹L - y(Lᵀy)ᵀ)
 )
     J = length(∇m)
-    F = try
-        cholesky(S)
-    catch
-        qr(S)
-    end
-    # y = S⁻¹r
-    ldiv!(S⁻¹r, F, r)
-    # M = S⁻¹L - y(Lᵀy)ᵀ, stored in S⁻¹L
-    ldiv!(S⁻¹L, F, L)
-    mul!(Lᵀy, L', S⁻¹r)
-    mul!(S⁻¹L, S⁻¹r, Lᵀy', -1, 1)
     # ∇m = ∇rᵀy + (1-δ)[⟨∂ⱼL, M⟩]ⱼ
-    mul!(∇m, ∇r', S⁻¹r)
-    mul!(∇m, reshape(∇L, :, J)', vec(S⁻¹L), 1-diagReg, 1)
+    mul!(∇m, ∇r', y)
+    mul!(∇m, reshape(∇L, :, J)', vec(M), 1-diagReg, 1)
     nothing
 end
 """
@@ -109,36 +78,28 @@ wⱼ = ∂ⱼSy, ℓ = Lᵀy, vⱼ = ∂ⱼLᵀy:
 so no solve or KD×KD product happens per pair (i,j). The second order terms are contracted through V without forming ∇²r or ∇²L:
     ∂ᵢⱼrᵀy          = ∑ HwF[d,i,j,m] (VᵀY)[m,d],                  Y = reshape(y, K, D)
     ⟨∂ᵢⱼL, M⟩       = ∑ HwJuF[d₂,d₁,i,j,m] σ[d₁] (VᵀM)[d₂,m,d₁],  M = reshape(S⁻¹L - yℓᵀ, K, D, Mp1, D)
-Pass HwF = HwJuF = nothing when the problem is linear in parameters.
+Pass HwF = HwJuF = M = nothing when the problem is linear in parameters.
 """
 function _Hwnll!(
     H::AbstractMatrix{<:Real}, # output
-    ∇L::AbstractArray{<:Real,3}, L::AbstractMatrix{<:Real}, S::AbstractMatrix{<:Real}, ∇r::AbstractMatrix{<:Real}, r::AbstractVector{<:Real}, diagReg::Real, # data
-    HwJuF::Union{Nothing,AbstractArray{<:Real,5}}, HwF::Union{Nothing,AbstractArray{<:Real,4}}, V::AbstractMatrix{<:Real}, sig::AbstractVector{<:Real}, # data (second order terms only)
-    S⁻¹r::AbstractVector{<:Real}, S⁻¹∇r::AbstractMatrix{<:Real}, S⁻¹L::AbstractMatrix{<:Real}, Lᵀy::AbstractVector{<:Real}, ∇Lᵀy::AbstractMatrix{<:Real}, # buffers
-    ∇Sy::AbstractMatrix{<:Real}, S⁻¹∇Sy::AbstractMatrix{<:Real}, ∂ⱼS::AbstractMatrix{<:Real}, S⁻¹∇S::AbstractArray{<:Real,3}, S⁻¹∂ⱼL::AbstractMatrix{<:Real}, # buffers
+    F::Factorization, ∇L::AbstractArray{<:Real,3}, L::AbstractMatrix{<:Real}, ∇r::AbstractMatrix{<:Real}, y::AbstractVector{<:Real}, diagReg::Real, # data (F factors S, y = S⁻¹r)
+    HwJuF::Union{Nothing,AbstractArray{<:Real,5}}, HwF::Union{Nothing,AbstractArray{<:Real,4}}, M::Union{Nothing,AbstractMatrix{<:Real}}, V::AbstractMatrix{<:Real}, sig::AbstractVector{<:Real}, # data (second order terms only, M = S⁻¹L - y(Lᵀy)ᵀ)
+    S⁻¹∇r::AbstractMatrix{<:Real}, ∇Lᵀy::AbstractMatrix{<:Real}, ∇Sy::AbstractMatrix{<:Real}, S⁻¹∇Sy::AbstractMatrix{<:Real}, ∂ⱼS::AbstractMatrix{<:Real}, S⁻¹∇S::AbstractArray{<:Real,3}, S⁻¹∂ⱼL::AbstractMatrix{<:Real}, # buffers
     VᵀY::AbstractMatrix{<:Real}, VᵀM::AbstractArray{<:Real,3} # buffers (second order terms only)
 )
     J = size(H,1)
     K, Mp1 = size(V)
     D = length(sig)
     δ̃ = 1-diagReg
-    F = try 
-        cholesky(S) 
-    catch  
-        qr(S) 
-    end
-    ldiv!(S⁻¹r, F, r)
     ldiv!(S⁻¹∇r, F, ∇r)
-    mul!(Lᵀy, L', S⁻¹r)
     # ∂ⱼrᵀS⁻¹∂ᵢr
     mul!(H, ∇r', S⁻¹∇r)
     @inbounds for j in 1:J
-        @views mul!(∇Lᵀy[:,j], ∇L[:,:,j]', S⁻¹r)
+        @views mul!(∇Lᵀy[:,j], ∇L[:,:,j]', y)
         # ∂ⱼS = (1-δ)(∂ⱼLLᵀ + L∂ⱼLᵀ)
         @views mul!(∂ⱼS, ∇L[:,:,j], L', 1-diagReg, 0)
         ∂ⱼS .+= ∂ⱼS'
-        @views mul!(∇Sy[:,j], ∂ⱼS, S⁻¹r)
+        @views mul!(∇Sy[:,j], ∂ⱼS, y)
         @views ldiv!(S⁻¹∇S[:,:,j], F, ∂ⱼS)
         # (1-δ)⟨S⁻¹∂ⱼL, ∂ᵢL⟩ for all i
         @views ldiv!(S⁻¹∂ⱼL, F, ∇L[:,:,j])
@@ -150,16 +111,14 @@ function _Hwnll!(
     mul!(H, ∇Lᵀy', ∇Lᵀy, -(1-diagReg), 1)
     # ∂ᵢⱼrᵀy
     if !isnothing(HwF)
-        Y = reshape(S⁻¹r, K, D)
+        Y = reshape(y, K, D)
         @tullio VᵀY[m,d] = V[k,m] * Y[k,d]
         @tullio H[i,j] += HwF[d,i,j,m] * VᵀY[m,d]
     end
     # (1-δ)⟨∂ᵢⱼL, S⁻¹L - yℓᵀ⟩
     if !isnothing(HwJuF)
-        ldiv!(S⁻¹L, F, L)
-        mul!(S⁻¹L, S⁻¹r, Lᵀy', -1, 1)
-        M = reshape(S⁻¹L, K, D, Mp1, D)
-        @tullio VᵀM[d2,m,d1] = V[k,m] * M[k,d2,m,d1]
+        M₄ = reshape(M, K, D, Mp1, D)
+        @tullio VᵀM[d2,m,d1] = V[k,m] * M₄[k,d2,m,d1]
         @tullio H[i,j] += δ̃ * HwJuF[d2,d1,i,j,m] * sig[d1] * VᵀM[d2,m,d1]
     end
     H .= (H .+ H') ./ 2
