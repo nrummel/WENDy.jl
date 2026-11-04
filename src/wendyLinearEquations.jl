@@ -59,62 +59,96 @@ function _Rᵀr!(r::AbstractVector, p::AbstractVector, # output/input
     @views r .-= b
     nothing
 end
-## Hm(p) - hessian of the Maholinobis distance when the ode is linear in parameters ⇒ ∀w  ∂ᵢⱼS = 0 and ∂ᵢⱼr = 0. Also notice that ∇_w[G*p -b₀] = G
-function _Hwnll!(
-    H::AbstractMatrix{<:Real}, p::AbstractVector{<:Real},
-    ∇L::AbstractArray{<:Real,3}, G::AbstractMatrix{<:Real}, L::AbstractMatrix{<:Real}, S::AbstractMatrix{<:Real}, 
-    r::AbstractVector{<:Real}, 
-    S⁻¹r::AbstractVector{<:Real}, S⁻¹∇r::AbstractMatrix{<:Real}, 
-    ∂ⱼLLᵀ::AbstractMatrix{<:Real}, ∇S::AbstractArray{<:Real, 3}, 
-    ∂ⱼL∂ᵢLᵀ::AbstractMatrix{<:Real}, ∂ᵢⱼS::AbstractMatrix{<:Real}, S⁻¹∂ⱼS::AbstractMatrix{<:Real}, ∂ᵢSS⁻¹∂ⱼS::AbstractMatrix{<:Real}
+## LLᵀ blocks - because L(p) = L₀ + ∑ⱼpⱼL₁ⱼ, with q = [1; p] and L̃ = [L₀, L₁₁, ⋯, L₁ⱼ]
+# LLᵀ = ∑ₐᵦ qₐqᵦ L̃ₐL̃ᵦᵀ, so we store P[:,a,b] = vec(L̃ₐL̃ᵦᵀ) once and never touch the Mp1*D dimension again
+function _LLᵀBlocks!(
+    P::AbstractArray{<:Real,3}, # output
+    L₀::AbstractMatrix{<:Real}, L₁::AbstractArray{<:Real,3}, # data
+    LaLbᵀ::AbstractMatrix{<:Real} # buffers
 )
-    @assert !all(0 .== ∇L)
-    @assert !all(0 .== G)
-    @assert !all(0 .== L)
-    @assert !all(0 .== S)
-    @assert !all(0 .== r)
+    J = size(L₁,3)
+    L̃(a) = a == 1 ? L₀ : view(L₁,:,:,a-1)
+    for a in 1:J+1, b in a:J+1
+        mul!(LaLbᵀ, L̃(a), L̃(b)')
+        @views P[:,a,b] .= vec(LaLbᵀ)
+        @views P[:,b,a] .= vec(LaLbᵀ')
+    end
+    nothing
+end
+# S(p) = (1-δ)∑ₐᵦ qₐqᵦ L̃ₐL̃ᵦᵀ + δI
+function _S!(
+    S::AbstractMatrix{<:Real}, q::AbstractVector{<:Real}, # output/input (q = [1; p])
+    P::AbstractArray{<:Real,3}, diagReg::Real # data
+)
+    mul!(vec(S), reshape(P, size(P,1), :), vec(q*q'))
+    S .*= (1-diagReg)
+    @views S[diagind(S)] .+= diagReg
+    nothing
+end
+## ∇m(p) - gradient using the LLᵀ blocks. With y = S⁻¹r and Qⱼ = ∑ₐqₐL̃ₐL₁ⱼᵀ = LL₁ⱼᵀ, ∂ⱼS = (1-δ)(Qⱼ + Qⱼᵀ) so
+# ∂ⱼm = Gⱼᵀy - (1-δ)yᵀQⱼy + (1-δ)⟨S⁻¹, Qⱼ⟩
+function _∇wnll!(
+    ∇m::AbstractVector{<:Real}, p::AbstractVector{<:Real}, # output/input
+    P::AbstractArray{<:Real,3}, G::AbstractMatrix{<:Real}, b₀::AbstractVector{<:Real}, diagReg::Real, # data
+    S::AbstractMatrix{<:Real}, S⁻¹::AbstractMatrix{<:Real}, r::AbstractVector{<:Real}, S⁻¹r::AbstractVector{<:Real}, Qⱼ::AbstractMatrix{<:Real}, q::AbstractVector{<:Real} # buffers
+)
     J = length(p)
-    # Hm(p) - Hessian of Maholinobis distance 
-    F = try 
-        cholesky(S) 
-    catch 
-        lu(S)
+    q[1] = 1
+    @views q[2:end] .= p
+    _S!(S, q, P, diagReg)
+    _r!(r, p, G, b₀)
+    F = try
+        cholesky(Symmetric(S))
+    catch
+        qr(S)
     end
-    ## Precompute S⁻¹(G(p)-b) and S⁻¹∂ⱼG(p)
     ldiv!(S⁻¹r, F, r)
-    ldiv!(S⁻¹∇r, F, G)
-    ## Compute ∇S 
-    @inbounds for j = 1:J 
-        @views mul!(∂ⱼLLᵀ, ∇L[:,:,j], L')
-        @views ∇S[:,:,j] .= ∂ⱼLLᵀ + (∂ⱼLLᵀ)'
+    copyto!(S⁻¹, I)
+    ldiv!(F, S⁻¹)
+    mul!(∇m, G', S⁻¹r)
+    @inbounds for j in 1:J
+        @views mul!(vec(Qⱼ), P[:,:,j+1], q)
+        ∇m[j] += (1-diagReg)*(dot(S⁻¹, Qⱼ) - dot(S⁻¹r, Qⱼ, S⁻¹r))
     end
-    ## Compute ∇²m
-    @inbounds for j = 1:J 
-        # this only depends on j so we do it once
-        @views ldiv!(S⁻¹∂ⱼS, F, ∇S[:,:,j])
-        for i = j:J 
-            # Commpute ∂ᵢⱼS   
-            @views mul!(∂ⱼL∂ᵢLᵀ, ∇L[:,:,j], (∇L[:,:,i])')
-            @views ∂ᵢⱼS .= ∂ⱼL∂ᵢLᵀ + (∂ⱼL∂ᵢLᵀ)'
-            # compute ∂ᵢSS⁻¹∂ⱼS
-            @views mul!(∂ᵢSS⁻¹∂ⱼS, ∇S[:,:,i], S⁻¹∂ⱼS) 
-            # make the building blocks
-            @views prt0 = - dot(S⁻¹∇r[:,j], ∇S[:,:,i], S⁻¹r)   # ∂ⱼrᵀ∂ᵢS⁻¹r = -(S⁻¹∂ⱼr)ᵀ∂ᵢS(S⁻¹r)
-            @views prt1 = dot(G[:,j], S⁻¹∇r[:,i])             # ∂ⱼrᵀS⁻¹∂ᵢr
-            @views prt2 = - 2*dot(S⁻¹∇r[:,i], ∇S[:,:,j], S⁻¹r) # 2∂ᵢrᵀ∂ⱼS⁻¹r = -(S⁻¹∂ᵢr)ᵀ∂ⱼSS⁻¹r
-            @views prt3 = - dot(S⁻¹r, ∂ᵢⱼS, S⁻¹r)              # rᵀ∂ᵢⱼS⁻¹r  = -(S⁻¹r)ᵀ∂ᵢⱼSS⁻¹r
-            @views prt4 = 2*dot(S⁻¹r, ∂ᵢSS⁻¹∂ⱼS, S⁻¹r)         #             + 2(S⁻¹r)ᵀ∂ᵢSS⁻¹∂ⱼSS⁻¹r
-            logDetTerm = - tr(F \ ∂ᵢSS⁻¹∂ⱼS) + tr(F \ ∂ᵢⱼS)
-            # Put everything together
-            H[j,i] = 1/2*(
-                2*(prt0+prt1) 
-                + prt2+prt3+prt4
-                + logDetTerm
-            )
-        end
+    nothing
+end
+## Hm(p) - hessian of the Maholinobis distance when the ode is linear in parameters ⇒ ∀w  ∂ᵢⱼL = 0 and ∂ᵢⱼr = 0, so ∂ᵢⱼS = ∂ⱼL∂ᵢLᵀ + ∂ᵢL∂ⱼLᵀ is constant in p. Also notice that ∇_w[G*p -b₀] = G
+# With the LLᵀ blocks, ∂ⱼS = (1-δ)(Qⱼ + Qⱼᵀ) and ⟨S⁻¹∂ⱼL, ∂ᵢL⟩ - vᵢᵀvⱼ = ⟨S⁻¹ - yyᵀ, L₁ᵢL₁ⱼᵀ⟩, so nothing here touches the Mp1*D dimension
+function _Hwnll!(
+    H::AbstractMatrix{<:Real}, p::AbstractVector{<:Real}, # output/input
+    P::AbstractArray{<:Real,3}, G::AbstractMatrix{<:Real}, b₀::AbstractVector{<:Real}, diagReg::Real, # data
+    S::AbstractMatrix{<:Real}, S⁻¹::AbstractMatrix{<:Real}, r::AbstractVector{<:Real}, S⁻¹r::AbstractVector{<:Real}, S⁻¹G::AbstractMatrix{<:Real}, # buffers
+    Qⱼ::AbstractMatrix{<:Real}, ∂ⱼS::AbstractMatrix{<:Real}, ∇Sy::AbstractMatrix{<:Real}, S⁻¹∇Sy::AbstractMatrix{<:Real}, S⁻¹∇S::AbstractArray{<:Real,3}, q::AbstractVector{<:Real} # buffers
+)
+    J = length(p)
+    q[1] = 1
+    @views q[2:end] .= p
+    _S!(S, q, P, diagReg)
+    _r!(r, p, G, b₀)
+    F = try 
+        cholesky(Symmetric(S)) 
+    catch  
+        qr(S) 
     end
-    # Only compute the upper triangular part of the hessian
-    # and because it is symmetric, all computations are done
-    H .= Symmetric(H)
+    ldiv!(S⁻¹r, F, r)
+    ldiv!(S⁻¹G, F, G)
+    copyto!(S⁻¹, I)
+    ldiv!(F, S⁻¹)
+    # ∂ⱼrᵀS⁻¹∂ᵢr
+    mul!(H, G', S⁻¹G)
+    @inbounds for j in 1:J
+        @views mul!(vec(Qⱼ), P[:,:,j+1], q)
+        ∂ⱼS .= (1-diagReg) .* (Qⱼ .+ Qⱼ')
+        @views mul!(∇Sy[:,j], ∂ⱼS, S⁻¹r)
+        @views mul!(S⁻¹∇S[:,:,j], S⁻¹, ∂ⱼS)
+    end
+    ldiv!(S⁻¹∇Sy, F, ∇Sy)
+    _HwnllCovTerms!(H, S⁻¹G, ∇Sy, S⁻¹∇Sy, S⁻¹∇S)
+    # (1-δ)⟨S⁻¹ - yyᵀ, L₁ᵢL₁ⱼᵀ⟩, reusing S⁻¹ as the buffer
+    mul!(S⁻¹, S⁻¹r, S⁻¹r', -1, 1)
+    @inbounds for j in 1:J, i in 1:J
+        @views H[i,j] += (1-diagReg)*dot(vec(S⁻¹), P[:,i+1,j+1])
+    end
+    H .= (H .+ H') ./ 2
     nothing 
-end 
+end

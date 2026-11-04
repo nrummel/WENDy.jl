@@ -95,84 +95,27 @@ function _∇r!(
     @views ∇r .= reshape(_∇r, K*D, J)
     nothing
 end
-function _Hwnll!(
-    H::AbstractMatrix{<:Real}, p::AbstractVector{<:Real},
-    ∇L::AbstractArray{<:Real, 3}, tt::AbstractVector{<:Real}, X::AbstractMatrix{<:Real}, V::AbstractMatrix{<:Real}, L::AbstractMatrix{<:Real}, S::AbstractMatrix{<:Real}, ∇r::AbstractMatrix{<:Real}, b₀::AbstractVector{<:Real}, sig::AbstractVector{<:Real},
-    r::AbstractVector{<:Real},  
-    Hₚf!::Function, Hₚ∇ₓf!::Function,  S⁻¹r::AbstractVector{<:Real}, 
-    S⁻¹∇r::AbstractMatrix{<:Real}, ∂ⱼLLᵀ::AbstractMatrix{<:Real}, ∇S::AbstractArray{<:Real, 3}, HwF::AbstractArray{<:Real, 4}, _∇²r::AbstractArray{<:Real, 4}, ∇²r::AbstractArray{<:Real, 3}, HwJuF::AbstractArray{<:Real, 5}, _∇²L::AbstractArray{<:Real, 6}, ∇²L::AbstractArray{<:Real, 4}, ∂ⱼL∂ᵢLᵀ::AbstractMatrix{<:Real}, ∂ᵢⱼLLᵀ::AbstractMatrix{<:Real}, ∂ᵢⱼS::AbstractMatrix{<:Real}, S⁻¹∂ⱼS::AbstractMatrix{<:Real}, ∂ᵢSS⁻¹∂ⱼS::AbstractMatrix{<:Real}
+# Hessian of the rhs wrt p at each time point: HwF[:,:,:,m] = ∇ₚ²f(xₘ) (∇²r = V∘HwF is never formed)
+function _HwF!(
+    HwF::AbstractArray{<:Real,4}, p::AbstractVector{<:Real}, # output/input
+    tt::AbstractVector{<:Real}, X::AbstractMatrix{<:Real}, # data
+    Hₚf!::Function # functions
 )
-    Mp1, D = size(X)
-    K, _ = size(V)
-    J = length(p)
-    # Hm(p) - Hessian of Maholinobis distance 
-    F = try 
-        cholesky(S) 
-    catch 
-        lu(S)
+    Mp1, _ = size(X)
+    @inbounds for m in 1:Mp1 
+        @views Hₚf!(HwF[:,:,:,m], X[m,:], p, tt[m] )
     end
-    ## Precompute S⁻¹(G(p)-b) and S⁻¹∂ⱼG(p)
-    begin
-        ldiv!(S⁻¹r, F, r)
-        ldiv!(S⁻¹∇r, F, ∇r)
+    nothing
+end
+# Hessian of the state jacobian of the rhs wrt p at each time point: HwJuF[:,:,:,:,m] = ∇ₚ²∇ₓf(xₘ) (∇²L = V∘HwJuF∘diag(σ) is never formed)
+function _HwJuF!(
+    HwJuF::AbstractArray{<:Real,5}, p::AbstractVector{<:Real}, # output/input
+    tt::AbstractVector{<:Real}, X::AbstractMatrix{<:Real}, # data
+    Hₚ∇ₓf!::Function # functions
+)
+    Mp1, _ = size(X)
+    @inbounds for m in 1:Mp1 
+        @views Hₚ∇ₓf!(HwJuF[:,:,:,:,m], X[m,:], p, tt[m])
     end
-    ## Compute ∇S 
-    tmp = similar(∂ⱼLLᵀ)
-    @inbounds for j = 1:J 
-        @views mul!(∂ⱼLLᵀ, ∇L[:,:,j], L')
-        tmp .= ∂ⱼLLᵀ
-        @views ∇S[:,:,j] .= ∂ⱼLLᵀ + (tmp)'
-    end
-    ## compute ∇²r
-    begin
-        @inbounds for m in 1:Mp1 
-            @views Hₚf!(HwF[:,:,:,m], X[m,:], p, tt[m] )
-        end
-        @tullio _∇²r[k,d,j1,j2] = V[k,m] * HwF[d,j1,j2,m] 
-        ∇²r = reshape(_∇²r,K*D,J,J)
-    end
-    ## compute ∇²L
-    begin
-        @inbounds for m in 1:Mp1 
-            @views Hₚ∇ₓf!(HwJuF[:,:,:,:,m], X[m,:], p, tt[m])
-        end
-        # turns out this is slower
-        # @time "outerprod" @tullio __∇²L[k,d2,d1,j1,j2,m] = V[k,m] * HwJuF[d2,d1,j1,j2,m] * sig[d1] 
-        # @time "permutedims" permutedims!(_∇²L,__∇²L, (1,2,6,3,4,5))
-        @tullio _∇²L[k,d2,m,d1,j1,j2] = V[k,m] * HwJuF[d2,d1,j1,j2,m] * sig[d1] 
-        ∇²L = reshape(_∇²L,K*D,Mp1*D,J,J)
-    end
-    ## Compute ∇²m
-    @inbounds for j = 1:J
-        # this only depends on j so we do it once
-        @views ldiv!(S⁻¹∂ⱼS, F, ∇S[:,:,j])
-        for i = j:J  
-            # Commpute ∂ᵢⱼS   
-            @views mul!(∂ⱼL∂ᵢLᵀ, ∇L[:,:,j], (∇L[:,:,i])')
-            @views mul!(∂ᵢⱼLLᵀ, ∇²L[:,:,i,j], L')
-            @views ∂ᵢⱼS .= ∂ⱼL∂ᵢLᵀ + (∂ⱼL∂ᵢLᵀ)' + ∂ᵢⱼLLᵀ + (∂ᵢⱼLLᵀ)'
-            # compute ∂ᵢSS⁻¹∂ⱼS
-            @views mul!(∂ᵢSS⁻¹∂ⱼS, ∇S[:,:,i], S⁻¹∂ⱼS) 
-            # make the building blocks
-            @views prt0 = dot(∇²r[:,j,i], S⁻¹r)                # ∂ᵢⱼrᵀS⁻¹r
-            @views prt1 = - dot(S⁻¹∇r[:,j], ∇S[:,:,i], S⁻¹r)   # ∂ⱼrᵀ∂ᵢS⁻¹r = -(S⁻¹∂ⱼr)ᵀ∂ᵢS(S⁻¹r)
-            @views prt2 = dot(∇r[:,j], S⁻¹∇r[:,i])             # ∂ⱼrᵀS⁻¹∂ᵢr
-            @views prt3 = - 2*dot(S⁻¹∇r[:,i], ∇S[:,:,j], S⁻¹r) # 2∂ᵢrᵀ∂ⱼS⁻¹r = -(S⁻¹∂ᵢr)ᵀ∂ⱼSS⁻¹r
-            @views prt4 = - dot(S⁻¹r, ∂ᵢⱼS, S⁻¹r)              # rᵀ∂ᵢⱼS⁻¹r  = -(S⁻¹r)ᵀ∂ᵢⱼSS⁻¹r
-            @views prt5 = 2*dot(S⁻¹r, ∂ᵢSS⁻¹∂ⱼS, S⁻¹r)         #            + 2(S⁻¹r)ᵀ∂ᵢSS⁻¹∂ⱼSS⁻¹r
-            logDetTerm = - tr(F \ ∂ᵢSS⁻¹∂ⱼS) + tr(F \ ∂ᵢⱼS)
-            # Put everything together
-            H[j,i] = (
-                1/2*(
-                    2*(prt0+prt1+prt2) 
-                    + prt3+prt4+prt5
-                    + logDetTerm
-                )
-            )
-        end
-    end
-    # Only compute the upper triangular part of the hessian
-    # and because it is symmetric, all computations are done
-    H .= Symmetric(H)
-    nothing 
-end 
+    nothing
+end

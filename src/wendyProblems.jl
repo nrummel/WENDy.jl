@@ -79,10 +79,12 @@ function _buildCostFunctions(J::Int, _tt::AbstractVector{<:Real}, _f!::Function,
         K*D
     )
 
+    # the gradient and hessian share the precomputed blocks of LLᵀ (nothing when not linear in parameters or too large)
+    P = _LLᵀBlocks(data, params)
     wnll = SecondOrderCostFunction(
         WeakNLL(data, params),
-        GradientWeakNLL(data, params),
-        HesianWeakNLL(data, params)
+        GradientWeakNLL(data, params; P=P),
+        HesianWeakNLL(data, params; P=P)
     )
     return oels, wlsq, wnll
 end

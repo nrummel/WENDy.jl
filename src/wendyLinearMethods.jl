@@ -173,81 +173,98 @@ function (m::LinearJacobianResidual)(::AbstractVector{<:Real}, Rᵀ::AbstractMat
     ldiv!(m.Rᵀ⁻¹∇r, LowerTriangular(Rᵀ), m.∇r)
     return m.Rᵀ⁻¹∇r
 end 
-## Hm(p) - Hessian of Maholinobis Distance
+## ∇m(p) - gradient of Maholinobis distance from the precomputed blocks of LLᵀ
+struct LinearGradientWeakNLL<:GradientWeakNLL
+    # output
+    ∇m::AbstractVector{<:Real}
+    # data
+    P::AbstractArray{<:Real,3}
+    G::AbstractMatrix{<:Real}
+    b₀::AbstractVector{<:Real}
+    diagReg::Real
+    # buffers
+    S::AbstractMatrix{<:Real}
+    S⁻¹::AbstractMatrix{<:Real}
+    r::AbstractVector{<:Real}
+    S⁻¹r::AbstractVector{<:Real}
+    Qⱼ::AbstractMatrix{<:Real}
+    q::AbstractVector{<:Real}
+end
+# constructor: P are the precomputed blocks of LLᵀ (see _LLᵀBlocks)
+function LinearGradientWeakNLL(data::WENDyInternals{true,<:Distribution}, params::WENDyParameters, P::AbstractArray{<:Real,3})
+    _, D = size(data.X)
+    K, _ = size(data.V)
+    J = data.J
+    KD = K*D
+    # output
+    ∇m = zeros(J)
+    LinearGradientWeakNLL(
+        ∇m,
+        P, data.G, data.b₀, params.diagReg,
+        zeros(KD, KD), zeros(KD, KD), zeros(KD), zeros(KD), zeros(KD, KD), zeros(J+1)
+    )
+end
+# method inplace
+function (m::LinearGradientWeakNLL)(∇m::AbstractVector{<:Real}, p::AbstractVector{<:Real})
+    _∇wnll!(
+        ∇m, p,
+        m.P, m.G, m.b₀, m.diagReg,
+        m.S, m.S⁻¹, m.r, m.S⁻¹r, m.Qⱼ, m.q
+    )
+end
+# method mutate internal data
+function (m::LinearGradientWeakNLL)(p::AbstractVector{<:Real})
+    m(m.∇m, p)
+    return m.∇m
+end
+## Hm(p) - Hessian of Maholinobis Distance from the precomputed blocks of LLᵀ
 struct LinearHesianWeakNLL<:HesianWeakNLL
     # output 
     H::AbstractMatrix{<:Real}
     # data 
+    P::AbstractArray{<:Real,3}
+    G::AbstractMatrix{<:Real}
     b₀::AbstractVector{<:Real}
-    # functions 
-    R!::Covariance
-    r!::Residual
-    ∇r!::JacobianResidual
-    ∇L!::JacobianCovarianceFactor
+    diagReg::Real
     # buffers 
+    S::AbstractMatrix{<:Real}
+    S⁻¹::AbstractMatrix{<:Real}
+    r::AbstractVector{<:Real}
     S⁻¹r::AbstractVector{<:Real}
-    S⁻¹∇r::AbstractMatrix{<:Real}
-    ∂ⱼLLᵀ::AbstractMatrix{<:Real}
-    ∇S::AbstractArray{<:Real, 3}
-    ∂ⱼL∂ᵢLᵀ::AbstractMatrix{<:Real}
-    ∂ᵢⱼS::AbstractMatrix{<:Real}
-    S⁻¹∂ⱼS::AbstractMatrix{<:Real}
-    ∂ᵢSS⁻¹∂ⱼS::AbstractMatrix{<:Real}
+    S⁻¹G::AbstractMatrix{<:Real}
+    Qⱼ::AbstractMatrix{<:Real}
+    ∂ⱼS::AbstractMatrix{<:Real}
+    ∇Sy::AbstractMatrix{<:Real}
+    S⁻¹∇Sy::AbstractMatrix{<:Real}
+    S⁻¹∇S::AbstractArray{<:Real,3}
+    q::AbstractVector{<:Real}
 end
-
-function LinearHesianWeakNLL(data::WENDyInternals{true,<:Distribution}, params::WENDyParameters) 
+# constructor: P are the precomputed blocks of LLᵀ (see _LLᵀBlocks)
+function LinearHesianWeakNLL(data::WENDyInternals{true,<:Distribution}, params::WENDyParameters, P::AbstractArray{<:Real,3}) 
     _, D = size(data.X)
     K, _ = size(data.V)
     J = data.J
+    KD = K*D
     # ouput 
     H = zeros(J,J)
-    # functions
-    R! = Covariance(data, params)
-    r! = Residual(data, params)
-    ∇r! = JacobianResidual(data, params)
-    ∇L! = JacobianCovarianceFactor(data, params)
-    # buffers
-    S⁻¹r = zeros(K*D)
-    S⁻¹∇r = zeros(K*D, J)
-    ∂ⱼLLᵀ = zeros(K*D, K*D)
-    ∇S = zeros(K*D, K*D, J)
-    ∂ⱼL∂ᵢLᵀ = zeros(K*D, K*D)
-    ∂ᵢⱼS = zeros(K*D, K*D)
-    S⁻¹∂ⱼS = zeros(K*D, K*D)
-    ∂ᵢSS⁻¹∂ⱼS = zeros(K*D, K*D)
     LinearHesianWeakNLL(
         H,
-        data.b₀,
-        R!, r!, ∇r!, ∇L!,
-        S⁻¹r, S⁻¹∇r, ∂ⱼLLᵀ, ∇S, ∂ⱼL∂ᵢLᵀ, ∂ᵢⱼS, S⁻¹∂ⱼS, ∂ᵢSS⁻¹∂ⱼS
+        P, data.G, data.b₀, params.diagReg,
+        zeros(KD, KD), zeros(KD, KD), zeros(KD), zeros(KD), zeros(KD, J), 
+        zeros(KD, KD), zeros(KD, KD), zeros(KD, J), zeros(KD, J), zeros(KD, KD, J), zeros(J+1)
     )
 end
 # method inplace
 function (m::LinearHesianWeakNLL)(H::AbstractMatrix{<:Real}, p::AbstractVector{<:Real})
-    # TODO: try letting cholesky factorization back in here
-    m.R!(p; transpose=false, doChol=false) 
-    m.r!(p) 
-    m.∇r!(p)
-    m.∇L!(p)
     _Hwnll!(
         H, p,
-        m.∇L!.∇L, m.∇r!.∇r, m.R!.L!.L, m.R!.Sreg, 
-        m.r!.r,  
-        m.S⁻¹r, m.S⁻¹∇r, m.∂ⱼLLᵀ, m.∇S, m.∂ⱼL∂ᵢLᵀ, m.∂ᵢⱼS, m.S⁻¹∂ⱼS, m.∂ᵢSS⁻¹∂ⱼS
+        m.P, m.G, m.b₀, m.diagReg,
+        m.S, m.S⁻¹, m.r, m.S⁻¹r, m.S⁻¹G, 
+        m.Qⱼ, m.∂ⱼS, m.∇Sy, m.S⁻¹∇Sy, m.S⁻¹∇S, m.q
     )
 end
 # method mutate internal data
 function (m::LinearHesianWeakNLL)(p::AbstractVector{<:Real})
-    # TODO: try letting cholesky factorization back in here
-    m.R!(p; transpose=false, doChol=false) 
-    m.r!(p) 
-    m.∇r!(p)
-    m.∇L!(p)
-    _Hwnll!(
-        m.H, p,
-        m.∇L!.∇L, m.∇r!.∇r, m.R!.L!.L, m.R!.Sreg,
-        m.r!.r,  
-        m.S⁻¹r, m.S⁻¹∇r, m.∂ⱼLLᵀ, m.∇S, m.∂ⱼL∂ᵢLᵀ, m.∂ᵢⱼS, m.S⁻¹∂ⱼS, m.∂ᵢSS⁻¹∂ⱼS
-    )
+    m(m.H, p)
     return m.H
 end
