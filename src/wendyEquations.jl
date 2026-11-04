@@ -54,15 +54,17 @@ end
 Hm(p) terms that only depend on how S changes, shared by the linear and general Hessians. 
 With U = S⁻¹∇r, wⱼ = ∂ⱼSy and Aⱼ = S⁻¹∂ⱼS this adds
     -Uⱼᵀwᵢ - Uᵢᵀwⱼ + wᵢᵀS⁻¹wⱼ - ½tr(AᵢAⱼ)
+Pass S⁻¹∇S = nothing to leave out the trace (see approx in _Hwnll!).
 """
 function _HwnllCovTerms!(
     H::AbstractMatrix{<:Real}, # output (accumulated into)
-    S⁻¹∇r::AbstractMatrix{<:Real}, ∇Sy::AbstractMatrix{<:Real}, S⁻¹∇Sy::AbstractMatrix{<:Real}, S⁻¹∇S::AbstractArray{<:Real,3} # data
+    S⁻¹∇r::AbstractMatrix{<:Real}, ∇Sy::AbstractMatrix{<:Real}, S⁻¹∇Sy::AbstractMatrix{<:Real}, S⁻¹∇S::Union{Nothing,AbstractArray{<:Real,3}} # data
 )
     J = size(H,1)
     mul!(H, S⁻¹∇r', ∇Sy, -1, 1)
     mul!(H, ∇Sy', S⁻¹∇r, -1, 1)
     mul!(H, ∇Sy', S⁻¹∇Sy, 1, 1)
+    isnothing(S⁻¹∇S) && return nothing
     @inbounds for j in 1:J, i in 1:j
         @views trAᵢAⱼ = dot(transpose(S⁻¹∇S[:,:,i]), S⁻¹∇S[:,:,j])
         H[i,j] -= trAᵢAⱼ/2
@@ -79,13 +81,18 @@ so no solve or KD×KD product happens per pair (i,j). The second order terms are
     ∂ᵢⱼrᵀy          = ∑ HwF[d,i,j,m] (VᵀY)[m,d],                  Y = reshape(y, K, D)
     ⟨∂ᵢⱼL, M⟩       = ∑ HwJuF[d₂,d₁,i,j,m] σ[d₁] (VᵀM)[d₂,m,d₁],  M = reshape(S⁻¹L - yℓᵀ, K, D, Mp1, D)
 Pass HwF = HwJuF = M = nothing when the problem is linear in parameters.
+
+With approx = true the log-det curvature E = (1-δ)⟨S⁻¹∂ⱼL, ∂ᵢL⟩ - ½tr(S⁻¹∂ᵢSS⁻¹∂ⱼS) is left out. What remains is the 
+exact hessian of the Maholinobis distance ½rᵀS⁻¹r plus (1-δ)⟨S⁻¹L, ∂ᵢⱼL⟩, and wⱼ = (1-δ)(∂ⱼL ℓ + L vⱼ) only needs matvecs, 
+so the per j KD×Mp1D products and solves are skipped.
 """
 function _Hwnll!(
     H::AbstractMatrix{<:Real}, # output
     F::Factorization, ∇L::AbstractArray{<:Real,3}, L::AbstractMatrix{<:Real}, ∇r::AbstractMatrix{<:Real}, y::AbstractVector{<:Real}, diagReg::Real, # data (F factors S, y = S⁻¹r)
     HwJuF::Union{Nothing,AbstractArray{<:Real,5}}, HwF::Union{Nothing,AbstractArray{<:Real,4}}, M::Union{Nothing,AbstractMatrix{<:Real}}, V::AbstractMatrix{<:Real}, sig::AbstractVector{<:Real}, # data (second order terms only, M = S⁻¹L - y(Lᵀy)ᵀ)
-    S⁻¹∇r::AbstractMatrix{<:Real}, ∇Lᵀy::AbstractMatrix{<:Real}, ∇Sy::AbstractMatrix{<:Real}, S⁻¹∇Sy::AbstractMatrix{<:Real}, ∂ⱼS::AbstractMatrix{<:Real}, S⁻¹∇S::AbstractArray{<:Real,3}, S⁻¹∂ⱼL::AbstractMatrix{<:Real}, # buffers
-    VᵀY::AbstractMatrix{<:Real}, VᵀM::AbstractArray{<:Real,3} # buffers (second order terms only)
+    S⁻¹∇r::AbstractMatrix{<:Real}, Lᵀy::AbstractVector{<:Real}, ∇Lᵀy::AbstractMatrix{<:Real}, ∇Sy::AbstractMatrix{<:Real}, S⁻¹∇Sy::AbstractMatrix{<:Real}, ∂ⱼS::AbstractMatrix{<:Real}, S⁻¹∇S::AbstractArray{<:Real,3}, S⁻¹∂ⱼL::AbstractMatrix{<:Real}, # buffers
+    VᵀY::AbstractMatrix{<:Real}, VᵀM::AbstractArray{<:Real,3}; # buffers (second order terms only)
+    approx::Bool=false
 )
     J = size(H,1)
     K, Mp1 = size(V)
@@ -94,8 +101,15 @@ function _Hwnll!(
     ldiv!(S⁻¹∇r, F, ∇r)
     # ∂ⱼrᵀS⁻¹∂ᵢr
     mul!(H, ∇r', S⁻¹∇r)
+    approx && mul!(Lᵀy, L', y)
     @inbounds for j in 1:J
         @views mul!(∇Lᵀy[:,j], ∇L[:,:,j]', y)
+        if approx 
+            # wⱼ = ∂ⱼSy = (1-δ)(∂ⱼL(Lᵀy) + L(∂ⱼLᵀy))
+            @views mul!(∇Sy[:,j], ∇L[:,:,j], Lᵀy, 1-diagReg, 0)
+            @views mul!(∇Sy[:,j], L, ∇Lᵀy[:,j], 1-diagReg, 1)
+            continue
+        end
         # ∂ⱼS = (1-δ)(∂ⱼLLᵀ + L∂ⱼLᵀ)
         @views mul!(∂ⱼS, ∇L[:,:,j], L', 1-diagReg, 0)
         ∂ⱼS .+= ∂ⱼS'
@@ -106,7 +120,7 @@ function _Hwnll!(
         @views mul!(H[:,j], reshape(∇L, :, J)', vec(S⁻¹∂ⱼL), 1-diagReg, 1)
     end
     ldiv!(S⁻¹∇Sy, F, ∇Sy)
-    _HwnllCovTerms!(H, S⁻¹∇r, ∇Sy, S⁻¹∇Sy, S⁻¹∇S)
+    _HwnllCovTerms!(H, S⁻¹∇r, ∇Sy, S⁻¹∇Sy, approx ? nothing : S⁻¹∇S)
     # -(1-δ)vᵢᵀvⱼ
     mul!(H, ∇Lᵀy', ∇Lᵀy, -(1-diagReg), 1)
     # ∂ᵢⱼrᵀy

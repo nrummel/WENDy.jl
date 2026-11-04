@@ -5,7 +5,7 @@ using OrdinaryDiffEq: ODEProblem, Rodas4P, solve as solve_ode
 
 ## Reference weak negative log-likelihood written directly from its definition, generic in the element type so
 ## ForwardDiff can differentiate it. It shares only the L(p) and r(p) kernels with the package.
-function wnll_ref(prob::WENDyProblem{lip}, params::WENDyParameters, p::AbstractVector{T}) where {lip, T}
+function Lr_ref(prob::WENDyProblem{lip}, p::AbstractVector{T}) where {lip, T}
     d = prob.data
     Mp1, D = size(d.X)
     K, _ = size(d.V)
@@ -20,10 +20,25 @@ function wnll_ref(prob::WENDyProblem{lip}, params::WENDyParameters, p::AbstractV
     else
         WENDy._r!(r, p, d.tt, d.X, d.V, d.b₀, d.f!, zeros(T,Mp1,D), zeros(T,K,D))
     end
-    S = (1-params.diagReg)*(L*L') + params.diagReg*I
-    C = cholesky(Symmetric(S))
+    L, r
+end
+S_ref(params, L) = (1-params.diagReg)*(L*L') + params.diagReg*I
+function wnll_ref(prob::WENDyProblem, params::WENDyParameters, p::AbstractVector)
+    L, r = Lr_ref(prob, p)
+    C = cholesky(Symmetric(S_ref(params, L)))
     z = C.L \ r
-    (dot(z,z) + 2sum(log, diag(C.U)))/2 + KD/2*log(2pi)
+    (dot(z,z) + 2sum(log, diag(C.U)))/2 + length(r)/2*log(2pi)
+end
+## The approximate hessian is the hessian of the Maholinobis distance ½rᵀS⁻¹r plus (1-δ)⟨S⁻¹L, ∂ᵢⱼL⟩ (zero when linear)
+function mahal_ref(prob::WENDyProblem, params::WENDyParameters, p::AbstractVector)
+    L, r = Lr_ref(prob, p)
+    dot(r, S_ref(params, L) \ r)/2
+end
+function approxH_ref(prob::WENDyProblem, params::WENDyParameters, p::AbstractVector)
+    L, _ = Lr_ref(prob, p)
+    Z = S_ref(params, L) \ L
+    ForwardDiff.hessian(q -> mahal_ref(prob, params, q), p) +
+        (1-params.diagReg)*ForwardDiff.hessian(q -> dot(Z, Lr_ref(prob, q)[1]), p)
 end
 
 function simulate(f!, u₀, tRng, dt, pstar, dist, nr; seed=1)
@@ -93,6 +108,12 @@ const CASES = [
             Hₐ = zeros(J,J); WENDy.HesianWeakNLL(prob.data, c.params; cache=adjointCache)(Hₐ, p)
             @test Hₐ ≈ Href rtol=1e-8
             @test WENDy.WeakNLL(prob.data, c.params; cache=adjointCache)(p) ≈ f(p) rtol=1e-10
+            # approximate hessian (no log-det curvature), both implementations
+            Happroxref = approxH_ref(prob, c.params, p)
+            Hf!(H, p; approx=true); @test H ≈ Happroxref rtol=1e-8
+            @test issymmetric(H)
+            WENDy.HesianWeakNLL(prob.data, c.params; cache=adjointCache)(Hₐ, p; approx=true)
+            @test Hₐ ≈ Happroxref rtol=1e-8
             # shared cache: one cache, never stale
             cache = prob.wnll.f.cache
             @test cache === ∇f!.cache === Hf!.cache
@@ -130,5 +151,9 @@ const CASES = [
             solve(prob, [0.5, 0.5], c.params)
         end
         @test norm(p̂ - c.pstar)/norm(c.pstar) < 0.05
+        p̂ₐ = with_logger(NullLogger()) do
+            solve(prob, [0.5, 0.5], WENDyParameters(Kmax=25, approxHessian=true))
+        end
+        @test norm(p̂ₐ - p̂)/norm(p̂) < 1e-6
     end
 end

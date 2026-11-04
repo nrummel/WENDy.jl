@@ -101,27 +101,40 @@ function _∇wnll!(
     nothing
 end
 ## Hm(p) - hessian of the Maholinobis distance when the ode is linear in parameters ⇒ ∀w  ∂ᵢⱼL = 0 and ∂ᵢⱼr = 0, so ∂ᵢⱼS = ∂ⱼL∂ᵢLᵀ + ∂ᵢL∂ⱼLᵀ is constant in p. Also notice that ∇_w[G*p -b₀] = G
-# With the LLᵀ blocks, ∂ⱼS = (1-δ)(Qⱼ + Qⱼᵀ) and ⟨S⁻¹∂ⱼL, ∂ᵢL⟩ - vᵢᵀvⱼ = ⟨S⁻¹ - yyᵀ, L₁ᵢL₁ⱼᵀ⟩, so nothing here touches the Mp1*D dimension
+# With the LLᵀ blocks, ∂ⱼS = (1-δ)(Qⱼ + Qⱼᵀ) and ⟨S⁻¹∂ⱼL, ∂ᵢL⟩ - vᵢᵀvⱼ = ⟨S⁻¹ - yyᵀ, L₁ᵢL₁ⱼᵀ⟩, so nothing here touches the Mp1*D dimension.
+# With approx = true (pass S⁻¹ = nothing) the log-det curvature (1-δ)⟨S⁻¹, L₁ᵢL₁ⱼᵀ⟩ - ½tr(S⁻¹∂ᵢSS⁻¹∂ⱼS) is left out, 
+# which is exactly the hessian of the Maholinobis distance ½rᵀS⁻¹r, and no KD×KD products are needed
 function _Hwnll!(
     H::AbstractMatrix{<:Real}, # output
-    q::AbstractVector{<:Real}, P::AbstractArray{<:Real,3}, G::AbstractMatrix{<:Real}, F::Factorization, S⁻¹::AbstractMatrix{<:Real}, y::AbstractVector{<:Real}, diagReg::Real, # data (q = [1; p], F factors S, y = S⁻¹r)
+    q::AbstractVector{<:Real}, P::AbstractArray{<:Real,3}, G::AbstractMatrix{<:Real}, F::Factorization, S⁻¹::Union{Nothing,AbstractMatrix{<:Real}}, y::AbstractVector{<:Real}, diagReg::Real, # data (q = [1; p], F factors S, y = S⁻¹r)
     S⁻¹G::AbstractMatrix{<:Real}, Qⱼ::AbstractMatrix{<:Real}, ∂ⱼS::AbstractMatrix{<:Real}, ∇Sy::AbstractMatrix{<:Real}, S⁻¹∇Sy::AbstractMatrix{<:Real}, S⁻¹∇S::AbstractArray{<:Real,3}, S⁻¹_yyᵀ::AbstractMatrix{<:Real} # buffers
 )
     J = size(H,1)
+    approx = isnothing(S⁻¹)
     ldiv!(S⁻¹G, F, G)
     # ∂ⱼrᵀS⁻¹∂ᵢr
     mul!(H, G', S⁻¹G)
     @inbounds for j in 1:J
         @views mul!(vec(Qⱼ), P[:,:,j+1], q)
+        if approx 
+            # wⱼ = ∂ⱼSy = (1-δ)(Qⱼ + Qⱼᵀ)y
+            @views mul!(∇Sy[:,j], Qⱼ, y, 1-diagReg, 0)
+            @views mul!(∇Sy[:,j], Qⱼ', y, 1-diagReg, 1)
+            continue
+        end
         ∂ⱼS .= (1-diagReg) .* (Qⱼ .+ Qⱼ')
         @views mul!(∇Sy[:,j], ∂ⱼS, y)
         @views mul!(S⁻¹∇S[:,:,j], S⁻¹, ∂ⱼS)
     end
     ldiv!(S⁻¹∇Sy, F, ∇Sy)
-    _HwnllCovTerms!(H, S⁻¹G, ∇Sy, S⁻¹∇Sy, S⁻¹∇S)
-    # (1-δ)⟨S⁻¹ - yyᵀ, L₁ᵢL₁ⱼᵀ⟩
-    copyto!(S⁻¹_yyᵀ, S⁻¹)
-    mul!(S⁻¹_yyᵀ, y, y', -1, 1)
+    _HwnllCovTerms!(H, S⁻¹G, ∇Sy, S⁻¹∇Sy, approx ? nothing : S⁻¹∇S)
+    # (1-δ)⟨S⁻¹ - yyᵀ, L₁ᵢL₁ⱼᵀ⟩, or just -(1-δ)⟨yyᵀ, L₁ᵢL₁ⱼᵀ⟩ when approx
+    if approx 
+        mul!(S⁻¹_yyᵀ, y, y', -1, 0)
+    else
+        copyto!(S⁻¹_yyᵀ, S⁻¹)
+        mul!(S⁻¹_yyᵀ, y, y', -1, 1)
+    end
     @inbounds for j in 1:J, i in 1:J
         @views H[i,j] += (1-diagReg)*dot(vec(S⁻¹_yyᵀ), P[:,i+1,j+1])
     end

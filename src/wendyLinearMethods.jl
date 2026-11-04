@@ -229,16 +229,17 @@ function LinearHesianWeakNLL(data::WENDyInternals{true,<:Distribution}, params::
     )
 end
 # method inplace
-function (m::LinearHesianWeakNLL)(H::AbstractMatrix{<:Real}, p::AbstractVector{<:Real})
+# approx = true leaves out the log-det curvature (see _Hwnll!)
+function (m::LinearHesianWeakNLL)(H::AbstractMatrix{<:Real}, p::AbstractVector{<:Real}; approx::Bool=false)
     c = _update!(m.cache, p)
     _Hwnll!(
         H, 
-        c.q, c.P, m.G, c.F, _S⁻¹!(c), c.S⁻¹r, c.diagReg,
+        c.q, c.P, m.G, c.F, approx ? nothing : _S⁻¹!(c), c.S⁻¹r, c.diagReg,
         m.S⁻¹G, m.Qⱼ, m.∂ⱼS, m.∇Sy, m.S⁻¹∇Sy, m.S⁻¹∇S, m.S⁻¹_yyᵀ
     )
 end
 # method mutate internal data
-function (m::LinearHesianWeakNLL)(p::AbstractVector{<:Real})
-    m(m.H, p)
+function (m::LinearHesianWeakNLL)(p::AbstractVector{<:Real}; approx::Bool=false)
+    m(m.H, p; approx=approx)
     return m.H
 end

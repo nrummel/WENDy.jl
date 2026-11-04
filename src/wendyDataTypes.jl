@@ -23,7 +23,8 @@ Hyper-parameters for the WENDy Algorithm
         optimMaxiters::Int=500,
         optimTimelimit::Real=200.0,
         fsAlg::OrdinaryDiffEqAlgorithm=Rodas4P(),
-        fsU0Free::Bool=true
+        fsU0Free::Bool=true,
+        approxHessian::Bool=false
     )
 
 # Fields
@@ -48,6 +49,7 @@ Hyper-parameters for the WENDy Algorithm
 - optimTimelimit::Real = 500.0 : maximum time in seconds (used by all other optimization algorithms)
 - fsAlg::OrdinaryDiffEqAlgorithm = Rodas4P() :  forward solve algorithm used by the forward solve nonlinear least squares algorithm
 - fsU0Free::Bool = true : Specifies if the forward solve algorithm should also optimize over the initial condition
+- approxHessian::Bool = false : Second order solvers (TrustRegion, ARCqK and the hybrid methods) use an approximate hessian of the weak negative log-likelihood that leaves out the curvature of its log-determinant term. This skips the most expensive part of the hessian (it is the exact hessian of the Maholinobis distance when the problem is linear in parameters), turning these into quasi-Newton methods. Often several times faster when that term is small relative to the rest of the hessian, but it can converge to a worse point when it is not, so check the result against the exact hessian on a new problem
 """
 @kwdef struct WENDyParameters   
     diagReg::Real                       = 1.0e-10
@@ -71,6 +73,7 @@ Hyper-parameters for the WENDy Algorithm
     optimTimelimit::Real                = 200.0
     fsAlg::OrdinaryDiffEqAlgorithm      = Rodas4P()
     fsU0Free::Bool                      = true
+    approxHessian::Bool                 = false
 end 
 ##
 struct WENDyInternals{lip, DistType}

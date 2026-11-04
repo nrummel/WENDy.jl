@@ -167,7 +167,7 @@ function _trustRegion_unconstrained(
     # Call algorithm
     J = length(p₀)
     res = optimize(
-        costFun.f, costFun.∇f!, costFun.Hf!, # f, g, h
+        costFun.f, costFun.∇f!, (H, p) -> costFun.Hf!(H, p; approx=params.approxHessian), # f, g, h
         p₀, NewtonTrustRegion(), 
         Optim_Options(
             x_reltol=reltol, x_abstol=abstol, iterations=maxIt, time_limit=timelimit, 
@@ -196,7 +196,7 @@ function _trustRegion_constrained(
     function Hv!(h, p, v; obj_weight=1.0)
         if !all(mem_w .== p)
             # @show norm(p - mem_w)
-            costFun.Hf!(_H, p)
+            costFun.Hf!(_H, p; approx=params.approxHessian)
             mem_w .= p
         end
         h .= _H*v * obj_weight
@@ -263,7 +263,7 @@ function (m::ARCqK)(
     function Hv!(h, p, v; obj_weight=1.0)
         if !all(mem_w .== p)
             # @show norm(p - mem_w)
-            costFun.Hf!(_H, p)
+            costFun.Hf!(_H, p; approx=params.approxHessian)
             mem_w .= p
         end
         h .= _H*v * obj_weight

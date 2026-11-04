@@ -261,6 +261,7 @@ struct AdjointHesianWeakNLL<:HesianWeakNLL
     Hₚ∇ₓf!::Function
     # buffers
     S⁻¹∇r::AbstractMatrix{<:Real}
+    Lᵀy::AbstractVector{<:Real}
     ∇Lᵀy::AbstractMatrix{<:Real}
     ∇Sy::AbstractMatrix{<:Real}
     S⁻¹∇Sy::AbstractMatrix{<:Real}
@@ -285,12 +286,12 @@ function AdjointHesianWeakNLL(data::WENDyInternals{lip, <:Distribution}, params:
         cache,
         lip, data.tt, data.X, data.V, data.sig,
         data.Hₚf!, data.Hₚ∇ₓf!,
-        zeros(KD, J), zeros(MD, J), zeros(KD, J), zeros(KD, J), zeros(KD, KD), zeros(KD, KD, J), zeros(KD, MD),
+        zeros(KD, J), zeros(MD), zeros(MD, J), zeros(KD, J), zeros(KD, J), zeros(KD, KD), zeros(KD, KD, J), zeros(KD, MD),
         zeros(D, J, J, Mp1₂), zeros(D, D, J, J, Mp1₂), zeros(Mp1₂, D), zeros(D, Mp1₂, D)
     )
 end
-# method inplace
-function (m::AdjointHesianWeakNLL)(H::AbstractMatrix{<:Real}, p::AbstractVector{<:Real})
+# method inplace: approx = true leaves out the log-det curvature (see _Hwnll!)
+function (m::AdjointHesianWeakNLL)(H::AbstractMatrix{<:Real}, p::AbstractVector{<:Real}; approx::Bool=false)
     c = _update!(m.cache, p)
     _jacobians!(c)
     if !m.lip
@@ -301,12 +302,13 @@ function (m::AdjointHesianWeakNLL)(H::AbstractMatrix{<:Real}, p::AbstractVector{
         H,
         c.F, c.∇L!.∇L, c.L!.L, c.∇r!.∇r, c.S⁻¹r, c.diagReg,
         m.lip ? nothing : m.HwJuF, m.lip ? nothing : m.HwF, m.lip ? nothing : _M!(c), m.V, m.sig,
-        m.S⁻¹∇r, m.∇Lᵀy, m.∇Sy, m.S⁻¹∇Sy, m.∂ⱼS, m.S⁻¹∇S, m.S⁻¹∂ⱼL,
-        m.VᵀY, m.VᵀM
+        m.S⁻¹∇r, m.Lᵀy, m.∇Lᵀy, m.∇Sy, m.S⁻¹∇Sy, m.∂ⱼS, m.S⁻¹∇S, m.S⁻¹∂ⱼL,
+        m.VᵀY, m.VᵀM;
+        approx=approx
     )
 end
 # method mutate internal data
-function (m::AdjointHesianWeakNLL)(p::AbstractVector{<:Real})
-    m(m.H, p)
+function (m::AdjointHesianWeakNLL)(p::AbstractVector{<:Real}; approx::Bool=false)
+    m(m.H, p; approx=approx)
     return m.H
 end
