@@ -12,7 +12,7 @@ function _buildGmat(f!::Function, tt::AbstractVector{<:Real}, Y::AbstractMatrix{
             @views f!(F[m,:], Y[m,:], eⱼ, tt[m])
         end 
         gⱼ = V * F
-        @views G[:,j] .= reshape(gⱼ,K*D)
+        G[:,j] = vec(gⱼ)
     end
     G
 end
@@ -162,34 +162,42 @@ Weak form negative log-likelihood m(p) = ½rᵀS⁻¹r + ½log|S| + (KD/2)log(2�
 """
 wnll(prob::WENDyProblem, p::AbstractVector{<:Real}) = wnll(prob.ws, p)
 """
+    ∇wnll(prob::WENDyProblem, p)
     ∇wnll!(g, prob::WENDyProblem, p)
 
-Gradient of the weak form negative log-likelihood, written into (and returned in) g
+Gradient of the weak form negative log-likelihood (∇wnll! writes it into g)
 """
-∇wnll!(g::AbstractVector{<:Real}, prob::WENDyProblem, p::AbstractVector{<:Real}) = ∇wnll!(g, prob.ws, p)
+∇wnll(prob::WENDyProblem, p::AbstractVector{<:Real}) = ∇wnll(prob.ws, p)
+∇wnll!(g::AbstractVector{<:Real}, prob::WENDyProblem, p::AbstractVector{<:Real}) = g .= ∇wnll(prob, p)
 """
+    Hwnll(prob::WENDyProblem, p; approx=false)
     Hwnll!(H, prob::WENDyProblem, p; approx=false)
 
-Hessian of the weak form negative log-likelihood, written into (and returned in) H. With approx = true the curvature 
+Hessian of the weak form negative log-likelihood (Hwnll! writes it into H). With approx = true the curvature 
 of the log-determinant term is left out (see approxHessian in WENDyParameters)
 """
-Hwnll!(H::AbstractMatrix{<:Real}, prob::WENDyProblem, p::AbstractVector{<:Real}; approx::Bool=false) = Hwnll!(H, prob.ws, p; approx=approx)
+Hwnll(prob::WENDyProblem, p::AbstractVector{<:Real}; approx::Bool=false) = Hwnll(prob.ws, p; approx=approx)
+Hwnll!(H::AbstractMatrix{<:Real}, prob::WENDyProblem, p::AbstractVector{<:Real}; approx::Bool=false) = H .= Hwnll(prob, p; approx=approx)
 ## weak residual, its jacobian and covariance
 """
+    weakResidual(prob::WENDyProblem, p)
     weakResidual!(r, prob::WENDyProblem, p)
 
-Weak residual r(p) = G(p) - b₀, written into r
+Weak residual r(p) = G(p) - b₀ (weakResidual! writes it into r)
 """
-weakResidual!(r::AbstractVector{<:Real}, prob::WENDyProblem, p::AbstractVector{<:Real}) = _evalr!(r, prob.ws, p)
+weakResidual(prob::WENDyProblem, p::AbstractVector{<:Real}) = _r(prob.ws, p)
+weakResidual!(r::AbstractVector{<:Real}, prob::WENDyProblem, p::AbstractVector{<:Real}) = r .= weakResidual(prob, p)
 """
+    weakJacobian(prob::WENDyProblem, p)
     weakJacobian!(∇r, prob::WENDyProblem, p)
 
-Jacobian of the weak residual wrt p, written into ∇r
+Jacobian of the weak residual wrt p (weakJacobian! writes it into ∇r)
 """
-weakJacobian!(∇r::AbstractMatrix{<:Real}, prob::WENDyProblem, p::AbstractVector{<:Real}) = _eval∇r!(∇r, prob.ws, p)
+weakJacobian(prob::WENDyProblem, p::AbstractVector{<:Real}) = copy(_∇r(prob.ws, p))
+weakJacobian!(∇r::AbstractMatrix{<:Real}, prob::WENDyProblem, p::AbstractVector{<:Real}) = ∇r .= _∇r(prob.ws, p)
 """
     weakCovariance(prob::WENDyProblem, p)
 
-Covariance of the weak residual S(p) = (1-δ)L(p)L(p)ᵀ + δI (a copy)
+Covariance of the weak residual S(p) = (1-δ)L(p)L(p)ᵀ + δI
 """
 weakCovariance(prob::WENDyProblem, p::AbstractVector{<:Real}) = copy(_update!(prob.ws, p).S)

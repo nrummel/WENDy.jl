@@ -1,133 +1,63 @@
 ## Equations that work if the ode rhs is linear in p
-# L₁ - this is the gradient/jacobian of L(p) when L is linear 
-function _L₁!(
-    L₁::AbstractArray{<:Real,3}, 
-    tt::AbstractVector{<:Real}, X::AbstractMatrix{<:Real}, V::AbstractMatrix{<:Real}, sig::AbstractVector{<:Real}, 
-    ∇ₓf!::Function, 
-    JuF::AbstractArray{<:Real, 3}, _∂ⱼL::AbstractArray{<:Real, 4}, ∂ⱼL::AbstractArray{<:Real, 4}, eⱼ::AbstractVector{<:Real}
-)
-∂ⱼL
-    Mp1,D = size(X)
-    K,_ = size(V)
-    J = length(eⱼ)
-    KD = K*D
-    MD = Mp1*D
-    for j = 1:J 
-        eⱼ .= 0
-        eⱼ[j] = 1
-        @inbounds for m in 1:Mp1
-            @views ∇ₓf!(JuF[:,:,m], X[m,:], eⱼ, tt[m])
-        end
-        @tullio _∂ⱼL[k,d2,d1,m] = JuF[d2,d1,m] * V[k,m]* sig[d1] # increases allocation from 4 to 45 
-        permutedims!(∂ⱼL,_∂ⱼL,(1,2,4,3))
-        @views L₁[:,:,j] .= reshape(∂ⱼL,KD,MD) 
-    end
-    nothing
+# Then L(p) = L₀ + ∑ⱼpⱼL₁ⱼ and r(p) = Gp - b₀ with G = ∇r constant.
+# L₁[:,:,j] = Lₚ(eⱼ), the gradient/jacobian of L(p)
+function _L₁(data::WENDyInternals)
+    J = data.J
+    eⱼ(j) = [i == j ? 1.0 : 0.0 for i in 1:J]
+    cat((_Lₚ(eⱼ(j), data) for j in 1:J)...; dims=3)
 end
 ## L(p)
-function _L!(
-    L::AbstractMatrix{<:Real},p::AbstractVector{<:Real}, # output/input
-    L₁::AbstractArray{<:Real}, L₀::AbstractMatrix{<:Real} # data
-) 
-    @tullio L[kd,md] = L₁[kd,md,j]*p[j] 
-    L .+= L₀
-    nothing
-end
-## G(p)
-function _g!(g::AbstractVector, p::AbstractVector, # output/input
-    G::AbstractMatrix{<:Real} # data
-)
-    mul!(g, G, p)
-    nothing
-end
-# r(p) = G*p - b₀
-function _r!(
-    r::AbstractVector, p::AbstractVector, # output/input
-    G::AbstractMatrix, b₀::AbstractVector # data
-) 
-    _g!(r, p, G )
-    @views r .-= b₀
-    nothing
-end
-## LLᵀ blocks - because L(p) = L₀ + ∑ⱼpⱼL₁ⱼ, with q = [1; p] and L̃ = [L₀, L₁₁, ⋯, L₁ⱼ]
-# LLᵀ = ∑ₐᵦ qₐqᵦ L̃ₐL̃ᵦᵀ, so we store P[:,a,b] = vec(L̃ₐL̃ᵦᵀ) once and never touch the Mp1*D dimension again
-function _LLᵀBlocks!(
-    P::AbstractArray{<:Real,3}, # output
-    L₀::AbstractMatrix{<:Real}, L₁::AbstractArray{<:Real,3}, # data
-    LaLbᵀ::AbstractMatrix{<:Real} # buffers
-)
-    J = size(L₁,3)
+_L(p::AbstractVector{<:Real}, L₀::AbstractMatrix{<:Real}, L₁::AbstractArray{<:Real,3}) = L₀ + reshape(reshape(L₁, :, length(p)) * p, size(L₀))
+## LLᵀ blocks - with q = [1; p] and L̃ = [L₀, L₁₁, ⋯, L₁ⱼ], LLᵀ = ∑ₐᵦ qₐqᵦ L̃ₐL̃ᵦᵀ, so we store
+# P[:,a,b] = vec(L̃ₐL̃ᵦᵀ) once and never touch the Mp1*D dimension again
+function _LLᵀBlocks(L₀::AbstractMatrix{<:Real}, L₁::AbstractArray{<:Real,3})
+    J = size(L₁, 3)
+    KD = size(L₀, 1)
     L̃(a) = a == 1 ? L₀ : view(L₁,:,:,a-1)
+    P = zeros(KD*KD, J+1, J+1)
     for a in 1:J+1, b in a:J+1
-        mul!(LaLbᵀ, L̃(a), L̃(b)')
-        @views P[:,a,b] .= vec(LaLbᵀ)
-        @views P[:,b,a] .= vec(LaLbᵀ')
+        LₐLᵦᵀ = L̃(a) * L̃(b)'
+        P[:,a,b] = vec(LₐLᵦᵀ)
+        P[:,b,a] = vec(LₐLᵦᵀ')
     end
-    nothing
+    P
 end
 # S(p) = (1-δ)∑ₐᵦ qₐqᵦ L̃ₐL̃ᵦᵀ + δI
-function _S!(
-    S::AbstractMatrix{<:Real}, q::AbstractVector{<:Real}, # output/input (q = [1; p])
-    P::AbstractArray{<:Real,3}, diagReg::Real # data
-)
-    mul!(vec(S), reshape(P, size(P,1), :), vec(q*q'))
-    S .*= (1-diagReg)
-    @views S[diagind(S)] .+= diagReg
-    nothing
+function _S(q::AbstractVector{<:Real}, P::AbstractArray{<:Real,3}, diagReg::Real)
+    KD = isqrt(size(P, 1))
+    S = reshape(reshape(P, KD*KD, :) * vec(q*q'), KD, KD)
+    S .*= 1-diagReg
+    S[diagind(S)] .+= diagReg
+    S
 end
-## ∇m(p) - gradient using the LLᵀ blocks. With y = S⁻¹r and Qⱼ = ∑ₐqₐL̃ₐL₁ⱼᵀ = LL₁ⱼᵀ, ∂ⱼS = (1-δ)(Qⱼ + Qⱼᵀ) so
-# ∂ⱼm = Gⱼᵀy - (1-δ)yᵀQⱼy + (1-δ)⟨S⁻¹, Qⱼ⟩
-function _∇wnll!(
-    ∇m::AbstractVector{<:Real}, # output
-    q::AbstractVector{<:Real}, P::AbstractArray{<:Real,3}, G::AbstractMatrix{<:Real}, y::AbstractVector{<:Real}, S⁻¹::AbstractMatrix{<:Real}, diagReg::Real, # data (q = [1; p], y = S⁻¹r)
-    Qⱼ::AbstractMatrix{<:Real} # buffers
-)
-    J = length(∇m)
-    mul!(∇m, G', y)
-    @inbounds for j in 1:J 
-        @views mul!(vec(Qⱼ), P[:,:,j+1], q)
-        ∇m[j] += (1-diagReg)*(dot(S⁻¹, Qⱼ) - dot(y, Qⱼ, y))
-    end
-    nothing
+# Qⱼ = ∑ₐqₐL̃ₐL₁ⱼᵀ = LL₁ⱼᵀ
+_Q(q::AbstractVector{<:Real}, P::AbstractArray{<:Real,3}, j::Int) = (KD = isqrt(size(P, 1)); reshape(view(P,:,:,j+1) * q, KD, KD))
+# Cₐᵦ = ⟨B, L̃ₐL̃ᵦᵀ⟩ for every pair of blocks
+_C(B::AbstractMatrix{<:Real}, P::AbstractArray{<:Real,3}) = reshape(reshape(P, size(P,1), :)' * vec(B), size(P,2), size(P,3))
+## ∇m(p) - gradient using the LLᵀ blocks. With y = S⁻¹r and ∂ⱼS = (1-δ)(Qⱼ + Qⱼᵀ)
+# ∂ⱼm = Gⱼᵀy + (1-δ)⟨S⁻¹ - yyᵀ, Qⱼ⟩ = Gⱼᵀy + (1-δ)∑ₐqₐCₐ,ⱼ₊₁ with C = _C(S⁻¹ - yyᵀ, P)
+function _∇wnll(q::AbstractVector{<:Real}, P::AbstractArray{<:Real,3}, G::AbstractMatrix{<:Real}, y::AbstractVector{<:Real}, S⁻¹::AbstractMatrix{<:Real}, diagReg::Real)
+    C = _C(S⁻¹ - y*y', P)
+    G'y + (1-diagReg) * C[:,2:end]'q
 end
 ## Hm(p) - hessian of the Maholinobis distance when the ode is linear in parameters ⇒ ∀w  ∂ᵢⱼL = 0 and ∂ᵢⱼr = 0, so ∂ᵢⱼS = ∂ⱼL∂ᵢLᵀ + ∂ᵢL∂ⱼLᵀ is constant in p. Also notice that ∇_w[G*p -b₀] = G
 # With the LLᵀ blocks, ∂ⱼS = (1-δ)(Qⱼ + Qⱼᵀ) and ⟨S⁻¹∂ⱼL, ∂ᵢL⟩ - vᵢᵀvⱼ = ⟨S⁻¹ - yyᵀ, L₁ᵢL₁ⱼᵀ⟩, so nothing here touches the Mp1*D dimension.
-# With approx = true (pass S⁻¹ = nothing) the log-det curvature (1-δ)⟨S⁻¹, L₁ᵢL₁ⱼᵀ⟩ - ½tr(S⁻¹∂ᵢSS⁻¹∂ⱼS) is left out, 
+# With S⁻¹ = nothing (approx) the log-det curvature (1-δ)⟨S⁻¹, L₁ᵢL₁ⱼᵀ⟩ - ½tr(S⁻¹∂ᵢSS⁻¹∂ⱼS) is left out,
 # which is exactly the hessian of the Maholinobis distance ½rᵀS⁻¹r, and no KD×KD products are needed
-function _Hwnll!(
-    H::AbstractMatrix{<:Real}, # output
-    q::AbstractVector{<:Real}, P::AbstractArray{<:Real,3}, G::AbstractMatrix{<:Real}, F::Factorization, S⁻¹::Union{Nothing,AbstractMatrix{<:Real}}, y::AbstractVector{<:Real}, diagReg::Real, # data (q = [1; p], F factors S, y = S⁻¹r)
-    S⁻¹G::AbstractMatrix{<:Real}, Qⱼ::AbstractMatrix{<:Real}, ∂ⱼS::AbstractMatrix{<:Real}, ∇Sy::AbstractMatrix{<:Real}, S⁻¹∇Sy::AbstractMatrix{<:Real}, S⁻¹∇S::AbstractArray{<:Real,3}, S⁻¹_yyᵀ::AbstractMatrix{<:Real} # buffers
+function _Hwnll(
+    q::AbstractVector{<:Real}, P::AbstractArray{<:Real,3}, G::AbstractMatrix{<:Real}, F::Factorization,
+    S⁻¹::Union{Nothing,AbstractMatrix{<:Real}}, y::AbstractVector{<:Real}, diagReg::Real
 )
-    J = size(H,1)
+    J = size(G, 2)
     approx = isnothing(S⁻¹)
-    ldiv!(S⁻¹G, F, G)
-    # ∂ⱼrᵀS⁻¹∂ᵢr
-    mul!(H, G', S⁻¹G)
-    @inbounds for j in 1:J
-        @views mul!(vec(Qⱼ), P[:,:,j+1], q)
-        if approx 
-            # wⱼ = ∂ⱼSy = (1-δ)(Qⱼ + Qⱼᵀ)y
-            @views mul!(∇Sy[:,j], Qⱼ, y, 1-diagReg, 0)
-            @views mul!(∇Sy[:,j], Qⱼ', y, 1-diagReg, 1)
-            continue
-        end
-        ∂ⱼS .= (1-diagReg) .* (Qⱼ .+ Qⱼ')
-        @views mul!(∇Sy[:,j], ∂ⱼS, y)
-        @views mul!(S⁻¹∇S[:,:,j], S⁻¹, ∂ⱼS)
-    end
-    ldiv!(S⁻¹∇Sy, F, ∇Sy)
-    _HwnllCovTerms!(H, S⁻¹G, ∇Sy, S⁻¹∇Sy, approx ? nothing : S⁻¹∇S)
+    δ̃ = 1-diagReg
+    U = F \ G
+    ∂S = [(Qⱼ = _Q(q, P, j); δ̃ .* (Qⱼ .+ Qⱼ')) for j in 1:J]
+    W = reduce(hcat, ∂ⱼS * y for ∂ⱼS in ∂S)
+    # ∂ⱼrᵀS⁻¹∂ᵢr + covariance terms
+    H = G'U + _HwnllCovTerms(U, W, F \ W, approx ? nothing : [S⁻¹ * ∂ⱼS for ∂ⱼS in ∂S])
     # (1-δ)⟨S⁻¹ - yyᵀ, L₁ᵢL₁ⱼᵀ⟩, or just -(1-δ)⟨yyᵀ, L₁ᵢL₁ⱼᵀ⟩ when approx
-    if approx 
-        mul!(S⁻¹_yyᵀ, y, y', -1, 0)
-    else
-        copyto!(S⁻¹_yyᵀ, S⁻¹)
-        mul!(S⁻¹_yyᵀ, y, y', -1, 1)
-    end
-    @inbounds for j in 1:J, i in 1:J
-        @views H[i,j] += (1-diagReg)*dot(vec(S⁻¹_yyᵀ), P[:,i+1,j+1])
-    end
-    H .= (H .+ H') ./ 2
-    nothing 
+    C = _C(approx ? -y*y' : S⁻¹ - y*y', P)
+    H += δ̃ * C[2:end,2:end]
+    (H + H') / 2
 end

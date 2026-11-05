@@ -23,8 +23,8 @@ function _irlsStep(prob::WENDyProblem{lip}, pnm1::AbstractVector{<:Real}, params
         end
         @info "  Running local optimization method"
         pn, iter = nonlinearLeastSquares(
-            (r, p) -> ldiv!(C, weakResidual!(r, prob, p)),
-            (∇r, p) -> ldiv!(C, weakJacobian!(∇r, prob, p)),
+            (r, p) -> r .= C \ weakResidual(prob, p),
+            (∇r, p) -> ∇r .= C \ weakJacobian(prob, p),
             KD, pnm1, params;
             reltol=params.nlsReltol, abstol=params.nlsAbstol, maxiters=params.nlsMaxiters, return_iters=true
         )

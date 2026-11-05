@@ -1,110 +1,62 @@
+## Equations used when the ode rhs is not linear in p
+# (see _Lₚ for why each kernel has a version that takes the fields of WENDyInternals)
 # L(p)
-function _L!(
-    L::AbstractMatrix{<:Real},p::AbstractVector{<:Real}, # output/input
-    tt::AbstractVector{<:Real}, X::AbstractMatrix{<:Real}, V::AbstractMatrix{<:Real}, L₀::AbstractMatrix{<:Real}, sig::AbstractVector{<:Real}, # data
-    ∇ₓf!::Function, # functions
-    JuF::AbstractArray{<:Real, 3}, _L₁::AbstractArray{<:Real, 4} # buffers
-) 
-    Mp1, D = size(X)
-    K, _ = size(V)
-    @inbounds for m in 1:Mp1
-        @views ∇ₓf!(JuF[:,:,m], X[m,:], p, tt[m])
-    end
-    @tullio _L₁[k,d2,m,d1] = JuF[d2,d1,m] * V[k,m]* sig[d1] # increases allocation from 4 to 45 
-    # permutedims!(_L₁,__L₁,(1,2,4,3))
-    @views L .= reshape(_L₁,K*D,Mp1*D) + L₀
-    nothing
-end
-# ∇L(p)
-function _∇L!(
-    ∇L::AbstractArray{<:Real,3}, p::AbstractVector{<:Real},
-    tt::AbstractVector{<:Real}, X::AbstractMatrix{<:Real},V::AbstractMatrix{<:Real},sig::AbstractVector{<:Real},
-    ∇ₚ∇ₓf!::Function,
-    JwJuF::AbstractArray{<:Real,4}, _∇L::AbstractArray{<:Real,5})
+_L(p::AbstractVector{<:Real}, data::WENDyInternals, L₀::AbstractMatrix{<:Real}) = L₀ + _Lₚ(p, data)
+# ∇L(p), ∇L[:,:,j] = ∂ⱼL
+_∇L(p::AbstractVector{<:Real}, data::WENDyInternals) = _∇L(p, data.tt, data.X, data.V, data.sig, data.∇ₚ∇ₓf!)
+function _∇L(p::AbstractVector{<:Real}, tt, X, V, sig, ∇ₚ∇ₓf!)
     Mp1, D = size(X)
     K, _ = size(V)
     J = length(p)
-    # compute ∇L
-    @inbounds for m in 1:Mp1 
+    JwJuF = zeros(D, D, J, Mp1)
+    for m in 1:Mp1 
         @views ∇ₚ∇ₓf!(JwJuF[:,:,:,m], X[m,:], p, tt[m])
     end
-    @tullio _∇L[k,d2,m,d1,j] = JwJuF[d2,d1,j,m] * V[k,m] * sig[d1] 
-    @views ∇L .= reshape(_∇L,K*D,Mp1*D,J)
-    nothing
+    @tullio ∇L[k,d2,m,d1,j] := JwJuF[d2,d1,j,m] * V[k,m] * sig[d1] 
+    reshape(∇L, K*D, Mp1*D, J)
 end
-# G(p)
-function _g!(g::AbstractVector, p::AbstractVector, # output/input
-    tt::AbstractVector{<:Real}, X::AbstractMatrix, V::AbstractMatrix, # data
-    f!::Function, # function
-    F::AbstractMatrix{<:Real}, G::AbstractMatrix{<:Real} # buffers
-)
+# r(p) = G(p) - b₀ where G(p) = V F(p) and F(p)[m,:] = f(xₘ, p, tₘ)
+_r(p::AbstractVector{<:Real}, data::WENDyInternals) = _r(p, data.tt, data.X, data.V, data.b₀, data.f!)
+function _r(p::AbstractVector{T}, tt, X, V, b₀, f!) where T<:Real
     Mp1, D = size(X)
-    K, _ = size(V)
+    F = zeros(T, Mp1, D)
     for m in 1:Mp1
         @views f!(F[m,:], X[m,:], p, tt[m])
     end
-    mul!(G, V, F)
-    @views g .= reshape(G, K*D)
-    nothing
+    vec(V * F) - b₀
 end
-# r(p) = G(p) - b₀
-function _r!(
-    r::AbstractVector,p::AbstractVector, # output/input
-    tt::AbstractVector{<:Real}, X::AbstractMatrix, V::AbstractMatrix, b₀::AbstractVector, # data
-    f!::Function, # function
-    F::AbstractMatrix{<:Real}, G::AbstractMatrix{<:Real} # buffers
-) 
-    _g!(
-        r, p, 
-        tt, X, V, 
-        f!,
-        F, G
-    )
-    @views r .-= b₀
-    nothing
-end
-# ∇r = ∇G
-function _∇r!(
-    ∇r::AbstractMatrix{<:Real}, p::AbstractVector{<:Real}, # output/input
-    tt::AbstractVector{<:Real}, X::AbstractMatrix{<:Real}, V::AbstractMatrix{<:Real}, 
-    ∇ₚf!::Function, # functions
-    JwF::AbstractArray{<:Real, 3}, __∇r::AbstractArray{<:Real, 3}, _∇r::AbstractArray{<:Real, 3} # buffers
-) 
+# ∇r(p) = ∇G(p)
+_∇r(p::AbstractVector{<:Real}, data::WENDyInternals) = _∇r(p, data.tt, data.X, data.V, data.∇ₚf!)
+function _∇r(p::AbstractVector{<:Real}, tt, X, V, ∇ₚf!)
     Mp1, D = size(X)
     K, _ = size(V)
-    _, J = size(∇r)
-    @assert length(p) == J "p must be of length $J"
-
-    @inbounds for m in 1:Mp1
+    J = length(p)
+    JwF = zeros(D, J, Mp1)
+    for m in 1:Mp1
         @views ∇ₚf!(JwF[:,:,m], X[m,:], p, tt[m])
     end
-    
-    @tullio __∇r[d,j,k] = V[k,m] * JwF[d,j,m] 
-    permutedims!(_∇r, __∇r,(3,1,2))
-    @views ∇r .= reshape(_∇r, K*D, J)
-    nothing
+    @tullio ∇r[k,d,j] := V[k,m] * JwF[d,j,m] 
+    reshape(∇r, K*D, J)
 end
 # Hessian of the rhs wrt p at each time point: HwF[:,:,:,m] = ∇ₚ²f(xₘ) (∇²r = V∘HwF is never formed)
-function _HwF!(
-    HwF::AbstractArray{<:Real,4}, p::AbstractVector{<:Real}, # output/input
-    tt::AbstractVector{<:Real}, X::AbstractMatrix{<:Real}, # data
-    Hₚf!::Function # functions
-)
-    Mp1, _ = size(X)
-    @inbounds for m in 1:Mp1 
-        @views Hₚf!(HwF[:,:,:,m], X[m,:], p, tt[m] )
+_HwF(p::AbstractVector{<:Real}, data::WENDyInternals) = _HwF(p, data.tt, data.X, data.Hₚf!)
+function _HwF(p::AbstractVector{<:Real}, tt, X, Hₚf!)
+    Mp1, D = size(X)
+    J = length(p)
+    HwF = zeros(D, J, J, Mp1)
+    for m in 1:Mp1 
+        @views Hₚf!(HwF[:,:,:,m], X[m,:], p, tt[m])
     end
-    nothing
+    HwF
 end
 # Hessian of the state jacobian of the rhs wrt p at each time point: HwJuF[:,:,:,:,m] = ∇ₚ²∇ₓf(xₘ) (∇²L = V∘HwJuF∘diag(σ) is never formed)
-function _HwJuF!(
-    HwJuF::AbstractArray{<:Real,5}, p::AbstractVector{<:Real}, # output/input
-    tt::AbstractVector{<:Real}, X::AbstractMatrix{<:Real}, # data
-    Hₚ∇ₓf!::Function # functions
-)
-    Mp1, _ = size(X)
-    @inbounds for m in 1:Mp1 
+_HwJuF(p::AbstractVector{<:Real}, data::WENDyInternals) = _HwJuF(p, data.tt, data.X, data.Hₚ∇ₓf!)
+function _HwJuF(p::AbstractVector{<:Real}, tt, X, Hₚ∇ₓf!)
+    Mp1, D = size(X)
+    J = length(p)
+    HwJuF = zeros(D, D, J, J, Mp1)
+    for m in 1:Mp1 
         @views Hₚ∇ₓf!(HwJuF[:,:,:,:,m], X[m,:], p, tt[m])
     end
-    nothing
+    HwJuF
 end

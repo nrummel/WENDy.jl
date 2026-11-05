@@ -35,5 +35,5 @@ module WENDy
     include("wendyOptim.jl")
 
     export WENDyProblem, OutputErrorProblem, WENDyParameters, solve, Normal, LogNormal
-    export wnll, ∇wnll!, Hwnll!, weakResidual!, weakJacobian!, weakCovariance, oeResidual!, oeJacobian!
+    export wnll, ∇wnll, ∇wnll!, Hwnll, Hwnll!, weakResidual, weakResidual!, weakJacobian, weakJacobian!, weakCovariance, oeResidual!, oeJacobian!
 end # module WENDy

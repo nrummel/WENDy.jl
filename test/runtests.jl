@@ -5,21 +5,11 @@ using OrdinaryDiffEq: ODEProblem, Rodas4P, solve as solve_ode
 
 ## Reference weak negative log-likelihood written directly from its definition, generic in the element type so
 ## ForwardDiff can differentiate it. It shares only the L(p) and r(p) kernels with the package.
-function Lr_ref(prob::WENDyProblem{lip}, p::AbstractVector{T}) where {lip, T}
+function Lr_ref(prob::WENDyProblem{lip}, p::AbstractVector) where lip
     d = prob.data
-    Mp1, D = size(d.X)
-    K, _ = size(d.V)
-    KD = K*D
-    L₀ = zeros(KD, Mp1*D)
-    WENDy._L₀!(L₀, d.Vp, d.sig, zeros(K,D,D,Mp1), zeros(K,D,Mp1,D))
-    L = zeros(T, KD, Mp1*D)
-    r = zeros(T, KD)
-    WENDy._L!(L, p, d.tt, d.X, d.V, L₀, d.sig, d.∇ₓf!, zeros(T,D,D,Mp1), zeros(T,K,D,Mp1,D))
-    if lip
-        r .= d.G*p .- d.b₀
-    else
-        WENDy._r!(r, p, d.tt, d.X, d.V, d.b₀, d.f!, zeros(T,Mp1,D), zeros(T,K,D))
-    end
+    L₀ = kron(Diagonal(d.sig), d.Vp) # L₀ = V′ ∘ diag(σ)
+    L = L₀ + WENDy._Lₚ(p, d)
+    r = lip ? d.G*p - d.b₀ : WENDy._r(p, d)
     L, r
 end
 S_ref(params, L) = (1-params.diagReg)*(L*L') + params.diagReg*I
@@ -94,23 +84,27 @@ const CASES = [
             wsL = WENDy.WENDyWorkspace(prob.data, c.params; useBlocks=false)
             @test wnll(prob, p) ≈ f(p) rtol=1e-10
             @test WENDy.wnll(wsL, p) ≈ f(p) rtol=1e-10
-            g = zeros(J); gₗ = zeros(J)
+            g = zeros(J)
             @test ∇wnll!(g, prob, p) ≈ gref rtol=1e-8
-            @test WENDy.∇wnll!(gₗ, wsL, p) ≈ gref rtol=1e-8
-            H = zeros(J,J); Hₗ = zeros(J,J)
+            @test WENDy.∇wnll(wsL, p) ≈ gref rtol=1e-8
+            @test ∇wnll(prob, p) ≈ g
+            H = zeros(J,J)
             @test Hwnll!(H, prob, p) ≈ Href rtol=1e-8
             @test issymmetric(H)
-            @test WENDy.Hwnll!(Hₗ, wsL, p) ≈ Href rtol=1e-8
+            @test WENDy.Hwnll(wsL, p) ≈ Href rtol=1e-8
+            @test Hwnll(prob, p) ≈ H
             # approximate hessian (no log-det curvature)
             Happroxref = approxH_ref(prob, c.params, p)
             @test Hwnll!(H, prob, p; approx=true) ≈ Happroxref rtol=1e-8
             @test issymmetric(H)
-            @test WENDy.Hwnll!(Hₗ, wsL, p; approx=true) ≈ Happroxref rtol=1e-8
+            @test WENDy.Hwnll(wsL, p; approx=true) ≈ Happroxref rtol=1e-8
             # weak residual, its jacobian and covariance
             L, r = Lr_ref(prob, p)
             KD = prob.K*prob.D
             @test weakResidual!(zeros(KD), prob, p) ≈ r rtol=1e-12
+            @test weakResidual(prob, p) ≈ r rtol=1e-12
             @test weakJacobian!(zeros(KD, J), prob, p) ≈ ForwardDiff.jacobian(q -> Lr_ref(prob, q)[2], p) rtol=1e-8
+            @test weakJacobian(prob, p) ≈ weakJacobian!(zeros(KD, J), prob, p)
             @test weakCovariance(prob, p) ≈ S_ref(c.params, L) rtol=1e-12
             # the workspace is never stale
             p₂ = c.pstar .* (1 .+ 0.1 .* randn(MersenneTwister(3), J))
