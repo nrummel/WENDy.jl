@@ -1,10 +1,9 @@
 ## Equations that work if the ode rhs is linear in p
 # Then L(p) = L₀ + ∑ⱼpⱼL₁ⱼ and r(p) = Gp - b₀ with G = ∇r constant.
 # L₁[:,:,j] = Lₚ(eⱼ), the gradient/jacobian of L(p)
-function _L₁(data::WENDyInternals)
-    J = data.J
+function _L₁(tt, X, V, sig, ∇ₓf!, J::Int)
     eⱼ(j) = [i == j ? 1.0 : 0.0 for i in 1:J]
-    cat((_Lₚ(eⱼ(j), data) for j in 1:J)...; dims=3)
+    cat((_Lₚ(eⱼ(j), tt, X, V, sig, ∇ₓf!) for j in 1:J)...; dims=3)
 end
 ## L(p)
 _L(p::AbstractVector{<:Real}, L₀::AbstractMatrix{<:Real}, L₁::AbstractArray{<:Real,3}) = L₀ + reshape(reshape(L₁, :, length(p)) * p, size(L₀))

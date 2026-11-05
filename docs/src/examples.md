@@ -63,7 +63,7 @@ wendyProb_linear = WENDyProblem(
     U, 
     f!, 
     J, 
-    linearInParameters=Val(true), # f! is linear in parameters 
+    linearInParameters=true, # f! is linear in parameters 
 )
 @time (wendyProb_linear, p₀)
 nothing # hide
@@ -137,7 +137,7 @@ wendyProb = WENDyProblem(
     U, 
     f!, 
     J;
-    noiseDist=Val(LogNormal), # multiplicative LogNormal noise
+    noiseDist=LogNormal, # multiplicative LogNormal noise
     params=params, 
 );
 J = length(pstar)
@@ -227,7 +227,7 @@ wendyProb = WENDyProblem(
     U, 
     f!, 
     J;
-    noiseDist=Val(LogNormal), # LogNormalNoise
+    noiseDist=LogNormal, # LogNormalNoise
     params=params,
     constraints=constraints
 )

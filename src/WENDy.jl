@@ -29,6 +29,7 @@ module WENDy
     include("wendyEquations.jl")
     include("wendyLinearEquations.jl")
     include("wendyNonlinearEquations.jl")
+    include("wendyWeakForms.jl")
     include("wendyWorkspace.jl")
     include("wendyProblems.jl")
     include("wendyOutputError.jl")

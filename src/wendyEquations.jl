@@ -11,10 +11,9 @@ function _L₀(Vp::AbstractMatrix{<:Real}, sig::AbstractVector{<:Real})
     end
     reshape(L₀, K*D, Mp1*D)
 end
-# The fields of WENDyInternals are abstractly typed, so kernels that loop over time points take its fields as 
-# arguments (a function barrier) and get compiled for their concrete types; the data versions just unpack.
+# Kernels that loop over time points take the symbolic function as an argument, so each is compiled for the 
+# function's concrete type (the weak forms keep it as ::Function).
 """Lₚ(p) = V ∘ ∇ₓf(x, p) ∘ diag(σ₁,⋯,σ_D), the part of L that depends on p"""
-_Lₚ(p::AbstractVector{<:Real}, data::WENDyInternals) = _Lₚ(p, data.tt, data.X, data.V, data.sig, data.∇ₓf!)
 function _Lₚ(p::AbstractVector{T}, tt, X, V, sig, ∇ₓf!) where T<:Real
     Mp1, D = size(X)
     K, _ = size(V)
@@ -54,24 +53,18 @@ Hm(p) - Hessian of weak form negative log likelihood using trace identities. Wit
 wⱼ = ∂ⱼSy, ℓ = Lᵀy, vⱼ = ∂ⱼLᵀy:
     Hᵢⱼ = ∂ᵢⱼrᵀy + ∂ⱼrᵀUᵢ - Uⱼᵀwᵢ - Uᵢᵀwⱼ + wᵢᵀS⁻¹wⱼ - ½tr(S⁻¹∂ᵢSS⁻¹∂ⱼS)
           + (1-δ)[⟨S⁻¹∂ⱼL, ∂ᵢL⟩ - vᵢᵀvⱼ + ⟨∂ᵢⱼL, M⟩],   M = S⁻¹L - yℓᵀ
-so no solve or KD×KD product happens per pair (i,j). The second order terms are contracted through V without forming ∇²r or ∇²L:
-    ∂ᵢⱼrᵀy          = ∑ HwF[d,i,j,m] (VᵀY)[m,d],                  Y = reshape(y, K, D)
-    ⟨∂ᵢⱼL, M⟩       = ∑ HwJuF[d₂,d₁,i,j,m] σ[d₁] (VᵀM)[d₂,m,d₁],  M reshaped to K × D × Mp1 × D
-Pass HwF = HwJuF = M = nothing when the problem is linear in parameters.
+so no solve or KD×KD product happens per pair (i,j). This returns everything but the second order terms 
+∂ᵢⱼrᵀy + (1-δ)⟨∂ᵢⱼL, M⟩, which depend on the weak form (see _Hsecond).
 
 With approx = true the log-det curvature E = (1-δ)⟨S⁻¹∂ⱼL, ∂ᵢL⟩ - ½tr(S⁻¹∂ᵢSS⁻¹∂ⱼS) is left out. What remains is the
 exact hessian of the Maholinobis distance ½rᵀS⁻¹r plus (1-δ)⟨M, ∂ᵢⱼL⟩, and wⱼ = (1-δ)(∂ⱼL ℓ + L vⱼ) only needs matvecs,
 so the per j KD×Mp1D products and solves are skipped.
 """
 function _Hwnll(
-    F::Factorization, ∇L::AbstractArray{<:Real,3}, L::AbstractMatrix{<:Real}, ∇r::AbstractMatrix{<:Real}, y::AbstractVector{<:Real}, diagReg::Real,
-    HwJuF::Union{Nothing,AbstractArray{<:Real,5}}, HwF::Union{Nothing,AbstractArray{<:Real,4}}, M::Union{Nothing,AbstractMatrix{<:Real}},
-    V::AbstractMatrix{<:Real}, sig::AbstractVector{<:Real};
+    F::Factorization, ∇L::AbstractArray{<:Real,3}, L::AbstractMatrix{<:Real}, ∇r::AbstractMatrix{<:Real}, y::AbstractVector{<:Real}, diagReg::Real;
     approx::Bool=false
 )
     J = size(∇L, 3)
-    K, Mp1 = size(V)
-    D = length(sig)
     δ̃ = 1-diagReg
     U = F \ ∇r
     ℓ = L'y
@@ -94,19 +87,5 @@ function _Hwnll(
         # (1-δ)⟨S⁻¹∂ⱼL, ∂ᵢL⟩ for all i
         H[:,j] += δ̃ * (reshape(∇L, :, J)' * vec(F \ ∂ⱼL))
     end
-    H += _HwnllCovTerms(U, W, F \ W, A)
-    # ∂ᵢⱼrᵀy
-    if !isnothing(HwF)
-        VᵀY = V' * reshape(y, K, D)
-        @tullio H2[i,j] := HwF[d,i,j,m] * VᵀY[m,d]
-        H += H2
-    end
-    # (1-δ)⟨∂ᵢⱼL, M⟩
-    if !isnothing(HwJuF)
-        M₄ = reshape(M, K, D, Mp1, D)
-        @tullio VᵀM[d2,m,d1] := V[k,m] * M₄[k,d2,m,d1]
-        @tullio H3[i,j] := HwJuF[d2,d1,i,j,m] * sig[d1] * VᵀM[d2,m,d1]
-        H += δ̃ * H3
-    end
-    (H + H') / 2
+    H + _HwnllCovTerms(U, W, F \ W, A) # (symmetrized by the caller, after adding the second order terms)
 end

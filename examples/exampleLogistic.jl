@@ -37,7 +37,7 @@ wendyProb = WENDyProblem(
     U, 
     f!, 
     J, 
-    linearInParameters=Val(true), 
+    linearInParameters=true, 
     ll=Logging.Info,
     params=params
 );

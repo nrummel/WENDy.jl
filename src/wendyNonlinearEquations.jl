@@ -1,9 +1,5 @@
-## Equations used when the ode rhs is not linear in p
-# (see _Lₚ for why each kernel has a version that takes the fields of WENDyInternals)
-# L(p)
-_L(p::AbstractVector{<:Real}, data::WENDyInternals, L₀::AbstractMatrix{<:Real}) = L₀ + _Lₚ(p, data)
+## Equations used when the ode rhs is not linear in p (see NonlinearWeakForm)
 # ∇L(p), ∇L[:,:,j] = ∂ⱼL
-_∇L(p::AbstractVector{<:Real}, data::WENDyInternals) = _∇L(p, data.tt, data.X, data.V, data.sig, data.∇ₚ∇ₓf!)
 function _∇L(p::AbstractVector{<:Real}, tt, X, V, sig, ∇ₚ∇ₓf!)
     Mp1, D = size(X)
     K, _ = size(V)
@@ -16,7 +12,6 @@ function _∇L(p::AbstractVector{<:Real}, tt, X, V, sig, ∇ₚ∇ₓf!)
     reshape(∇L, K*D, Mp1*D, J)
 end
 # r(p) = G(p) - b₀ where G(p) = V F(p) and F(p)[m,:] = f(xₘ, p, tₘ)
-_r(p::AbstractVector{<:Real}, data::WENDyInternals) = _r(p, data.tt, data.X, data.V, data.b₀, data.f!)
 function _r(p::AbstractVector{T}, tt, X, V, b₀, f!) where T<:Real
     Mp1, D = size(X)
     F = zeros(T, Mp1, D)
@@ -26,7 +21,6 @@ function _r(p::AbstractVector{T}, tt, X, V, b₀, f!) where T<:Real
     vec(V * F) - b₀
 end
 # ∇r(p) = ∇G(p)
-_∇r(p::AbstractVector{<:Real}, data::WENDyInternals) = _∇r(p, data.tt, data.X, data.V, data.∇ₚf!)
 function _∇r(p::AbstractVector{<:Real}, tt, X, V, ∇ₚf!)
     Mp1, D = size(X)
     K, _ = size(V)
@@ -39,7 +33,6 @@ function _∇r(p::AbstractVector{<:Real}, tt, X, V, ∇ₚf!)
     reshape(∇r, K*D, J)
 end
 # Hessian of the rhs wrt p at each time point: HwF[:,:,:,m] = ∇ₚ²f(xₘ) (∇²r = V∘HwF is never formed)
-_HwF(p::AbstractVector{<:Real}, data::WENDyInternals) = _HwF(p, data.tt, data.X, data.Hₚf!)
 function _HwF(p::AbstractVector{<:Real}, tt, X, Hₚf!)
     Mp1, D = size(X)
     J = length(p)
@@ -50,7 +43,6 @@ function _HwF(p::AbstractVector{<:Real}, tt, X, Hₚf!)
     HwF
 end
 # Hessian of the state jacobian of the rhs wrt p at each time point: HwJuF[:,:,:,:,m] = ∇ₚ²∇ₓf(xₘ) (∇²L = V∘HwJuF∘diag(σ) is never formed)
-_HwJuF(p::AbstractVector{<:Real}, data::WENDyInternals) = _HwJuF(p, data.tt, data.X, data.Hₚ∇ₓf!)
 function _HwJuF(p::AbstractVector{<:Real}, tt, X, Hₚ∇ₓf!)
     Mp1, D = size(X)
     J = length(p)
@@ -59,4 +51,21 @@ function _HwJuF(p::AbstractVector{<:Real}, tt, X, Hₚ∇ₓf!)
         @views Hₚ∇ₓf!(HwJuF[:,:,:,:,m], X[m,:], p, tt[m])
     end
     HwJuF
+end
+"""
+Second order terms of the hessian, ∂ᵢⱼrᵀy + (1-δ)⟨∂ᵢⱼL, M⟩ with y = S⁻¹r and M = S⁻¹L - y(Lᵀy)ᵀ, contracted through 
+V without forming ∇²r or ∇²L:
+    ∂ᵢⱼrᵀy    = ∑ HwF[d,i,j,m] (VᵀY)[m,d],                  Y = reshape(y, K, D)
+    ⟨∂ᵢⱼL, M⟩ = ∑ HwJuF[d₂,d₁,i,j,m] σ[d₁] (VᵀM)[d₂,m,d₁],  M reshaped to K × D × Mp1 × D
+"""
+function _Hsecond(p::AbstractVector{<:Real}, tt, X, V, sig, Hₚf!, Hₚ∇ₓf!, y::AbstractVector{<:Real}, M::AbstractMatrix{<:Real}, diagReg::Real)
+    Mp1, D = size(X)
+    K, _ = size(V)
+    HwF, HwJuF = _HwF(p, tt, X, Hₚf!), _HwJuF(p, tt, X, Hₚ∇ₓf!)
+    VᵀY = V' * reshape(y, K, D)
+    @tullio H2[i,j] := HwF[d,i,j,m] * VᵀY[m,d]
+    M₄ = reshape(M, K, D, Mp1, D)
+    @tullio VᵀM[d2,m,d1] := V[k,m] * M₄[k,d2,m,d1]
+    @tullio H3[i,j] := HwJuF[d2,d1,i,j,m] * sig[d1] * VᵀM[d2,m,d1]
+    H2 + (1-diagReg) * H3
 end

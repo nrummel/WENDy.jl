@@ -2,7 +2,7 @@
 abstract type AbstractWENDySolver<:Function end
 ## IRLS: iteratively reweighted least squares
 # With Cholesky S(pⁿ⁻¹) = CCᵀ held fixed, pⁿ minimizes ½‖C⁻¹r(p)‖²
-function _irlsStep(prob::WENDyProblem{lip}, pnm1::AbstractVector{<:Real}, params::WENDyParameters; ll::LogLevel=Warn) where lip
+function _irlsStep(prob::WENDyProblem, pnm1::AbstractVector{<:Real}, params::WENDyParameters; ll::LogLevel=Warn)
     with_logger(ConsoleLogger(stderr,ll)) do
         ws = try
             _update!(prob.ws, pnm1)
@@ -13,24 +13,25 @@ function _irlsStep(prob::WENDyProblem{lip}, pnm1::AbstractVector{<:Real}, params
             @warn "The covariance calculation failed most likely because S ⊁ 0 "
             return NaN .* ones(size(pnm1))
         end
-        C = ws.F.L
-        KD = length(ws.r)
-        if lip
-            # r(p) = Gp - b₀ so this is a linear least squares problem
-            pn = (C \ prob.data.G) \ (C \ prob.data.b₀)
-            @info "  objective_value = $(norm(C \ (prob.data.G*pn - prob.data.b₀))^2/2)"
-            return pn
-        end
-        @info "  Running local optimization method"
-        pn, iter = nonlinearLeastSquares(
-            (r, p) -> r .= C \ weakResidual(prob, p),
-            (∇r, p) -> ∇r .= C \ weakJacobian(prob, p),
-            KD, pnm1, params;
-            reltol=params.nlsReltol, abstol=params.nlsAbstol, maxiters=params.nlsMaxiters, return_iters=true
-        )
-        @info "  iterations = $iter"
-        return pn
+        _irlsStep(ws.form, prob, ws.F.L, pnm1, params)
     end
+end
+# r(p) = Gp - b₀, so this is a linear least squares problem
+function _irlsStep(w::LinearWeakForm, prob::WENDyProblem, C::AbstractMatrix{<:Real}, pnm1::AbstractVector{<:Real}, params::WENDyParameters)
+    pn = (C \ w.G) \ (C \ w.b₀)
+    @info "  objective_value = $(norm(C \ (w.G*pn - w.b₀))^2/2)"
+    pn
+end
+function _irlsStep(w::NonlinearWeakForm, prob::WENDyProblem, C::AbstractMatrix{<:Real}, pnm1::AbstractVector{<:Real}, params::WENDyParameters)
+    @info "  Running local optimization method"
+    pn, iter = nonlinearLeastSquares(
+        (r, p) -> r .= C \ weakResidual(prob, p),
+        (∇r, p) -> ∇r .= C \ weakJacobian(prob, p),
+        prob.K*prob.D, pnm1, params;
+        reltol=params.nlsReltol, abstol=params.nlsAbstol, maxiters=params.nlsMaxiters, return_iters=true
+    )
+    @info "  iterations = $iter"
+    pn
 end
 struct IRLS<:AbstractWENDySolver end
 function (m::IRLS)(prob::WENDyProblem, p₀::AbstractVector{<:AbstractFloat}, params::WENDyParameters;
@@ -207,18 +208,6 @@ function (m::HybridTrustRegionOELS)(prob::WENDyProblem, p₀::AbstractVector{<:R
     end
     return what_oe, iter_wendy + iter_oe, hcat(wits_wendy, wits_oe)
 end
-## hybrid : weak form least squares -> MLE (trust region)
-struct HybridWLSTrustRegion<:AbstractWENDySolver end
-function (m::HybridWLSTrustRegion)(prob::WENDyProblem, p₀::AbstractVector{<:Real}, params::WENDyParameters;
-    return_wits::Bool=false, kwargs...
-)
-    if !return_wits
-        return TrustRegion()(prob, WLS()(prob, p₀, params), params)
-    end
-    what_wlsq, iter_wlsq, wits_wlsq = WLS()(prob, p₀, params; return_wits=true)
-    what_wendy, iter_wendy, wits_wendy = TrustRegion()(prob, what_wlsq, params; return_wits=true)
-    return what_wendy, iter_wlsq + iter_wendy, hcat(wits_wlsq, wits_wendy)
-end
 """
 Solve the inverse problem for the unknown parameters
     solve(
@@ -240,15 +229,14 @@ Solve the inverse problem for the unknown parameters
     - TrustRegion : (default) optimize over the weak form negative log-likelihood with a trust region solver. This approximates the maximum likelhood estimator. Note: this is the only solver that will respect the constraints
     - ARCqK : optimize over the weak form negative log-likelihood with adaptive regularized cubics algorithm
     - HybridTrustRegionOELS(oe) : hybrid solver that first optimizes with the trust region solver then passes the result as an intialization to the output error least squares problem oe (an OutputErrorProblem)
-    - HybridWLSTrustRegion : hybrid solver that first optimizes with the weak form least squares solver then passes the result as an intialization to the trust region weak form negative log-likelihood
 - return_wits::Bool=false : (optional) also return the number of iterations and the iterates, (what, iters, wits)
 
 For output error least squares on its own see OutputErrorProblem.
 """
 function solve(prob::WENDyProblem, p₀::AbstractVector{<:Real}, params::WENDyParameters=WENDyParameters(); alg::AbstractWENDySolver=TrustRegion(), forceAlg::Bool=false, kwargs...)
     if !forceAlg
-        maxSizeOfData = sqrt(maximum(prob.data.X.^2))
-        minSig = minimum(prob.data.sig)
+        maxSizeOfData = sqrt(maximum(prob.X.^2))
+        minSig = minimum(prob.sig)
         if minSig/maxSizeOfData < 1e-8
             @info "Switching the Weak Form Least Squares Problem, Noise is considered negligible..."
             alg = WLS()

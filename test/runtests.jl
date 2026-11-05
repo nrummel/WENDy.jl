@@ -5,12 +5,11 @@ using OrdinaryDiffEq: ODEProblem, Rodas4P, solve as solve_ode
 
 ## Reference weak negative log-likelihood written directly from its definition, generic in the element type so
 ## ForwardDiff can differentiate it. It shares only the L(p) and r(p) kernels with the package.
-function Lr_ref(prob::WENDyProblem{lip}, p::AbstractVector) where lip
-    d = prob.data
-    L₀ = kron(Diagonal(d.sig), d.Vp) # L₀ = V′ ∘ diag(σ)
-    L = L₀ + WENDy._Lₚ(p, d)
-    r = lip ? d.G*p - d.b₀ : WENDy._r(p, d)
-    L, r
+Lₚ_ref(w::WENDy.LinearWeakForm, p) = reshape(reshape(w.L₁, :, length(p)) * p, size(w.L₀))
+Lₚ_ref(w::WENDy.NonlinearWeakForm, p) = WENDy._Lₚ(p, w.tt, w.X, w.V, w.sig, w.∇ₓf!)
+function Lr_ref(prob::WENDyProblem, p::AbstractVector)
+    L₀ = kron(Diagonal(prob.sig), prob.Vp) # L₀ = V′ ∘ diag(σ)
+    L₀ + Lₚ_ref(prob.ws.form, p), WENDy._r(prob.ws.form, p)
 end
 S_ref(params, L) = (1-params.diagReg)*(L*L') + params.diagReg*I
 function wnll_ref(prob::WENDyProblem, params::WENDyParameters, p::AbstractVector)
@@ -71,7 +70,7 @@ const CASES = [
         tt, U = simulate(c.f!, c.u₀, c.tRng, c.dt, c.pstar, c.dist, c.nr)
         J = length(c.pstar)
         prob = with_logger(NullLogger()) do
-            WENDyProblem(tt, U, c.f!, J; linearInParameters=Val(c.lip), noiseDist=Val(c.dist), params=c.params)
+            WENDyProblem(tt, U, c.f!, J; linearInParameters=c.lip, noiseDist=c.dist, params=c.params)
         end
         p = c.pstar .* (1 .+ 0.1 .* randn(MersenneTwister(2), J))
         f(q) = wnll_ref(prob, c.params, q)
@@ -79,9 +78,11 @@ const CASES = [
         Href = ForwardDiff.hessian(f, p)
         @testset "$(c.name)" begin
             # linear problems use the blocks of LLᵀ, nonlinear ones build S from L(p)
-            @test isnothing(prob.ws.P) == !c.lip
+            @test prob.ws.form isa (c.lip ? WENDy.LinearWeakForm : WENDy.NonlinearWeakForm)
+            @test prob.ws.cov isa (c.lip ? WENDy.BlockCovariance : WENDy.FactorCovariance)
+            @test prob.noiseDist == c.dist
             # a workspace that builds S from L(p) is always valid, so compare both
-            wsL = WENDy.WENDyWorkspace(prob.data, c.params; useBlocks=false)
+            wsL = WENDy.WENDyWorkspace(prob.ws.form, c.params; cov=WENDy.FactorCovariance())
             @test wnll(prob, p) ≈ f(p) rtol=1e-10
             @test WENDy.wnll(wsL, p) ≈ f(p) rtol=1e-10
             g = zeros(J)
@@ -136,20 +137,24 @@ const CASES = [
         c = CASES[1]
         tt, U = simulate(c.f!, c.u₀, c.tRng, c.dt, c.pstar, c.dist, c.nr)
         prob = with_logger(NullLogger()) do
-            WENDyProblem(tt, U, c.f!, 2; linearInParameters=Val(true), params=c.params)
+            WENDyProblem(tt, U, c.f!, 2; linearInParameters=true, params=c.params)
         end
         oe = OutputErrorProblem(tt, U, c.f!, 2; params=c.params)
         p₀ = [0.5, 0.5]
         quiet(f) = with_logger(f, NullLogger())
         relErr(p̂) = norm(p̂[1:2] - c.pstar)/norm(c.pstar)
         p̂ = quiet(() -> solve(prob, p₀, c.params))
+        # earlier versions took Val(...) keywords
+        probVal = quiet(() -> WENDyProblem(tt, U, c.f!, 2; linearInParameters=Val(true), noiseDist=Val(Normal), params=c.params))
+        @test probVal.ws.form isa WENDy.LinearWeakForm
+        @test wnll(probVal, p₀) ≈ wnll(prob, p₀) rtol=1e-10 # test function selection is not bitwise reproducible
         @test relErr(p̂) < 0.05
         @test norm(∇wnll!(zeros(2), prob, p̂)) < 1e-3*norm(∇wnll!(zeros(2), prob, p₀))
         # approximate hessian
         p̂ₐ = quiet(() -> solve(prob, p₀, WENDyParameters(Kmax=25, approxHessian=true)))
         @test norm(p̂ₐ - p̂)/norm(p̂) < 1e-6
         # other weak form solvers
-        for alg in (WENDy.ARCqK(), WENDy.IRLS(), WENDy.WLS(), WENDy.HybridWLSTrustRegion())
+        for alg in (WENDy.ARCqK(), WENDy.IRLS(), WENDy.WLS())
             @test relErr(quiet(() -> solve(prob, p₀, c.params; alg=alg))) < 0.1
             what, iters, wits = quiet(() -> solve(prob, p₀, c.params; alg=alg, return_wits=true))
             @test relErr(what) < 0.1 && iters > 0 && size(wits, 1) == 2

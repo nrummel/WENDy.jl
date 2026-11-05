@@ -52,7 +52,7 @@ wendyProb = WENDyProblem(
     U, 
     f!, 
     J;
-    noiseDist=Val(LogNormal), # LogNormalNoise
+    noiseDist=LogNormal, # LogNormalNoise
     params=params,
     ll=Logging.Info, 
     constraints=constraints

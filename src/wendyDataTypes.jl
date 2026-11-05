@@ -75,22 +75,3 @@ Hyper-parameters for the WENDy Algorithm
     fsU0Free::Bool                      = true
     approxHessian::Bool                 = false
 end 
-##
-struct WENDyInternals{lip, DistType}
-    J::Int # number of parameters (to be estimated)
-    b₀::AbstractVector{<:AbstractFloat}
-    sig::AbstractVector{<:AbstractFloat}
-    tt::AbstractVector{<:AbstractFloat}
-    X::AbstractMatrix{<:AbstractFloat} 
-    V::AbstractMatrix{<:AbstractFloat}
-    Vp::AbstractMatrix{<:AbstractFloat}
-    f!::Function 
-    ∇ₓf!::Function
-    # Only valid when the problem is linear 
-    G::AbstractMatrix{<:Real}
-    # Only necessary when the problem is non linear
-    ∇ₚf!::Function
-    ∇ₚ∇ₓf!::Function
-    Hₚf!::Function
-    Hₚ∇ₓf!::Function
-end

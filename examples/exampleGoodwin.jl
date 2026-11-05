@@ -45,7 +45,7 @@ wendyProb = WENDyProblem(
     U,
     f!,
     J;
-    noiseDist=Val(LogNormal), # multiplicative LogNormal noise
+    noiseDist=LogNormal, # multiplicative LogNormal noise
     params=params, 
     ll=Logging.Info # turn on logging information
 );

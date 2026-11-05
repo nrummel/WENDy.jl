@@ -12,8 +12,8 @@ wendyProb = WENDyProblem(tt, U, f!, J)
 ```
 
 It is important to note that there are optional inputs that are keyword arguments that can help get the best performance from the algorithm. 
-- `linearInParameters` : (Default `Val(false)`) If the ODE is linear in parameters (lip) then one can accelerate our weak form algorithms by setting this to `Val(true)`. This allows the WENDyProblem to be specified as lip at compile time. Specifying special routines that will make many function evaluations and the following optimization faster. 
-- `noiseDist` : (Default `Val(Normal)`) This specifies whether the noise is additive Gaussian `Val(Normal)` or multiplicative LogNormal `Val(LogNormal)`. Again this flag allows the correct subroutines to be specified at compile time. 
+- `linearInParameters` : (Default `false`) If the ODE is linear in parameters (lip) then one can accelerate our weak form algorithms by setting this to `true`. This precomputes the parts of the weak form that do not depend on the parameters, which makes function evaluations and the following optimization much faster. 
+- `noiseDist` : (Default `Normal`) This specifies whether the noise is additive Gaussian `Normal` or multiplicative LogNormal `LogNormal`. With `LogNormal` the data are log-transformed (nonpositive data are dropped) and the right hand side is transformed accordingly. 
 - `params` : (Default `WENDyParameters()`)One can update the hyper-parameters for WENDy via the [WENDyParameters](@ref) struct. Of particular interest are the parameters that inform the test function selection algorithm (see [Test Function Selection](@ref)) and those that that inform the optimization algorithms (see [Optimization Parameters](@ref))
 - `constraints` : (Default `Nothing`) WENDy supports linear box constraints for each parameter, ∀j ∈ [1, ⋯,J], ℓⱼ ≤ pⱼ ≤ uⱼ. Accepts constraints as a list of tuples, [(ℓ₁,u₁), ⋯]. Note: this only is compatible with the TrustRegion solver.
 - `ll` : (Default `Warn`) Logging level 
@@ -55,7 +55,6 @@ WENDy.jl allows for the user to make use of several different solvers. This is d
 - `IRLS()` : This is (in general) a more computationally efficient solver that still incorporates covariance information from the weak form residual, but frames a generalized least squares problem instead of a maximum likelihood estimator. 
 - `WLS()` : This simple minimizes the norm of the weak form residual by posing either linear or nonlinear least squares problem. This is the most appropriate if there is no noise in the system. 
 - `HybridTrustRegionOELS(oe)` : Runs `TrustRegion()` and then uses the result to initialize the output error least squares problem `oe` (see below).
-- `HybridWLSTrustRegion()` : Runs `WLS()` and then uses the result to initialize `TrustRegion()`.
 
 ## Output Error Least Squares
 A common technique is to minimize the output error, i.e. the difference between the data and a forward solve of the ODE. WENDy.jl provides a simple forward solve least squares solver for comparison as its own problem type:

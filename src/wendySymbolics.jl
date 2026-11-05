@@ -3,7 +3,7 @@
 the case of lognormal noise. This means the original rhs changes to 
     f̃(x) = f(x) ./ x 
 """
-function _getf_sym(f!::Function, D::Int, J::Int, ::Val{LogNormal})
+function _getf_sym(f!::Function, D::Int, J::Int, ::Type{LogNormal})
     @variables p[1:J] x[1:D] t
     dx = Vector(undef, D)
     f!(dx, x, p, t)
@@ -12,16 +12,16 @@ function _getf_sym(f!::Function, D::Int, J::Int, ::Val{LogNormal})
     return [simplify(substitute(fud, mymap)) for fud in fu]
 end
 """ (private) Build a function for the the rhs specialized to normal noise """
-function _getf_sym(f!::Function, D::Int, J::Int, ::Val{Normal})
+function _getf_sym(f!::Function, D::Int, J::Int, ::Type{Normal})
     @variables p[1:J] x[1:D] t
     dx = Vector(undef, D)
     f!(dx, x, p, t)
     return dx
 end
 """ Build a function for the the rhs """ 
-function _getf(f!::Function, D::Int, J::Int, ::Val{DistType}) where {DistType<:Distribution}
+function _getf(f!::Function, D::Int, J::Int, noiseDist::Type{<:Distribution})
     @variables p[1:J] x[1:D] t
-    f_sym = _getf_sym(f!, D, J, Val(DistType))
+    f_sym = _getf_sym(f!, D, J, noiseDist)
     _,f! = build_function(f_sym, x, p, t;expression=false)
     return f!
 end
