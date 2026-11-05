@@ -1,7 +1,7 @@
 name = "WENDy"
 uuid = "d405da13-e5c5-4ff7-999e-699e6f93cd5d"
 authors = ["Nicholas Rummel"]
-version = "1.0.3"
+version = "1.1.0"
 
 [deps]
 AdaptiveRegularization = "79adfba0-1eab-50d9-8528-0589417a2bfe"
@@ -19,35 +19,22 @@ Optim = "429524aa-4258-5aef-a3af-852621145aeb"
 OrdinaryDiffEq = "1dea7af3-3e70-54e6-95c3-0bf5283fa5ed"
 Printf = "de0858da-6303-5e67-8744-51eddeeeb8d7"
 Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
-SolverCore = "ff4d7338-4cf1-434d-91df-b86cb86fb843"
 Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
 Symbolics = "0c5d862f-8b57-4792-8d23-62f2024744c7"
 Tullio = "bc48ee85-29a4-5162-ae0b-a64e1601d4bc"
 
 [compat]
-AdaptiveRegularization = "~0.1"
-Arpack = "~0.5"
-Distributions = "~0.25"
-FFTW = "~1.8"
-ForwardDiff = "~0.10"
-ImageFiltering = "~0.7"
-JSOSolvers = "~0.11"
-LinearAlgebra = "~1.11"
-Logging = "~1.11"
-ManualNLPModels = "~0.1"
-NonlinearSolve = "3.15.2"
-Optim = "~1.11"
-OrdinaryDiffEq = "~6.91"
-Printf = "~1.11"
-Random = "~1.11"
-SolverCore = "0.3.0 - 0.3.8"
-Statistics = "~1.11"
-Symbolics = "~6.28"
-Tullio = "~0.3"
-julia = "1.8"
-
-[extras]
-Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
-
-[targets]
-test = ["Test"]
+AdaptiveRegularization = "0.2"
+Arpack = "0.5.4"
+Distributions = "0.25.120"
+FFTW = "1.8"
+ForwardDiff = "1"
+ImageFiltering = "0.7.12"
+JSOSolvers = "0.14"
+ManualNLPModels = "0.2"
+NonlinearSolve = "4"
+Optim = "2"
+OrdinaryDiffEq = "7"
+Symbolics = "7"
+Tullio = "0.3.9"
+julia = "1.11"

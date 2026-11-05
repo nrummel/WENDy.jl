@@ -43,7 +43,7 @@ function _forwardSolveResidual(oe::OutputErrorProblem, w::AbstractVector, params
         dt = (oe.tt[end] - oe.tt[1]) / (length(oe.tt) - 1)
         sol = solve_ode(ODEProblem(oe.f!, u₀, tRng, p), params.fsAlg;
             reltol=params.fsReltol, abstol=params.fsAbstol,
-            saveat=dt, verbose=false
+            saveat=dt, verbose=DEVerbosity(SciMLLogging.None())
         )
         Û = reduce(vcat, um' for um in sol.u)
         return (Û - oe.U)[:]

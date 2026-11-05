@@ -1,7 +1,7 @@
 using Test, WENDy, LinearAlgebra, Random, Logging, Statistics
 using WENDy: Normal, LogNormal
 using ForwardDiff
-using OrdinaryDiffEq: ODEProblem, Rodas4P, solve as solve_ode
+using OrdinaryDiffEq: ODEProblem, Rodas5P, solve as solve_ode
 
 ## Reference weak negative log-likelihood written directly from its definition, generic in the element type so
 ## ForwardDiff can differentiate it. It shares only the L(p) and r(p) kernels with the package.
@@ -33,7 +33,7 @@ end
 function simulate(f!, u₀, tRng, dt, pstar, dist, nr; seed=1)
     Random.seed!(seed)
     tt = collect(tRng[1]:dt:tRng[end])
-    sol = solve_ode(ODEProblem(f!, u₀, tRng, pstar), Rodas4P(); saveat=dt, reltol=1e-10, abstol=1e-10)
+    sol = solve_ode(ODEProblem(f!, u₀, tRng, pstar), Rodas5P(); saveat=dt, reltol=1e-10, abstol=1e-10)
     U = reduce(vcat, um' for um in sol.u)
     U = dist == LogNormal ? U .* exp.(nr*randn(size(U))) : U + nr*std(U)*randn(size(U))
     tt, U
