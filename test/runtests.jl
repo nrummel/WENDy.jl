@@ -8,7 +8,7 @@ using OrdinaryDiffEq: ODEProblem, Rodas5P, solve as solve_ode
 Lₚ_ref(w::WENDy.LinearWeakForm, p) = reshape(reshape(w.L₁, :, length(p)) * p, size(w.L₀))
 Lₚ_ref(w::WENDy.NonlinearWeakForm, p) = WENDy._Lₚ(p, w.tt, w.X, w.V, w.sig, w.∇ₓf!)
 function Lr_ref(prob::WENDyProblem, p::AbstractVector)
-    L₀ = kron(Diagonal(prob.sig), prob.Vp) # L₀ = V′ ∘ diag(σ)
+    L₀ = cat((prob.sig[d] * prob.Vp[d] for d in 1:prob.D)...; dims=(1,2)) # L₀ = blockdiag(σ_d V′_d)
     L₀ + Lₚ_ref(prob.ws.form, p), WENDy._r(prob.ws.form, p)
 end
 S_ref(params, L) = (1-params.diagReg)*(L*L') + params.diagReg*I
@@ -63,6 +63,12 @@ const CASES = [
     (name="Goodwin (nonlinear, LogNormal)", f! =goodwin!, u₀=[0.3617,0.9137,1.3934], tRng=(0.0,80.0), dt=0.5,
         pstar=[3.4884,0.0969,1,10,0.0969,0.0581,0.0969,0.0775], lip=false, dist=LogNormal, nr=0.05,
         params=WENDyParameters(Kmax=25, radiusMinTime=0.5, radiusMaxTime=16.0)),
+    # test functions selected separately for each state variable
+    (name="Lotka-Volterra (linear, per-state test functions)", f! =lotkaVolterra!, u₀=[1.0,1.0], tRng=(0.0,10.0), dt=0.02, pstar=[1.5,1.0,1.0,3.0],
+        lip=true, dist=Normal, nr=0.05, params=WENDyParameters(Kmax=25, perStateTestFunctions=true)),
+    (name="Goodwin (nonlinear, LogNormal, per-state test functions)", f! =goodwin!, u₀=[0.3617,0.9137,1.3934], tRng=(0.0,80.0), dt=0.5,
+        pstar=[3.4884,0.0969,1,10,0.0969,0.0581,0.0969,0.0775], lip=false, dist=LogNormal, nr=0.05,
+        params=WENDyParameters(Kmax=25, radiusMinTime=0.5, radiusMaxTime=16.0, perStateTestFunctions=true)),
 ]
 
 @testset "WENDy.jl" begin
@@ -80,6 +86,10 @@ const CASES = [
             # linear problems use the blocks of LLᵀ, nonlinear ones build S from L(p)
             @test prob.ws.form isa (c.lip ? WENDy.LinearWeakForm : WENDy.NonlinearWeakForm)
             @test prob.ws.cov isa (c.lip ? WENDy.BlockCovariance : WENDy.FactorCovariance)
+            # one block of test functions per state variable
+            @test length(prob.K) == length(prob.V) == prob.D && sum(prob.K) == length(prob.b₀)
+            @test size.(prob.V, 1) == prob.K && all(size.(prob.V, 2) .== prob.Mp1)
+            c.params.perStateTestFunctions || @test all(==(prob.V[1]), prob.V)
             @test prob.noiseDist == c.dist
             # a workspace that builds S from L(p) is always valid, so compare both
             wsL = WENDy.WENDyWorkspace(prob.ws.form, c.params; cov=WENDy.FactorCovariance())
@@ -101,7 +111,7 @@ const CASES = [
             @test WENDy.Hwnll(wsL, p; approx=true) ≈ Happroxref rtol=1e-8
             # weak residual, its jacobian and covariance
             L, r = Lr_ref(prob, p)
-            KD = prob.K*prob.D
+            KD = length(prob.b₀)
             @test weakResidual!(zeros(KD), prob, p) ≈ r rtol=1e-12
             @test weakResidual(prob, p) ≈ r rtol=1e-12
             @test weakJacobian!(zeros(KD, J), prob, p) ≈ ForwardDiff.jacobian(q -> Lr_ref(prob, q)[2], p) rtol=1e-8

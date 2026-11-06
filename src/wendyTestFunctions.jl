@@ -204,3 +204,19 @@ end
 function getTestFunctionMatrices(tt::AbstractVector{<:Real}, U::AbstractMatrix{<:Real}, params::WENDyParameters; kwargs...)
     getTestFunctionMatrices(tt, U, params.radiusMinTime,params.radiusMaxTime, params.numRadii, params.testFunSubRate,params.radiiParams,params.maxTestFunCondNum, params.minTestFunInfoNum,params.Kmax, params.Kᵣ; kwargs...)
 end
+"""
+    testFunctionMatrices(tt, X, params::WENDyParameters; kwargs...) -> (V, Vp)
+
+Test function matrices V_d and their derivatives V′_d for each state variable d, as vectors of length D. With 
+params.perStateTestFunctions the minimum radius and the number of test functions are selected from each state's 
+data alone (Kmax applies to each state), otherwise every state uses the same matrices from getTestFunctionMatrices.
+"""
+function testFunctionMatrices(tt::AbstractVector{<:Real}, X::AbstractMatrix{<:Real}, params::WENDyParameters; kwargs...)
+    D = size(X, 2)
+    if params.perStateTestFunctions
+        VVp = [getTestFunctionMatrices(tt, X[:, d:d], params; kwargs...) for d in 1:D]
+        return first.(VVp), last.(VVp)
+    end
+    V, Vp = getTestFunctionMatrices(tt, X, params; kwargs...)
+    fill(V, D), fill(Vp, D)
+end

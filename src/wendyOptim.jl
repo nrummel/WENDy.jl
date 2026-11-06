@@ -27,7 +27,7 @@ function _irlsStep(w::NonlinearWeakForm, prob::WENDyProblem, C::AbstractMatrix{<
     pn, iter = nonlinearLeastSquares(
         (r, p) -> r .= C \ weakResidual(prob, p),
         (∇r, p) -> ∇r .= C \ weakJacobian(prob, p),
-        prob.K*prob.D, pnm1, params;
+        length(prob.b₀), pnm1, params;
         reltol=params.nlsReltol, abstol=params.nlsAbstol, maxiters=params.nlsMaxiters, return_iters=true
     )
     @info "  iterations = $iter"
@@ -181,7 +181,7 @@ end
 struct WLS<:AbstractWENDySolver end
 (m::WLS)(prob::WENDyProblem, p₀::AbstractVector{<:Real}, params::WENDyParameters; return_wits::Bool=false, kwargs...) =
     nonlinearLeastSquares(
-        (r, p) -> weakResidual!(r, prob, p), (∇r, p) -> weakJacobian!(∇r, prob, p), prob.K*prob.D,
+        (r, p) -> weakResidual!(r, prob, p), (∇r, p) -> weakJacobian!(∇r, prob, p), length(prob.b₀),
         p₀, params; return_wits=return_wits
     )
 ## hybrid : MLE (trust region) -> output error least squares

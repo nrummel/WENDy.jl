@@ -1,18 +1,16 @@
-## helper function to build G matrix
-function _buildGmat(f!::Function, tt::AbstractVector{<:Real}, Y::AbstractMatrix{<:Real}, V::AbstractMatrix{<:Real}, J::Int)
+## helper function to build G matrix: column j is r(eⱼ) + b₀, with row block d equal to V_d F(eⱼ)[:,d]
+function _buildGmat(f!::Function, tt::AbstractVector{<:Real}, Y::AbstractMatrix{<:Real}, V::AbstractVector{<:AbstractMatrix{<:Real}}, J::Int)
     Mp1, D = size(Y)
-    K, _ = size(V)
     eⱼ = zeros(J)
     F = similar(Y)
-    G = zeros(K*D,J)
+    G = zeros(sum(size.(V, 1)), J)
     for j in 1:J 
         eⱼ .= 0
         eⱼ[j] = 1
         for m in 1:Mp1 
             @views f!(F[m,:], Y[m,:], eⱼ, tt[m])
         end 
-        gⱼ = V * F
-        G[:,j] = vec(gⱼ)
+        G[:,j] = reduce(vcat, V[d] * F[:,d] for d in 1:D)
     end
     G
 end
@@ -51,17 +49,18 @@ For the output error (forward solve) least squares problem see OutputErrorProble
 
 It can also be built from data that was already transformed and its weak form (e.g. to rebuild a saved problem) with 
     WENDyProblem(tt, X, V, Vp, sig, b₀, form::WeakForm, params::WENDyParameters; noiseDist=Normal, constraints=nothing, ll=Warn)
-where form = weakForm(f!, tt, X, V, Vp, sig, b₀, J; linearInParameters, noiseDist).
+where form = weakForm(f!, tt, X, V, Vp, sig, b₀, J; linearInParameters, noiseDist). V and Vp are vectors with the 
+test function matrices of each state (a single matrix is used for every state).
 
 # Fields
 - D::Int : number of state variables
 - J::Int : number of parameters (to be estimated)
 - Mp1::Int : (Mp1+1) number of data points in time 
-- K::Int : number of test functions 
+- K::Vector{Int} : number of test functions of each state variable (all equal unless perStateTestFunctions)
 - tt, X : times and data (X = log(U) for LogNormal noise, with nonpositive data removed)
-- V, Vp : test function matrices V and V′
+- V, Vp : test function matrices V_d and V′_d of each state variable
 - sig : estimated noise level in each state variable
-- b₀ : -vec(V′X)
+- b₀ : the stacked -V′_d X[:,d]
 - noiseDist : the noise model the problem was built for, Normal or LogNormal
 - constraints : vector of tuples containing linear constraints for each parameter
 - ws::WENDyWorkspace : the weak form and shared state for m(p), ∇m(p) and Hm(p)
@@ -70,11 +69,11 @@ struct WENDyProblem
     D::Int # number of state variables
     J::Int # number of parameters (to be estimated)
     Mp1::Int # (Mp1+1) number of data points in time 
-    K::Int # number of test functions 
+    K::Vector{Int} # number of test functions of each state variable
     tt::Vector{Float64}
     X::Matrix{Float64}
-    V::Matrix{Float64}
-    Vp::Matrix{Float64}
+    V::Vector{Matrix{Float64}}
+    Vp::Vector{Matrix{Float64}}
     sig::Vector{Float64}
     b₀::Vector{Float64}
     noiseDist::Type{<:Distribution}
@@ -83,17 +82,20 @@ struct WENDyProblem
 end
 ## constructor from transformed data and its weak form
 function WENDyProblem(
-    tt::AbstractVector{<:Real}, X::AbstractMatrix{<:Real}, V::AbstractMatrix{<:Real}, Vp::AbstractMatrix{<:Real}, 
+    tt::AbstractVector{<:Real}, X::AbstractMatrix{<:Real}, V, Vp, 
     sig::AbstractVector{<:Real}, b₀::AbstractVector{<:Real}, form::WeakForm, params::WENDyParameters; 
     noiseDist::Type{<:Distribution}=Normal, constraints::Union{Nothing,AbstractVector{<:Tuple{<:Real,<:Real}}}=nothing, ll::LogLevel=Warn
 )
     with_logger(ConsoleLogger(stderr, ll)) do
         @info "  Building workspace"
         Mp1, D = size(X)
-        K, _ = size(V)
-        WENDyProblem(D, _J(form), Mp1, K, tt, X, V, Vp, sig, b₀, noiseDist, constraints, WENDyWorkspace(form, params))
+        V, Vp = _perState(V, D), _perState(Vp, D)
+        WENDyProblem(D, _J(form), Mp1, size.(V, 1), tt, X, V, Vp, sig, b₀, noiseDist, constraints, WENDyWorkspace(form, params))
     end
 end
+# test function matrices of each state variable; a single matrix is shared by all of them
+_perState(V::AbstractVector{<:AbstractMatrix}, D::Int) = V
+_perState(V::AbstractMatrix, D::Int) = fill(V, D)
 # noise models: LogNormal noise is Normal noise on log(U), so only the data and rhs are transformed
 _transformData(::Type{Normal}, tt::AbstractVector{<:Real}, U::AbstractMatrix{<:Real}) = tt, U
 function _transformData(::Type{LogNormal}, tt::AbstractVector{<:Real}, U::AbstractMatrix{<:Real})
@@ -126,9 +128,9 @@ function WENDyProblem(
         tt, X = _transformData(noiseDist, _tt, U)
         sig = estimate_std(X)
         @info "  sig = $sig"
-        V, Vp = getTestFunctionMatrices(tt, X, params; ll=ll)
+        V, Vp = testFunctionMatrices(tt, X, params; ll=ll)
         @info "  Building the LHS to the residual"
-        b₀ = vec(-Vp * X)
+        b₀ = reduce(vcat, -Vp[d] * X[:,d] for d in 1:size(X, 2))
         @info "  Build the weak form from symbolic expressions of the ODE"
         form = weakForm(_f!, tt, X, V, Vp, sig, b₀, J; linearInParameters=linearInParameters, noiseDist=noiseDist)
         return WENDyProblem(tt, X, V, Vp, sig, b₀, form, params; noiseDist=noiseDist, constraints=constraints, ll=ll)

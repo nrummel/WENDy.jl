@@ -13,6 +13,7 @@ Hyper-parameters for the WENDy Algorithm
         minTestFunInfoNum::Real=0.95,
         Kmax::Int=200,
         Kᵣ::Union{Nothing,Int}=100,
+        perStateTestFunctions::Bool=false,
         fsAbstol::Real=1e-8,
         fsReltol::Real=1e-8,
         nlsAbstol::Real=1e-8,
@@ -36,8 +37,9 @@ Hyper-parameters for the WENDy Algorithm
 - testFunSubRate::Real = 2.0 : Corresponds to how much we should sup-sample in the min radii detection sub-algorithm 
 - maxTestFunCondNum::Real = 1e4 : Maximum Condition number of the test function matrix after svd reduction
 - minTestFunInfoNum::Real = 0.95 : Minimum information (σₖ/σ₁)in the test function matrix after svd reduction
-- Kmax::Int = 200 : Hard maximum size on the test function matrix
+- Kmax::Int = 200 : Hard maximum size on the test function matrix (of each state variable when perStateTestFunctions)
 - Kᵣ::Union{Nothing,Int} = 100 : how many test function to spread through the time domain in the min radii detection sub-algorithm
+- perStateTestFunctions::Bool = false : Select the test functions separately for each state variable (the minimum radius and the number of test functions come from that state's data alone), instead of one set shared by all states. Smooth or slow states can then use fewer, wider test functions
 - fsAbstol::Real = 1e-8 : forward solve absolute tolerance for solving ordinary differential equation
 - fsReltol::Real = 1e-8 : forward solve relative tolerance for solving ordinary differntial equation
 - nlsAbstol::Real = 1e-8 : nonlinear least squares absolute tolerance (only used in the IRLS WENDy algorithm)
@@ -62,6 +64,7 @@ Hyper-parameters for the WENDy Algorithm
     minTestFunInfoNum::Real             = 0.95
     Kmax::Int                           = 200
     Kᵣ::Union{Nothing,Int}              = 100
+    perStateTestFunctions::Bool         = false
     fsAbstol::Real                      = 1e-8
     fsReltol::Real                      = 1e-8
     nlsAbstol::Real                     = 1e-8

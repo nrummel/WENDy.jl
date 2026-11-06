@@ -13,14 +13,14 @@ struct LinearWeakForm <: WeakForm
     ∇ₓf!::Function
 end
 """
-Weak form of an ODE that is not linear in its parameters: r(p) = vec(V F(p)) - b₀ with F(p)[m,:] = f(xₘ, p, tₘ)
-and L(p) = L₀ + V ∘ ∇ₓf ∘ diag(σ), evaluated from the symbolic right hand side and its derivatives.
+Weak form of an ODE that is not linear in its parameters: row block d of r(p) is V_d F(p)[:,d] - b₀_d with 
+F(p)[m,:] = f(xₘ, p, tₘ), and L(p) = L₀ + Lₚ(p) (see _Lₚ), evaluated from the symbolic right hand side and its derivatives.
 """
 struct NonlinearWeakForm <: WeakForm
     J::Int
     tt::Vector{Float64}
     X::Matrix{Float64}
-    V::Matrix{Float64}
+    V::Vector{Matrix{Float64}} # test functions of each state variable
     sig::Vector{Float64}
     b₀::Vector{Float64}
     L₀::Matrix{Float64}
@@ -51,14 +51,16 @@ _Hsecond(w::NonlinearWeakForm, ws) = _Hsecond(ws.p, w.tt, w.X, w.V, w.sig, w.H�
 """
     weakForm(f!, tt, X, V, Vp, sig, b₀, J; linearInParameters=false, noiseDist=Normal)
 
-Build the weak form of du/dt = f(u, p, t) from the (transformed) data X at times tt, the test function matrices V and V′,
-the noise estimate σ and b₀ = -vec(V′X). With noiseDist = LogNormal the rhs is transformed to that of log(u).
+Build the weak form of du/dt = f(u, p, t) from the (transformed) data X at times tt, the test function matrices V_d and
+V′_d of each state (vectors; a single matrix is used for every state), the noise estimate σ and b₀ (the stacked 
+-V′_d X[:,d]). With noiseDist = LogNormal the rhs is transformed to that of log(u).
 """
-function weakForm(f!::Function, tt::AbstractVector{<:Real}, X::AbstractMatrix{<:Real}, V::AbstractMatrix{<:Real}, Vp::AbstractMatrix{<:Real},
+function weakForm(f!::Function, tt::AbstractVector{<:Real}, X::AbstractMatrix{<:Real}, V, Vp,
     sig::AbstractVector{<:Real}, b₀::AbstractVector{<:Real}, J::Int;
     linearInParameters::Bool=false, noiseDist::Type{<:Distribution}=Normal
 )
     D = size(X, 2)
+    V, Vp = _perState(V, D), _perState(Vp, D)
     fₙ! = _getf(f!, D, J, noiseDist)
     ∇ₓf! = _get∇ₓf(fₙ!, D, J)
     L₀ = _L₀(Vp, sig)

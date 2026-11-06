@@ -1,28 +1,31 @@
 ## Equations that do not depend on if the problem is linear or not in parameters
-# L(p) = L₀ + Lₚ(p) is the covariance factor of the weak residual, S(p) = (1-δ)LLᵀ + δI. Its rows are indexed
-# by (k,d) and its columns by (m,d′), each reshaped to K*D × Mp1*D.
-"""L₀ = V′ ∘ diag(σ₁,⋯,σ_D)"""
-function _L₀(Vp::AbstractMatrix{<:Real}, sig::AbstractVector{<:Real})
-    K, Mp1 = size(Vp)
-    D = length(sig)
-    L₀ = zeros(K, D, Mp1, D)
+# L(p) = L₀ + Lₚ(p) is the covariance factor of the weak residual, S(p) = (1-δ)LLᵀ + δI. Each state variable d 
+# has its own test functions V_d (K_d × Mp1, all the same unless perStateTestFunctions), so the rows of r, L and S 
+# come in blocks of K_d rows, one per state, and the columns of L in blocks of Mp1 columns, one per state.
+_rows(K::AbstractVector{Int}, d::Int) = sum(K[1:d-1])+1:sum(K[1:d])
+"""L₀ = blockdiag(σ_d V′_d)"""
+function _L₀(Vp::AbstractVector{<:AbstractMatrix{<:Real}}, sig::AbstractVector{<:Real})
+    K, Mp1, D = size.(Vp, 1), size(Vp[1], 2), length(sig)
+    L₀ = zeros(sum(K), Mp1*D)
     for d in 1:D
-        L₀[:,d,:,d] = Vp * sig[d]
+        L₀[_rows(K, d), (d-1)*Mp1+1:d*Mp1] = Vp[d] * sig[d]
     end
-    reshape(L₀, K*D, Mp1*D)
+    L₀
 end
 # Kernels that loop over time points take the symbolic function as an argument, so each is compiled for the 
 # function's concrete type (the weak forms keep it as ::Function).
-"""Lₚ(p) = V ∘ ∇ₓf(x, p) ∘ diag(σ₁,⋯,σ_D), the part of L that depends on p"""
+"""Lₚ(p), the part of L that depends on p: row block d₂ is [V_{d₂} diag(∂f_{d₂}/∂x_{d₁} σ_{d₁})]_{d₁}"""
 function _Lₚ(p::AbstractVector{T}, tt, X, V, sig, ∇ₓf!) where T<:Real
     Mp1, D = size(X)
-    K, _ = size(V)
     JuF = zeros(T, D, D, Mp1)
     for m in 1:Mp1
         @views ∇ₓf!(JuF[:,:,m], X[m,:], p, tt[m])
     end
-    @tullio Lₚ[k,d2,m,d1] := JuF[d2,d1,m] * V[k,m] * sig[d1]
-    reshape(Lₚ, K*D, Mp1*D)
+    reduce(vcat, begin
+        A, Vd = JuF[d2,:,:], V[d2]
+        @tullio Lₚ[k,m,d1] := A[d1,m] * Vd[k,m] * sig[d1]
+        reshape(Lₚ, size(Vd, 1), Mp1*D)
+    end for d2 in 1:D)
 end
 """
 ∇m(p) - Gradient of weak form negative log likelihood in adjoint form. With y = S⁻¹r and
