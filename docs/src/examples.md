@@ -84,7 +84,7 @@ nothing # hide
 ```
 
 ### Comparing to an Output Error Method
-One can compare the weak-form methods to the standard Output Error Least Squares approach by building an `OutputErrorProblem` and then calling `solve`. This will build the necessary loss with automatic differentiation to provide a Jacobian of the residual. Then, the will solve the code via the Levenberg–Marquardt solver. Note that the output error solver needs to optimize both the initial condition and the parameters for the best results. Thus, this solver returns both an estimate for initial condition $\hat{u}(t_0)$ and the parameters $\hat{p}$.
+One can compare the weak-form methods to the standard Output Error Least Squares approach by building an `OutputErrorProblem` and then calling `solve`. The forward solves use OrdinaryDiffEq.jl, which is already loaded above to generate the data. This will build the necessary loss with automatic differentiation to provide a Jacobian of the residual. Then, the will solve the code via the Levenberg–Marquardt solver. Note that the output error solver needs to optimize both the initial condition and the parameters for the best results. Thus, this solver returns both an estimate for initial condition $\hat{u}(t_0)$ and the parameters $\hat{p}$.
 
 ```@example logistic
 oeProb = WENDy.OutputErrorProblem(tt,U,f!, J)

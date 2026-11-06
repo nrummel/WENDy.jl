@@ -1,6 +1,6 @@
 # Getting Started 
 
-The first step to using WENDy.jl is to build the [WENDyProblem](@ref) struct. The constructor will precompute all the necessary data and functions to run different optimizers to estimate the unknown parameters $$p$$.
+The first step to using WENDy.jl is to build the [`WENDyProblem`](@ref) struct. The constructor will precompute all the necessary data and functions to run different optimizers to estimate the unknown parameters $$p$$.
 The algorithm only requires a few inputs 
 - `tt` : vector of equispaced times $$\{t_m\}_{m=0}^M$$.
 - `U` : data matrix where each row is a state vector at each time $$\{\mathbf{u}_m = \boldsymbol{u}(t_m) + \epsilon_m\}_{m=0}^M$$. This makes the size of this matrix $$M+1\times D$$. 
@@ -14,11 +14,11 @@ wendyProb = WENDyProblem(tt, U, f!, J)
 It is important to note that there are optional inputs that are keyword arguments that can help get the best performance from the algorithm. 
 - `linearInParameters` : (Default `false`) If the ODE is linear-in-parameters (lip) then one can accelerate our weak-form algorithms by setting this to `true`. This precomputes the parts of the weak form that do not depend on the parameters, which makes function evaluations and the following optimization much faster. 
 - `noiseDist` : (Default `Normal`) This specifies whether the noise is additive Gaussian `Normal` or multiplicative LogNormal `LogNormal`. With `LogNormal` the data are log-transformed (nonpositive data are dropped) and the right hand side is transformed accordingly. 
-- `params` : (Default `WENDyParameters()`) One can update the hyper-parameters for WENDy via the [WENDyParameters](@ref) struct. Of particular interest are the parameters that inform the test function selection algorithm (see [Test Function Selection](@ref)) and those that inform the optimization algorithms (see [Optimization Parameters](@ref))
+- `params` : (Default `WENDyParameters()`) One can update the hyper-parameters for WENDy via the [`WENDyParameters`](@ref) struct. Of particular interest are the parameters that inform the test function selection algorithm (see [Test Function Selection](@ref)) and those that inform the optimization algorithms (see [Optimization Parameters](@ref))
 - `constraints` : (Default `Nothing`) WENDy supports linear box constraints for each parameter, ∀j ∈ [1, ⋯,J], ℓⱼ ≤ pⱼ ≤ uⱼ. Accepts constraints as a list of tuples, [(ℓ₁,u₁), ⋯]. Note: this only is compatible with the TrustRegion solver.
 - `ll` : (Default `Warn`) Logging level 
 
-The next step is to solve the WENDy problem. This is done by calling the [solve](@ref) function. An initial guess for the parameters, $$p_0$$, is necessary for the local optimization routines to run. It may be necessary to run the WENDy algorithm with multiple initial guesses for best results. 
+The next step is to solve the WENDy problem. This is done by calling the [`solve`](@ref) function. An initial guess for the parameters, $$p_0$$, is necessary for the local optimization routines to run. It may be necessary to run the WENDy algorithm with multiple initial guesses for best results. 
 
 ```julia 
 solve(wendyProb, p₀)
@@ -57,8 +57,9 @@ WENDy.jl allows for the user to make use of several different solvers. This is d
 - `HybridTrustRegionOELS(oe)` : Runs `TrustRegion()` and then uses the result to initialize the output error least squares problem `oe` (see below).
 
 ## Output Error Least Squares
-A common technique is to minimize the output error, i.e. the difference between the data and a forward solve of the ODE. WENDy.jl provides a simple forward solve least squares solver for comparison as its own problem type:
+A common technique is to minimize the output error, i.e. the difference between the data and a forward solve of the ODE. WENDy.jl provides a simple forward solve least squares solver for comparison as its own problem type. The forward solves use [OrdinaryDiffEq.jl](https://github.com/SciML/OrdinaryDiffEq.jl), which WENDy.jl only loads on request, so it must be loaded first:
 ```julia
+using OrdinaryDiffEq
 oe = OutputErrorProblem(tt, U, f!, J; params=params)
 ŵ = solve(oe, p₀) # [p̂; û₀] when params.fsU0Free (the default), otherwise p̂
 ```

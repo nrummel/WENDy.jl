@@ -7,10 +7,7 @@ module WENDy
     using JSOSolvers: tron # constrained trust region
     using ManualNLPModels: NLPModel # necessary for ARC_qK, JSOSolvers
     using AdaptiveRegularization: ARCqKOp # ARC_qK
-    # For solving and symbolicly representing diff eq 
-    using OrdinaryDiffEq: Rodas5P, ODEProblem
-    using OrdinaryDiffEq: solve as solve_ode, DEVerbosity, SciMLLogging
-    using OrdinaryDiffEq.SciMLBase: AbstractODEAlgorithm
+    # For symbolicly representing diff eq (forward solves for OutputErrorProblem are in ext/WENDyOrdinaryDiffEqExt.jl)
     using Symbolics, ForwardDiff
     using Symbolics: jacobian, @variables
     # Other Necessities
@@ -20,7 +17,7 @@ module WENDy
     using Tullio: @tullio
     using Arpack: svds
     # stdlib
-    using LinearAlgebra, Statistics, Random, Logging, Printf
+    using LinearAlgebra, Statistics, Logging
     using Logging: Info, Warn, LogLevel
     ##
     include("wendyDataTypes.jl")

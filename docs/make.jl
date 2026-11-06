@@ -20,6 +20,6 @@ makedocs(
 
 deploydocs(
     repo = "github.com/nrummel/WENDy.jl",
-    devbranch = "paper",
+    devbranch = "main",
     push_preview = true,
 )

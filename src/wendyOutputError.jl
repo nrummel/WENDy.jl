@@ -6,6 +6,8 @@ The output error least squares problem: find p (and optionally u₀) that minimi
 the ODE du/dt = f(u, p, t). This is the common alternative to the weak form, provided for comparison and for the
 hybrid solver HybridTrustRegionOELS.
 
+The forward solves need OrdinaryDiffEq.jl, which WENDy only loads on request: run `using OrdinaryDiffEq` first.
+
 ## Arguments
 - tt::AbstractVector{<:Real} : vector of times (equispaced)
 - U::AbstractVecOrMat{<:Real} : Corrupted state variable data
@@ -29,24 +31,21 @@ struct OutputErrorProblem
     params::WENDyParameters
 end
 function OutputErrorProblem(tt::AbstractVector{<:Real}, U::AbstractVecOrMat{<:Real}, f!::Function, J::Int; params::WENDyParameters=WENDyParameters())
+    isnothing(Base.get_extension(@__MODULE__, :WENDyOrdinaryDiffEqExt)) &&
+        error("OutputErrorProblem solves the ODE with OrdinaryDiffEq.jl: run `using OrdinaryDiffEq` first")
     U = U isa AbstractVector ? reshape(U, length(U), 1) : U
     _, D = size(U)
     OutputErrorProblem(tt, U, f!, J, D, U[1,:], params)
 end
+# Û(tt; p, u₀), the (Mp1 x D) forward solve; defined in ext/WENDyOrdinaryDiffEqExt.jl
+function _forwardSolve end
 # û(tt; p, u₀) - U, where w = [p; u₀] when params.fsU0Free and w = p otherwise (then u₀ = U[1,:])
 function _forwardSolveResidual(oe::OutputErrorProblem, w::AbstractVector, params::WENDyParameters)
     Mp1, D = size(oe.U)
     J = oe.J
     try
         p, u₀ = params.fsU0Free ? (w[1:J], w[J+1:end]) : (w[1:J], oe.U[1,:])
-        tRng = (oe.tt[1], oe.tt[end])
-        dt = (oe.tt[end] - oe.tt[1]) / (length(oe.tt) - 1)
-        sol = solve_ode(ODEProblem(oe.f!, u₀, tRng, p), params.fsAlg;
-            reltol=params.fsReltol, abstol=params.fsAbstol,
-            saveat=dt, verbose=DEVerbosity(SciMLLogging.None())
-        )
-        Û = reduce(vcat, um' for um in sol.u)
-        return (Û - oe.U)[:]
+        return (_forwardSolve(oe, p, u₀, params) - oe.U)[:]
     catch
         NaN*ones(Mp1*D)
     end

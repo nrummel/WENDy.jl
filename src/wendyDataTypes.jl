@@ -22,7 +22,7 @@ Hyper-parameters for the WENDy Algorithm
         optimReltol::Real=1e-8,
         optimMaxiters::Int=500,
         optimTimelimit::Real=200.0,
-        fsAlg::AbstractODEAlgorithm=Rodas5P(),
+        fsAlg=nothing,
         fsU0Free::Bool=true,
         approxHessian::Bool=false
     )
@@ -47,7 +47,7 @@ Hyper-parameters for the WENDy Algorithm
 - optimReltol::Real = 1e-8 : relative tolerance (used by all other optimization algorithms)
 - optimMaxiters::Int = 200 : maximum iterations (used by all other optimization algorithms)
 - optimTimelimit::Real = 500.0 : maximum time in seconds (used by all other optimization algorithms)
-- fsAlg::AbstractODEAlgorithm = Rodas5P() :  forward solve algorithm (any OrdinaryDiffEq ODE solver) used by the forward solve nonlinear least squares algorithm
+- fsAlg = nothing : forward solve algorithm (any OrdinaryDiffEq ODE solver) used by the output error least squares problem; nothing uses Rodas5P() (see OutputErrorProblem)
 - fsU0Free::Bool = true : Specifies if the forward solve algorithm should also optimize over the initial condition
 - approxHessian::Bool = false : Second order solvers (TrustRegion, ARCqK and the hybrid methods) use an approximate hessian of the weak negative log-likelihood that leaves out the curvature of its log-determinant term. This skips the most expensive part of the hessian (it is the exact hessian of the Maholinobis distance when the problem is linear in parameters), turning these into quasi-Newton methods. Often several times faster when that term is small relative to the rest of the hessian, but it can converge to a worse point when it is not, so check the result against the exact hessian on a new problem
 """
@@ -71,7 +71,7 @@ Hyper-parameters for the WENDy Algorithm
     optimReltol::Real                   = 1e-8
     optimMaxiters::Int                  = 500
     optimTimelimit::Real                = 200.0
-    fsAlg::AbstractODEAlgorithm         = Rodas5P()
+    fsAlg                               = nothing
     fsU0Free::Bool                      = true
     approxHessian::Bool                 = false
 end 
