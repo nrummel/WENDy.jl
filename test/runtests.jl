@@ -143,7 +143,10 @@ const CASES = [
         p₀ = [0.5, 0.5]
         quiet(f) = with_logger(f, NullLogger())
         relErr(p̂) = norm(p̂[1:2] - c.pstar)/norm(c.pstar)
-        p̂ = quiet(() -> solve(prob, p₀, c.params))
+        sol = quiet(() -> solve(prob, p₀, c.params))
+        p̂ = sol.p̂
+        @test sol isa WENDySolution && sol.retcode == :success && sol.alg == "TrustRegion" && isnothing(sol.û₀)
+        @test sol.iterations > 0 && size(sol.iterates) == (2, sol.iterations + 1) && sol.iterates[:,1] == p₀ && sol.time > 0
         # earlier versions took Val(...) keywords
         probVal = quiet(() -> WENDyProblem(tt, U, c.f!, 2; linearInParameters=Val(true), noiseDist=Val(Normal), params=c.params))
         @test probVal.ws.wform isa WENDy.LinearWeakForm
@@ -151,24 +154,33 @@ const CASES = [
         @test relErr(p̂) < 0.05
         @test norm(∇ℓ!(zeros(2), prob, p̂)) < 1e-3*norm(∇ℓ!(zeros(2), prob, p₀))
         # approximate hessian
-        p̂ₐ = quiet(() -> solve(prob, p₀, WENDyParameters(Kmax=25, approxHessian=true)))
+        p̂ₐ = quiet(() -> solve(prob, p₀, WENDyParameters(Kmax=25, approxHessian=true))).p̂
         @test norm(p̂ₐ - p̂)/norm(p̂) < 1e-6
         # other weak form solvers
         for alg in (WENDy.ARCqK(), WENDy.IRLS(), WENDy.WLS())
-            @test relErr(quiet(() -> solve(prob, p₀, c.params; alg=alg))) < 0.1
-            p̂, iters, iterates = quiet(() -> solve(prob, p₀, c.params; alg=alg, return_iterates=true))
-            @test relErr(p̂) < 0.1 && iters > 0 && size(iterates, 1) == 2
+            s = quiet(() -> solve(prob, p₀, c.params; alg=alg))
+            @test relErr(s.p̂) < 0.1 && s.iterations > 0 && size(s.iterates, 1) == 2 && s.iterates[:,1] == p₀
+            @test s.retcode == :success && s.alg == string(nameof(typeof(alg)))
         end
-        # output error least squares estimates [p; u₀] by default
-        ŵ = quiet(() -> solve(oe, p₀))
-        @test length(ŵ) == 3 && relErr(ŵ) < 0.05
-        @test norm(oeResidual!(zeros(length(U)), oe, ŵ)) < norm(oeResidual!(zeros(length(U)), oe, vcat(p₀, oe.u₀)))
-        @test length(quiet(() -> solve(oe, p₀, WENDyParameters(fsU0Free=false)))) == 2
+        # output error least squares estimates p and u₀ by default
+        oes = quiet(() -> solve(oe, p₀))
+        @test length(oes.p̂) == 2 && length(oes.û₀) == 1 && relErr(oes.p̂) < 0.05 && size(oes.iterates, 1) == 2
+        @test norm(oeResidual!(zeros(length(U)), oe, vcat(oes.p̂, oes.û₀))) < norm(oeResidual!(zeros(length(U)), oe, vcat(p₀, oe.u₀)))
+        @test isnothing(quiet(() -> solve(oe, p₀, WENDyParameters(fsU0Free=false))).û₀)
         # hybrid: weak form MLE then output error
-        ŵₕ = quiet(() -> solve(prob, p₀, c.params; alg=WENDy.HybridTrustRegionOELS(oe)))
-        @test ŵₕ ≈ quiet(() -> solve(oe, p̂)) rtol=1e-8
-        p̂, iters, iterates = quiet(() -> solve(prob, p₀, c.params; alg=WENDy.HybridTrustRegionOELS(oe), return_iterates=true))
-        @test p̂ ≈ ŵₕ rtol=1e-8
-        @test size(iterates, 1) == 3
+        hy = quiet(() -> solve(prob, p₀, c.params; alg=WENDy.HybridTrustRegionOELS(oe)))
+        oeFromMLE = quiet(() -> solve(oe, p̂))
+        @test hy.p̂ ≈ oeFromMLE.p̂ rtol=1e-8
+        @test hy.û₀ ≈ oeFromMLE.û₀ rtol=1e-8
+        @test hy.iterations == sol.iterations + oeFromMLE.iterations && size(hy.iterates, 1) == 2 && hy.iterates[:,1] == p₀
+        # parameter covariances against their definitions
+        G, S = weakJacobian(prob, p̂), weakCovariance(prob, p̂)
+        Ĉref = inv(G' * (S \ G))
+        @test Ĉ(prob, p̂) ≈ Ĉref rtol=1e-8
+        @test Ĉ(prob, sol) == Ĉ(prob, p̂)
+        @test C_cons(prob, p̂) ≈ pinv(G) * S * pinv(G)' rtol=1e-8
+        @test C_cons(prob, p̂) ≈ (G \ S) / G' rtol=1e-8 # as the scripts computed it
+        @test eigmin(Symmetric(C_cons(prob, p̂) - Ĉ(prob, p̂))) > -1e-10 * opnorm(Ĉ(prob, p̂)) # C_cons ⪰ Ĉ
+        @test C_∇²ℓ(prob, p̂) ≈ inv(ForwardDiff.hessian(q -> ℓ_ref(prob, c.params, q), p̂)) rtol=1e-6
     end
 end

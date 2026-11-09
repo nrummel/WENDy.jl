@@ -1,5 +1,16 @@
 ## Solvers
 abstract type AbstractWENDySolver<:Function end
+# the iterates always start at p₀
+_fromStart(p₀, iterates) = !isempty(iterates) && iterates[:,1] == p₀ ? iterates : hcat(p₀, iterates)
+_solution(alg, p₀, p̂, iterations, iterates, retcode, start; û₀=nothing) =
+    WENDySolution(p̂, û₀, iterations, _fromStart(p₀, iterates), retcode, time() - start, string(nameof(typeof(alg))))
+# statuses of the underlying packages
+_retcode(r::Optim.MultivariateOptimizationResults) = Optim.converged(r) ? :success :
+    Optim.iteration_limit_reached(r) ? :maxiters : r.stopped_by.time_limit ? :timelimit : :failed
+_retcode(status::Symbol) = status in (:first_order, :acceptable) ? :success : # JSOSolvers / AdaptiveRegularization
+    status == :max_iter ? :maxiters : status == :max_time ? :timelimit : :failed
+_retcode(rc::NonlinearSolve.ReturnCode.T) = NonlinearSolve.SciMLBase.successful_retcode(rc) ? :success :
+    rc == NonlinearSolve.ReturnCode.MaxIters ? :maxiters : rc == NonlinearSolve.ReturnCode.MaxTime ? :timelimit : :failed
 ## IRLS: iteratively reweighted least squares
 # With Cholesky S(pⁿ⁻¹) = CCᵀ held fixed, pⁿ minimizes ½‖C⁻¹r(p)‖²
 function _irlsStep(prob::WENDyProblem, pnm1::AbstractVector{<:Real}, params::WENDyParameters; ll::LogLevel=Warn)
@@ -24,19 +35,20 @@ function _irlsStep(wform::LinearWeakForm, prob::WENDyProblem, C::AbstractMatrix{
 end
 function _irlsStep(wform::NonlinearWeakForm, prob::WENDyProblem, C::AbstractMatrix{<:Real}, pnm1::AbstractVector{<:Real}, params::WENDyParameters)
     @info "  Running local optimization method"
-    pn, iter = nonlinearLeastSquares(
+    out = nonlinearLeastSquares(
         (r, p) -> r .= C \ weakResidual(prob, p),
         (∇r, p) -> ∇r .= C \ weakJacobian(prob, p),
         prob.K*prob.D, pnm1, params;
-        reltol=params.nlsReltol, abstol=params.nlsAbstol, maxiters=params.nlsMaxiters, return_iters=true
+        reltol=params.nlsReltol, abstol=params.nlsAbstol, maxiters=params.nlsMaxiters
     )
-    @info "  iterations = $iter"
-    pn
+    @info "  iterations = $(out.iterations)"
+    out.p̂
 end
 struct IRLS<:AbstractWENDySolver end
 function (alg::IRLS)(prob::WENDyProblem, p₀::AbstractVector{<:AbstractFloat}, params::WENDyParameters;
-    ll::LogLevel=Warn, iterll::LogLevel=Warn, maxIt::Int=1000, return_iterates::Bool=false, kwargs...
+    ll::LogLevel=Warn, iterll::LogLevel=Warn, maxIt::Int=1000, kwargs...
 )
+    start = time()
     with_logger(ConsoleLogger(stderr,ll)) do
         reltol,abstol = params.optimReltol, params.optimAbstol
         J = length(p₀)
@@ -47,18 +59,18 @@ function (alg::IRLS)(prob::WENDyProblem, p₀::AbstractVector{<:AbstractFloat}, 
             pn = _irlsStep(prob, pnm1, params; ll=iterll)
             if any(isnan.(pn))
                 @warn "Optimization method failed"
-                return return_iterates ? (pn, n, hcat(p₀, iterates)) : pn
+                return _solution(alg, p₀, pn, n, iterates, :failed, start)
             end
             iterates = hcat(iterates, pn)
             resNorm = norm(pnm1 - pn)
             if resNorm / norm(pnm1) < reltol || resNorm < abstol
                 @info "  Convergence Criterion met: ‖pⁿ - pⁿ⁻¹‖ = $resNorm"
-                return return_iterates ? (pn, n, hcat(p₀, iterates)) : pn
+                return _solution(alg, p₀, pn, n, iterates, :success, start)
             end
             pnm1 = pn
         end
         @warn "Maxiteration met for IRLS"
-        return return_iterates ? (pnm1, maxIt, hcat(p₀, iterates)) : pnm1
+        return _solution(alg, p₀, pnm1, maxIt, iterates, :maxiters, start)
     end
 end
 ## Second order solvers over ℓ(p): objective(p) = ℓ(p), gradient!(gradℓ, p) = ∇ℓ(p), hessian!(hessℓ, p) = ∇²ℓ(p)
@@ -83,23 +95,22 @@ end
 ## unconstrained
 function _trustRegion_unconstrained(
     objective::Function, gradient!::Function, hessian!::Function, p₀::AbstractVector{<:Real}, params::WENDyParameters;
-    return_iterates::Bool=false, kwargs...
+    kwargs...
 )
     res = optimize(
         objective, gradient!, hessian!,
         p₀, NewtonTrustRegion(),
         Optim_Options(
             x_reltol=params.optimReltol, x_abstol=params.optimAbstol, iterations=params.optimMaxiters, time_limit=params.optimTimelimit,
-            store_trace=return_iterates, extended_trace=return_iterates
+            store_trace=true, extended_trace=true
         )
     )
-    p̂ = res.minimizer
-    return return_iterates ? (p̂, res.iterations, reduce(hcat, t.metadata["x"] for t in res.trace)) : p̂
+    (; p̂=res.minimizer, iterations=res.iterations, iterates=reduce(hcat, t.metadata["x"] for t in res.trace), retcode=_retcode(res))
 end
 ## constrained
 function _trustRegion_constrained(
     objective::Function, gradient!::Function, hessian!::Function, p₀::AbstractVector{<:Real}, params::WENDyParameters, constraints::AbstractVector{<:Tuple{<:Real,<:Real}};
-    return_iterates::Bool=false, kwargs...
+    kwargs...
 )
     J = length(p₀)
     # this solver expects the gradient in this form
@@ -113,29 +124,27 @@ function _trustRegion_constrained(
     out = tron(
         nlp,
         verbose=:show_trace in keys(kwargs) ? 1 : 0,
-        callback=return_iterates ? _clbk : (::Any, ::Any,::Any) -> nothing,
+        callback=_clbk,
         atol=params.optimAbstol,
         rtol=params.optimReltol,
         max_iter=params.optimMaxiters,
         max_time=params.optimTimelimit
     )
-    return return_iterates ? (out.solution, out.iter, iterates) : out.solution
+    (; p̂=out.solution, iterations=out.iter, iterates, retcode=_retcode(out.status))
 end
 struct TrustRegion<:AbstractWENDySolver end
-function (alg::TrustRegion)(prob::WENDyProblem, p₀::AbstractVector{<:Real}, params::WENDyParameters;
-    return_iterates::Bool=false, kwargs...
-)
+function (alg::TrustRegion)(prob::WENDyProblem, p₀::AbstractVector{<:Real}, params::WENDyParameters; kwargs...)
+    start = time()
     objective, gradient!, hessian! = _secondOrder(prob, params)
-    if isnothing(prob.constraints)
-        return _trustRegion_unconstrained(objective, gradient!, hessian!, p₀, params; return_iterates=return_iterates, kwargs...)
-    end
-    return _trustRegion_constrained(objective, gradient!, hessian!, p₀, params, prob.constraints; return_iterates=return_iterates, kwargs...)
+    out = isnothing(prob.constraints) ?
+        _trustRegion_unconstrained(objective, gradient!, hessian!, p₀, params; kwargs...) :
+        _trustRegion_constrained(objective, gradient!, hessian!, p₀, params, prob.constraints; kwargs...)
+    _solution(alg, p₀, out.p̂, out.iterations, out.iterates, out.retcode, start)
 end
 ## adaptive regularization with cubics
 struct ARCqK<:AbstractWENDySolver end
-function (alg::ARCqK)(prob::WENDyProblem, p₀::AbstractVector{<:Real}, params::WENDyParameters;
-    return_iterates::Bool=false, kwargs...
-)
+function (alg::ARCqK)(prob::WENDyProblem, p₀::AbstractVector{<:Real}, params::WENDyParameters; kwargs...)
+    start = time()
     objective, gradient!, hessian! = _secondOrder(prob, params)
     J = length(p₀)
     objgrad!(gradℓ, p) = (gradient!(gradℓ, p); (objective(p), gradℓ))
@@ -145,22 +154,22 @@ function (alg::ARCqK)(prob::WENDyProblem, p₀::AbstractVector{<:Real}, params::
     out = ARCqKOp(
         nlp,
         verbose=:show_trace in keys(kwargs) ? kwargs.show_trace : false,
-        callback=return_iterates ? _clbk : (::Any, ::Any,::Any) -> nothing,
+        callback=_clbk,
         atol=params.optimAbstol,
         rtol=params.optimReltol,
         max_iter=params.optimMaxiters,
         max_time=params.optimTimelimit,
     )
-    return return_iterates ? (out.solution, out.iter, iterates) : out.solution
+    _solution(alg, p₀, out.solution, out.iter, iterates, _retcode(out.status), start)
 end
-## Levenberg-Marquardt for min ½‖r(p)‖² given r!(r, p), ∇r!(∇r, p) and the length of r
+## Levenberg-Marquardt for min ½‖r(p)‖² given r!(r, p), ∇r!(∇r, p) and the length of r.
+## Gives (; p̂, iterations, iterates, retcode), the iterates being every point the residual was evaluated at.
 function nonlinearLeastSquares(r!::Function, ∇r!::Function, n::Int, p₀::AbstractVector{<:Real}, params::WENDyParameters;
-    return_iterates::Bool=false, return_iters::Bool=false,
     reltol::Real=params.optimReltol, abstol::Real=params.optimAbstol, maxiters::Int=params.optimMaxiters, kwargs...
 )
     iterates = zeros(length(p₀), 0)
     function _r!(r, p, ::Any)
-        return_iterates && (iterates = hcat(iterates, p))
+        iterates = hcat(iterates, p)
         r!(r, p)
         nothing
     end
@@ -174,16 +183,17 @@ function nonlinearLeastSquares(r!::Function, ∇r!::Function, n::Int, p₀::Abst
         maxtime=params.optimTimelimit,
         verbose=false
     )
-    p̂, iter = sol.u, sol.stats.nsteps
-    return return_iterates ? (p̂, iter, iterates) : return_iters ? (p̂, iter) : p̂
+    (; p̂=sol.u, iterations=sol.stats.nsteps, iterates, retcode=_retcode(sol.retcode))
 end
 ## weak form least squares: min ½‖r(p)‖²
 struct WLS<:AbstractWENDySolver end
-(alg::WLS)(prob::WENDyProblem, p₀::AbstractVector{<:Real}, params::WENDyParameters; return_iterates::Bool=false, kwargs...) =
-    nonlinearLeastSquares(
-        (r, p) -> weakResidual!(r, prob, p), (∇r, p) -> weakJacobian!(∇r, prob, p), prob.K*prob.D,
-        p₀, params; return_iterates=return_iterates
+function (alg::WLS)(prob::WENDyProblem, p₀::AbstractVector{<:Real}, params::WENDyParameters; kwargs...)
+    start = time()
+    out = nonlinearLeastSquares(
+        (r, p) -> weakResidual!(r, prob, p), (∇r, p) -> weakJacobian!(∇r, prob, p), prob.K*prob.D, p₀, params
     )
+    _solution(alg, p₀, out.p̂, out.iterations, out.iterates, out.retcode, start)
+end
 ## hybrid : MLE (trust region) -> output error least squares
 """
     HybridTrustRegionOELS(oe::OutputErrorProblem)
@@ -194,19 +204,13 @@ uses the result to initialize the output error least squares problem oe (see Out
 struct HybridTrustRegionOELS<:AbstractWENDySolver
     oe::OutputErrorProblem
 end
-function (alg::HybridTrustRegionOELS)(prob::WENDyProblem, p₀::AbstractVector{<:Real}, params::WENDyParameters;
-    return_iterates::Bool=false, kwargs...
-)
-    if !return_iterates
-        return solve(alg.oe, TrustRegion()(prob, p₀, params), params)
-    end
-    p̂_wendy, iter_wendy, iterates_wendy = TrustRegion()(prob, p₀, params; return_iterates=true)
-    p̂_oe, iter_oe, iterates_oe = solve(alg.oe, p̂_wendy, params; return_iterates=true)
-    # the output error iterates also contain u₀ when it is estimated
-    if params.fsU0Free
-        iterates_wendy = vcat(iterates_wendy, reduce(hcat, alg.oe.u₀ for _ in 1:size(iterates_wendy,2)))
-    end
-    return p̂_oe, iter_wendy + iter_oe, hcat(iterates_wendy, iterates_oe)
+function (alg::HybridTrustRegionOELS)(prob::WENDyProblem, p₀::AbstractVector{<:Real}, params::WENDyParameters; kwargs...)
+    start = time()
+    wendy = TrustRegion()(prob, p₀, params)
+    oe = solve(alg.oe, wendy.p̂, params)
+    # the output error iterates start where the trust region ended
+    WENDySolution(oe.p̂, oe.û₀, wendy.iterations + oe.iterations, hcat(wendy.iterates, oe.iterates[:,2:end]),
+        oe.retcode, time() - start, string(nameof(typeof(alg))))
 end
 """
 Solve the inverse problem for the unknown parameters
@@ -215,7 +219,6 @@ Solve the inverse problem for the unknown parameters
         p₀::AbstractVector{<:Real},
         params::WENDyParameters=WENDyParameters();
         alg::AbstractWENDySolver=TrustRegion(),
-        return_iterates::Bool=false,
         kwargs...
     )
 
@@ -229,9 +232,8 @@ Solve the inverse problem for the unknown parameters
     - TrustRegion : (default) optimize over the weak form negative log-likelihood with a trust region solver. This approximates the maximum likelhood estimator. Note: this is the only solver that will respect the constraints
     - ARCqK : optimize over the weak form negative log-likelihood with adaptive regularized cubics algorithm
     - HybridTrustRegionOELS(oe) : hybrid solver that first optimizes with the trust region solver then passes the result as an intialization to the output error least squares problem oe (an OutputErrorProblem)
-- return_iterates::Bool=false : (optional) also return the number of iterations and the iterates, (p̂, iters, iterates)
-
-For output error least squares on its own see OutputErrorProblem.
+Returns a WENDySolution (the estimate p̂, iterations, iterates, retcode, time and the solver). For uncertainty
+in the estimate see Ĉ, C_cons and C_∇²ℓ. For output error least squares on its own see OutputErrorProblem.
 """
 function solve(prob::WENDyProblem, p₀::AbstractVector{<:Real}, params::WENDyParameters=WENDyParameters(); alg::AbstractWENDySolver=TrustRegion(), forceAlg::Bool=false, kwargs...)
     if !forceAlg

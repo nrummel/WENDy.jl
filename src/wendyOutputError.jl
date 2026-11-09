@@ -65,18 +65,22 @@ Jacobian of the output error residual wrt pu₀ (by forward mode automatic diffe
 oeJacobian!(∇r::AbstractMatrix{<:Real}, oe::OutputErrorProblem, pu₀::AbstractVector{<:Real}, params::WENDyParameters=oe.params) =
     ForwardDiff.jacobian!(∇r, pu₀ -> _forwardSolveResidual(oe, pu₀, params), pu₀)
 """
-    solve(oe::OutputErrorProblem, p₀, params=oe.params; return_iterates=false)
+    solve(oe::OutputErrorProblem, p₀, params=oe.params)
 
 Solve the output error least squares problem with Levenberg-Marquardt starting from p₀. When params.fsU0Free the
-initial condition is estimated as well (starting from oe.u₀) and the result is [p̂; û₀], otherwise it is p̂.
-With return_iterates=true this returns (p̂, iterations, iterates).
+initial condition is estimated as well, starting from oe.u₀. Returns a WENDySolution with the estimate p̂, the
+estimated initial condition û₀ (nothing unless params.fsU0Free), and the parameter part of the iterates.
 """
-function solve(oe::OutputErrorProblem, p₀::AbstractVector{<:Real}, params::WENDyParameters=oe.params; return_iterates::Bool=false, kwargs...)
-    w₀ = params.fsU0Free ? vcat(p₀, oe.u₀) : p₀
-    nonlinearLeastSquares(
+function solve(oe::OutputErrorProblem, p₀::AbstractVector{<:Real}, params::WENDyParameters=oe.params; kwargs...)
+    start = time()
+    pu₀_init = params.fsU0Free ? vcat(p₀, oe.u₀) : p₀
+    out = nonlinearLeastSquares(
         (r, pu₀) -> oeResidual!(r, oe, pu₀, params),
         (∇r, pu₀) -> oeJacobian!(∇r, oe, pu₀, params),
-        length(oe.U), w₀, params;
-        return_iterates=return_iterates
+        length(oe.U), pu₀_init, params
     )
+    J = oe.J
+    û₀ = params.fsU0Free ? out.p̂[J+1:end] : nothing
+    WENDySolution(out.p̂[1:J], û₀, out.iterations, _fromStart(p₀, out.iterates[1:J,:]), out.retcode, time() - start,
+        "OutputErrorLeastSquares")
 end

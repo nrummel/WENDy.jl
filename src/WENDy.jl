@@ -2,8 +2,8 @@ module WENDy
     ## external dependencies
     # optimization algorithms
     using NonlinearSolve: NonlinearLeastSquaresProblem, NonlinearFunction, LevenbergMarquardt # nonlinear least squares
-    using NonlinearSolve: solve as solve_lsq
-    using Optim:optimize, NewtonTrustRegion, Options as Optim_Options # unconstrained trust region
+    using NonlinearSolve: solve as solve_lsq, NonlinearSolve # (NonlinearSolve.ReturnCode for the solver status)
+    using Optim: Optim, optimize, NewtonTrustRegion, Options as Optim_Options # unconstrained trust region
     using JSOSolvers: tron # constrained trust region
     using ManualNLPModels: NLPModel # necessary for ARC_qK, JSOSolvers
     using AdaptiveRegularization: ARCqKOp # ARC_qK
@@ -33,6 +33,6 @@ module WENDy
     include("wendyOutputError.jl")
     include("wendyOptim.jl")
 
-    export WENDyProblem, OutputErrorProblem, WENDyParameters, solve, Normal, LogNormal
-    export ℓ, ∇ℓ, ∇ℓ!, ∇²ℓ, ∇²ℓ!, weakResidual, weakResidual!, weakJacobian, weakJacobian!, weakCovariance, oeResidual!, oeJacobian!
+    export WENDyProblem, OutputErrorProblem, WENDyParameters, WENDySolution, solve, Normal, LogNormal
+    export ℓ, ∇ℓ, ∇ℓ!, ∇²ℓ, ∇²ℓ!, weakResidual, weakResidual!, weakJacobian, weakJacobian!, weakCovariance, Ĉ, C_cons, C_∇²ℓ, oeResidual!, oeJacobian!
 end # module WENDy

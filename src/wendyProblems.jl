@@ -182,3 +182,38 @@ weakJacobian!(∇r::AbstractMatrix{<:Real}, prob::WENDyProblem, p::AbstractVecto
 Covariance of the weak residual S(p) = (1-δ)L(p)L(p)ᵀ + δI
 """
 weakCovariance(prob::WENDyProblem, p::AbstractVector{<:Real}) = copy(_update!(prob.ws, p).S)
+## uncertainty of the estimate
+"""
+    Ĉ(prob::WENDyProblem, p̂)
+    Ĉ(prob::WENDyProblem, sol::WENDySolution)
+
+Covariance of the estimate from linearizing the weak form at p̂: Ĉ = (∇ₚgᵀ S⁻¹ ∇ₚg)⁻¹, where ∇ₚg = ∇ₚr is the
+jacobian of the weak residual and S(p̂) its covariance
+"""
+function Ĉ(prob::WENDyProblem, p::AbstractVector{<:Real})
+    ∇g = weakJacobian(prob, p)
+    Matrix(inv(Symmetric(∇g' * (_update!(prob.ws, p).Sfact \ ∇g))))
+end
+"""
+    C_cons(prob::WENDyProblem, p̂)
+    C_cons(prob::WENDyProblem, sol::WENDySolution)
+
+Conservative covariance of the estimate C_cons = ∇ₚg⁺ S ∇ₚg⁺ᵀ ⪰ Ĉ at p̂, the one used for the intervals reported
+in the paper
+"""
+function C_cons(prob::WENDyProblem, p::AbstractVector{<:Real})
+    ∇g⁺ = pinv(weakJacobian(prob, p))
+    Matrix(Symmetric(∇g⁺ * _update!(prob.ws, p).S * ∇g⁺'))
+end
+"""
+    C_∇²ℓ(prob::WENDyProblem, p̂)
+    C_∇²ℓ(prob::WENDyProblem, sol::WENDySolution)
+
+Covariance of the estimate from the curvature of the weak negative log-likelihood at p̂: (∇²ₚℓ)⁻¹
+"""
+# ℓ here is the negative log-likelihood itself (½rᵀS⁻¹r + ½log|S| + const), so its inverse hessian is the
+# asymptotic covariance; with the paper's ℓ = logdet S + rᵀS⁻¹r (twice this) it would be 2(∇²ₚℓ)⁻¹
+C_∇²ℓ(prob::WENDyProblem, p::AbstractVector{<:Real}) = Matrix(inv(Symmetric(∇²ℓ(prob, p))))
+for C in (:Ĉ, :C_cons, :C_∇²ℓ)
+    @eval $C(prob::WENDyProblem, sol::WENDySolution) = $C(prob, sol.p̂)
+end

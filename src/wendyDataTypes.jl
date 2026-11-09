@@ -75,3 +75,27 @@ Hyper-parameters for the WENDy Algorithm
     fsU0Free::Bool                      = true
     approxHessian::Bool                 = false
 end 
+"""
+    WENDySolution
+
+What every solver returns:
+- p̂::Vector{Float64} : the parameter estimate
+- û₀::Union{Nothing,Vector{Float64}} : the estimated initial condition (output error least squares and the hybrid
+  solver when params.fsU0Free), otherwise nothing
+- iterations::Int : number of iterations
+- iterates::Matrix{Float64} : the parameters at each iterate (J × iterates, starting at p₀)
+- retcode::Symbol : :success, :maxiters, :timelimit or :failed, from the solver's own status
+- time::Float64 : seconds spent in the solver
+- alg::String : the solver, e.g. "TrustRegion"
+
+The parameter covariance at the estimate is available from Ĉ, C_cons and C_∇²ℓ.
+"""
+struct WENDySolution
+    p̂::Vector{Float64}
+    û₀::Union{Nothing,Vector{Float64}}
+    iterations::Int
+    iterates::Matrix{Float64}
+    retcode::Symbol
+    time::Float64
+    alg::String
+end
