@@ -9,20 +9,20 @@ function _irlsStep(prob::WENDyProblem, pnm1::AbstractVector{<:Real}, params::WEN
         catch
             nothing
         end
-        if isnothing(ws) || !(ws.F isa Cholesky)
+        if isnothing(ws) || !(ws.Sfact isa Cholesky)
             @warn "The covariance calculation failed most likely because S ⊁ 0 "
             return NaN .* ones(size(pnm1))
         end
-        _irlsStep(ws.form, prob, ws.F.L, pnm1, params)
+        _irlsStep(ws.wform, prob, ws.Sfact.L, pnm1, params)
     end
 end
-# r(p) = Gp - b₀, so this is a linear least squares problem
-function _irlsStep(w::LinearWeakForm, prob::WENDyProblem, C::AbstractMatrix{<:Real}, pnm1::AbstractVector{<:Real}, params::WENDyParameters)
-    pn = (C \ w.G) \ (C \ w.b₀)
-    @info "  objective_value = $(norm(C \ (w.G*pn - w.b₀))^2/2)"
+# r(p) = Gp - b, so this is a linear least squares problem
+function _irlsStep(wform::LinearWeakForm, prob::WENDyProblem, C::AbstractMatrix{<:Real}, pnm1::AbstractVector{<:Real}, params::WENDyParameters)
+    pn = (C \ wform.G) \ (C \ wform.b)
+    @info "  objective_value = $(norm(C \ (wform.G*pn - wform.b))^2/2)"
     pn
 end
-function _irlsStep(w::NonlinearWeakForm, prob::WENDyProblem, C::AbstractMatrix{<:Real}, pnm1::AbstractVector{<:Real}, params::WENDyParameters)
+function _irlsStep(wform::NonlinearWeakForm, prob::WENDyProblem, C::AbstractMatrix{<:Real}, pnm1::AbstractVector{<:Real}, params::WENDyParameters)
     @info "  Running local optimization method"
     pn, iter = nonlinearLeastSquares(
         (r, p) -> r .= C \ weakResidual(prob, p),
@@ -34,7 +34,7 @@ function _irlsStep(w::NonlinearWeakForm, prob::WENDyProblem, C::AbstractMatrix{<
     pn
 end
 struct IRLS<:AbstractWENDySolver end
-function (m::IRLS)(prob::WENDyProblem, p₀::AbstractVector{<:AbstractFloat}, params::WENDyParameters;
+function (alg::IRLS)(prob::WENDyProblem, p₀::AbstractVector{<:AbstractFloat}, params::WENDyParameters;
     ll::LogLevel=Warn, iterll::LogLevel=Warn, maxIt::Int=1000, return_wits::Bool=false, kwargs...
 )
     with_logger(ConsoleLogger(stderr,ll)) do
@@ -61,19 +61,19 @@ function (m::IRLS)(prob::WENDyProblem, p₀::AbstractVector{<:AbstractFloat}, pa
         return return_wits ? (pnm1, maxIt, hcat(p₀, wits)) : pnm1
     end
 end
-## Second order solvers over m(p): f(p) = m(p), g!(g, p) = ∇m(p), h!(H, p) = Hm(p)
+## Second order solvers over ℓ(p): objective(p) = ℓ(p), gradient!(gradℓ, p) = ∇ℓ(p), hessian!(hessℓ, p) = ∇²ℓ(p)
 _secondOrder(prob::WENDyProblem, params::WENDyParameters) = (
-    p -> wnll(prob, p),
-    (g, p) -> ∇wnll!(g, prob, p),
-    (H, p) -> Hwnll!(H, prob, p; approx=params.approxHessian)
+    p -> ℓ(prob, p),
+    (gradℓ, p) -> ∇ℓ!(gradℓ, prob, p),
+    (hessℓ, p) -> ∇²ℓ!(hessℓ, prob, p; approx=params.approxHessian)
 )
 # These solvers accept a hessian vector product, so we build one that only recomputes H when p changes
-function _hessianVectorProduct(h!::Function, J::Int)
+function _hessianVectorProduct(hessian!::Function, J::Int)
     pH = fill(NaN, J)
     H = zeros(J, J)
     function Hv!(Hv, p, v; obj_weight=1.0)
         if pH != p
-            h!(H, p)
+            hessian!(H, p)
             pH .= p
         end
         Hv .= H*v * obj_weight
@@ -82,11 +82,11 @@ function _hessianVectorProduct(h!::Function, J::Int)
 end
 ## unconstrained
 function _trustRegion_unconstrained(
-    f::Function, g!::Function, h!::Function, p₀::AbstractVector{<:Real}, params::WENDyParameters;
+    objective::Function, gradient!::Function, hessian!::Function, p₀::AbstractVector{<:Real}, params::WENDyParameters;
     return_wits::Bool=false, kwargs...
 )
     res = optimize(
-        f, g!, h!,
+        objective, gradient!, hessian!,
         p₀, NewtonTrustRegion(),
         Optim_Options(
             x_reltol=params.optimReltol, x_abstol=params.optimAbstol, iterations=params.optimMaxiters, time_limit=params.optimTimelimit,
@@ -98,18 +98,18 @@ function _trustRegion_unconstrained(
 end
 ## constrained
 function _trustRegion_constrained(
-    f::Function, g!::Function, h!::Function, p₀::AbstractVector{<:Real}, params::WENDyParameters, constraints::AbstractVector{<:Tuple{<:Real,<:Real}};
+    objective::Function, gradient!::Function, hessian!::Function, p₀::AbstractVector{<:Real}, params::WENDyParameters, constraints::AbstractVector{<:Tuple{<:Real,<:Real}};
     return_wits::Bool=false, kwargs...
 )
     J = length(p₀)
     # this solver expects the gradient in this form
-    fg!(g, p) = (g!(g, p); (f(p), g))
+    objgrad!(gradℓ, p) = (gradient!(gradℓ, p); (objective(p), gradℓ))
     # store iterates in a callback
     wits = zeros(J, 0)
     _clbk(nlp, slvr, stats) = (wits = hcat(wits, slvr.x); nothing)
-    ℓ = [Float64(r[1]) for r in constraints]
-    u = [Float64(r[2]) for r in constraints]
-    nlp = NLPModel(p₀, ℓ, u, f; objgrad=fg!, hprod=_hessianVectorProduct(h!, J))
+    lower = [Float64(r[1]) for r in constraints]
+    upper = [Float64(r[2]) for r in constraints]
+    nlp = NLPModel(p₀, lower, upper, objective; objgrad=objgrad!, hprod=_hessianVectorProduct(hessian!, J))
     out = tron(
         nlp,
         verbose=:show_trace in keys(kwargs) ? 1 : 0,
@@ -122,26 +122,26 @@ function _trustRegion_constrained(
     return return_wits ? (out.solution, out.iter, wits) : out.solution
 end
 struct TrustRegion<:AbstractWENDySolver end
-function (m::TrustRegion)(prob::WENDyProblem, p₀::AbstractVector{<:Real}, params::WENDyParameters;
+function (alg::TrustRegion)(prob::WENDyProblem, p₀::AbstractVector{<:Real}, params::WENDyParameters;
     return_wits::Bool=false, kwargs...
 )
-    f, g!, h! = _secondOrder(prob, params)
+    objective, gradient!, hessian! = _secondOrder(prob, params)
     if isnothing(prob.constraints)
-        return _trustRegion_unconstrained(f, g!, h!, p₀, params; return_wits=return_wits, kwargs...)
+        return _trustRegion_unconstrained(objective, gradient!, hessian!, p₀, params; return_wits=return_wits, kwargs...)
     end
-    return _trustRegion_constrained(f, g!, h!, p₀, params, prob.constraints; return_wits=return_wits, kwargs...)
+    return _trustRegion_constrained(objective, gradient!, hessian!, p₀, params, prob.constraints; return_wits=return_wits, kwargs...)
 end
 ## adaptive regularization with cubics
 struct ARCqK<:AbstractWENDySolver end
-function (m::ARCqK)(prob::WENDyProblem, p₀::AbstractVector{<:Real}, params::WENDyParameters;
+function (alg::ARCqK)(prob::WENDyProblem, p₀::AbstractVector{<:Real}, params::WENDyParameters;
     return_wits::Bool=false, kwargs...
 )
-    f, g!, h! = _secondOrder(prob, params)
+    objective, gradient!, hessian! = _secondOrder(prob, params)
     J = length(p₀)
-    fg!(g, p) = (g!(g, p); (f(p), g))
+    objgrad!(gradℓ, p) = (gradient!(gradℓ, p); (objective(p), gradℓ))
     wits = zeros(J, 0)
     _clbk(nlp, solver, stats) = (wits = hcat(wits, stats.solution); nothing)
-    nlp = NLPModel(p₀, f; objgrad=fg!, hprod=_hessianVectorProduct(h!, J))
+    nlp = NLPModel(p₀, objective; objgrad=objgrad!, hprod=_hessianVectorProduct(hessian!, J))
     out = ARCqKOp(
         nlp,
         verbose=:show_trace in keys(kwargs) ? kwargs.show_trace : false,
@@ -179,7 +179,7 @@ function nonlinearLeastSquares(r!::Function, ∇r!::Function, n::Int, p₀::Abst
 end
 ## weak form least squares: min ½‖r(p)‖²
 struct WLS<:AbstractWENDySolver end
-(m::WLS)(prob::WENDyProblem, p₀::AbstractVector{<:Real}, params::WENDyParameters; return_wits::Bool=false, kwargs...) =
+(alg::WLS)(prob::WENDyProblem, p₀::AbstractVector{<:Real}, params::WENDyParameters; return_wits::Bool=false, kwargs...) =
     nonlinearLeastSquares(
         (r, p) -> weakResidual!(r, prob, p), (∇r, p) -> weakJacobian!(∇r, prob, p), prob.K*prob.D,
         p₀, params; return_wits=return_wits
@@ -194,17 +194,17 @@ uses the result to initialize the output error least squares problem oe (see Out
 struct HybridTrustRegionOELS<:AbstractWENDySolver
     oe::OutputErrorProblem
 end
-function (m::HybridTrustRegionOELS)(prob::WENDyProblem, p₀::AbstractVector{<:Real}, params::WENDyParameters;
+function (alg::HybridTrustRegionOELS)(prob::WENDyProblem, p₀::AbstractVector{<:Real}, params::WENDyParameters;
     return_wits::Bool=false, kwargs...
 )
     if !return_wits
-        return solve(m.oe, TrustRegion()(prob, p₀, params), params)
+        return solve(alg.oe, TrustRegion()(prob, p₀, params), params)
     end
     what_wendy, iter_wendy, wits_wendy = TrustRegion()(prob, p₀, params; return_wits=true)
-    what_oe, iter_oe, wits_oe = solve(m.oe, what_wendy, params; return_wits=true)
+    what_oe, iter_oe, wits_oe = solve(alg.oe, what_wendy, params; return_wits=true)
     # the output error iterates also contain u₀ when it is estimated
     if params.fsU0Free
-        wits_wendy = vcat(wits_wendy, reduce(hcat, m.oe.u₀ for _ in 1:size(wits_wendy,2)))
+        wits_wendy = vcat(wits_wendy, reduce(hcat, alg.oe.u₀ for _ in 1:size(wits_wendy,2)))
     end
     return what_oe, iter_wendy + iter_oe, hcat(wits_wendy, wits_oe)
 end
@@ -236,7 +236,7 @@ For output error least squares on its own see OutputErrorProblem.
 function solve(prob::WENDyProblem, p₀::AbstractVector{<:Real}, params::WENDyParameters=WENDyParameters(); alg::AbstractWENDySolver=TrustRegion(), forceAlg::Bool=false, kwargs...)
     if !forceAlg
         maxSizeOfData = sqrt(maximum(prob.X.^2))
-        minSig = minimum(prob.sig)
+        minSig = minimum(prob.σ)
         if minSig/maxSizeOfData < 1e-8
             @info "Switching the Weak Form Least Squares Problem, Noise is considered negligible..."
             alg = WLS()

@@ -1,7 +1,7 @@
 ## helper function to build G matrix
-function _buildGmat(f!::Function, tt::AbstractVector{<:Real}, Y::AbstractMatrix{<:Real}, V::AbstractMatrix{<:Real}, J::Int)
+function _buildGmat(f!::Function, tt::AbstractVector{<:Real}, Y::AbstractMatrix{<:Real}, Φ::AbstractMatrix{<:Real}, J::Int)
     Mp1, D = size(Y)
-    K, _ = size(V)
+    K, _ = size(Φ)
     eⱼ = zeros(J)
     F = similar(Y)
     G = zeros(K*D,J)
@@ -11,7 +11,7 @@ function _buildGmat(f!::Function, tt::AbstractVector{<:Real}, Y::AbstractMatrix{
         for m in 1:Mp1 
             @views f!(F[m,:], Y[m,:], eⱼ, tt[m])
         end 
-        gⱼ = V * F
+        gⱼ = Φ * F
         G[:,j] = vec(gⱼ)
     end
     G
@@ -21,7 +21,7 @@ end
 
 A WENDyProblem holds the weak form of the parameter inverse problem: the (transformed) data, the test functions, 
 the weak form (see LinearWeakForm, NonlinearWeakForm) and a workspace for evaluating the weak form negative 
-log-likelihood (see wnll, ∇wnll!, Hwnll!) and the weak residual (see weakResidual!, weakJacobian!, weakCovariance).
+log-likelihood (see ℓ, ∇ℓ!, ∇²ℓ!) and the weak residual (see weakResidual!, weakJacobian!, weakCovariance).
 For the output error (forward solve) least squares problem see OutputErrorProblem.
 
 # Constructor 
@@ -50,8 +50,8 @@ For the output error (forward solve) least squares problem see OutputErrorProble
 (linearInParameters=Val(true) and noiseDist=Val(LogNormal), as in earlier versions, are also accepted.)
 
 It can also be built from data that was already transformed and its weak form (e.g. to rebuild a saved problem) with 
-    WENDyProblem(tt, X, V, Vp, sig, b₀, form::WeakForm, params::WENDyParameters; noiseDist=Normal, constraints=nothing, ll=Warn)
-where form = weakForm(f!, tt, X, V, Vp, sig, b₀, J; linearInParameters, noiseDist).
+    WENDyProblem(tt, X, Φ, Φ̇, σ, b, wform::WeakForm, params::WENDyParameters; noiseDist=Normal, constraints=nothing, ll=Warn)
+where wform = weakForm(f!, tt, X, Φ, Φ̇, σ, b, J; linearInParameters, noiseDist).
 
 # Fields
 - D::Int : number of state variables
@@ -59,12 +59,12 @@ where form = weakForm(f!, tt, X, V, Vp, sig, b₀, J; linearInParameters, noiseD
 - Mp1::Int : (Mp1+1) number of data points in time 
 - K::Int : number of test functions 
 - tt, X : times and data (X = log(U) for LogNormal noise, with nonpositive data removed)
-- V, Vp : test function matrices V and V′
-- sig : estimated noise level in each state variable
-- b₀ : -vec(V′X)
+- Φ, Φ̇ : test function matrices Φ and Φ̇
+- σ : estimated noise level in each state variable
+- b : -vec(V′X)
 - noiseDist : the noise model the problem was built for, Normal or LogNormal
 - constraints : vector of tuples containing linear constraints for each parameter
-- ws::WENDyWorkspace : the weak form and shared state for m(p), ∇m(p) and Hm(p)
+- ws::WENDyWorkspace : the weak form and shared state for ℓ(p), ∇ℓ(p) and ∇²ℓ(p)
 """
 struct WENDyProblem
     D::Int # number of state variables
@@ -73,25 +73,25 @@ struct WENDyProblem
     K::Int # number of test functions 
     tt::Vector{Float64}
     X::Matrix{Float64}
-    V::Matrix{Float64}
-    Vp::Matrix{Float64}
-    sig::Vector{Float64}
-    b₀::Vector{Float64}
+    Φ::Matrix{Float64}
+    Φ̇::Matrix{Float64}
+    σ::Vector{Float64}
+    b::Vector{Float64}
     noiseDist::Type{<:Distribution}
     constraints::Union{Nothing,AbstractVector{Tuple{<:Real,<:Real}}}
     ws::WENDyWorkspace
 end
 ## constructor from transformed data and its weak form
 function WENDyProblem(
-    tt::AbstractVector{<:Real}, X::AbstractMatrix{<:Real}, V::AbstractMatrix{<:Real}, Vp::AbstractMatrix{<:Real}, 
-    sig::AbstractVector{<:Real}, b₀::AbstractVector{<:Real}, form::WeakForm, params::WENDyParameters; 
+    tt::AbstractVector{<:Real}, X::AbstractMatrix{<:Real}, Φ::AbstractMatrix{<:Real}, Φ̇::AbstractMatrix{<:Real}, 
+    σ::AbstractVector{<:Real}, b::AbstractVector{<:Real}, wform::WeakForm, params::WENDyParameters; 
     noiseDist::Type{<:Distribution}=Normal, constraints::Union{Nothing,AbstractVector{<:Tuple{<:Real,<:Real}}}=nothing, ll::LogLevel=Warn
 )
     with_logger(ConsoleLogger(stderr, ll)) do
         @info "  Building workspace"
         Mp1, D = size(X)
-        K, _ = size(V)
-        WENDyProblem(D, _J(form), Mp1, K, tt, X, V, Vp, sig, b₀, noiseDist, constraints, WENDyWorkspace(form, params))
+        K, _ = size(Φ)
+        WENDyProblem(D, _J(wform), Mp1, K, tt, X, Φ, Φ̇, σ, b, noiseDist, constraints, WENDyWorkspace(wform, params))
     end
 end
 # noise models: LogNormal noise is Normal noise on log(U), so only the data and rhs are transformed
@@ -124,48 +124,49 @@ function WENDyProblem(
         U = U isa AbstractVector ? reshape(U, length(U), 1) : U
         @info "  Estimate the noise in each dimension"
         tt, X = _transformData(noiseDist, _tt, U)
-        sig = estimate_std(X)
-        @info "  sig = $sig"
-        V, Vp = getTestFunctionMatrices(tt, X, params; ll=ll)
+        σ = estimate_std(X)
+        @info "  σ = $σ"
+        Φ, Φ̇ = getTestFunctionMatrices(tt, X, params; ll=ll)
         @info "  Building the LHS to the residual"
-        b₀ = vec(-Vp * X)
+        b = vec(-Φ̇ * X)
         @info "  Build the weak form from symbolic expressions of the ODE"
-        form = weakForm(_f!, tt, X, V, Vp, sig, b₀, J; linearInParameters=linearInParameters, noiseDist=noiseDist)
-        return WENDyProblem(tt, X, V, Vp, sig, b₀, form, params; noiseDist=noiseDist, constraints=constraints, ll=ll)
+        wform = weakForm(_f!, tt, X, Φ, Φ̇, σ, b, J; linearInParameters=linearInParameters, noiseDist=noiseDist)
+        return WENDyProblem(tt, X, Φ, Φ̇, σ, b, wform, params; noiseDist=noiseDist, constraints=constraints, ll=ll)
     end
 end
 ## weak form negative log-likelihood, its gradient and hessian
 """
-    wnll(prob::WENDyProblem, p)
+    ℓ(prob::WENDyProblem, p)
 
-Weak form negative log-likelihood m(p) = ½rᵀS⁻¹r + ½log|S| + (KD/2)log(2π), where r(p) is the weak residual and S(p) its covariance
+Weak form negative log-likelihood ℓ(p) = ½rᵀS⁻¹r + ½log|S| + (KD/2)log(2π), where r(p) is the weak residual and S(p) its covariance.
+This is half the paper's ℓ(p) = logdet S + rᵀS⁻¹r plus a constant (same minimizer); kept for comparison with earlier results.
 """
-wnll(prob::WENDyProblem, p::AbstractVector{<:Real}) = wnll(prob.ws, p)
+ℓ(prob::WENDyProblem, p::AbstractVector{<:Real}) = ℓ(prob.ws, p)
 """
-    ∇wnll(prob::WENDyProblem, p)
-    ∇wnll!(g, prob::WENDyProblem, p)
+    ∇ℓ(prob::WENDyProblem, p)
+    ∇ℓ!(gradℓ, prob::WENDyProblem, p)
 
-Gradient of the weak form negative log-likelihood (∇wnll! writes it into g)
+Gradient of the weak form negative log-likelihood (∇ℓ! writes it into gradℓ)
 """
-∇wnll(prob::WENDyProblem, p::AbstractVector{<:Real}) = ∇wnll(prob.ws, p)
-∇wnll!(g::AbstractVector{<:Real}, prob::WENDyProblem, p::AbstractVector{<:Real}) = g .= ∇wnll(prob, p)
+∇ℓ(prob::WENDyProblem, p::AbstractVector{<:Real}) = ∇ℓ(prob.ws, p)
+∇ℓ!(gradℓ::AbstractVector{<:Real}, prob::WENDyProblem, p::AbstractVector{<:Real}) = gradℓ .= ∇ℓ(prob, p)
 """
-    Hwnll(prob::WENDyProblem, p; approx=false)
-    Hwnll!(H, prob::WENDyProblem, p; approx=false)
+    ∇²ℓ(prob::WENDyProblem, p; approx=false)
+    ∇²ℓ!(hessℓ, prob::WENDyProblem, p; approx=false)
 
-Hessian of the weak form negative log-likelihood (Hwnll! writes it into H). With approx = true the curvature 
+Hessian of the weak form negative log-likelihood (∇²ℓ! writes it into hessℓ). With approx = true the curvature 
 of the log-determinant term is left out (see approxHessian in WENDyParameters)
 """
-Hwnll(prob::WENDyProblem, p::AbstractVector{<:Real}; approx::Bool=false) = Hwnll(prob.ws, p; approx=approx)
-Hwnll!(H::AbstractMatrix{<:Real}, prob::WENDyProblem, p::AbstractVector{<:Real}; approx::Bool=false) = H .= Hwnll(prob, p; approx=approx)
+∇²ℓ(prob::WENDyProblem, p::AbstractVector{<:Real}; approx::Bool=false) = ∇²ℓ(prob.ws, p; approx=approx)
+∇²ℓ!(hessℓ::AbstractMatrix{<:Real}, prob::WENDyProblem, p::AbstractVector{<:Real}; approx::Bool=false) = hessℓ .= ∇²ℓ(prob, p; approx=approx)
 ## weak residual, its jacobian and covariance
 """
     weakResidual(prob::WENDyProblem, p)
     weakResidual!(r, prob::WENDyProblem, p)
 
-Weak residual r(p) = G(p) - b₀ (weakResidual! writes it into r)
+Weak residual r(p) = g(p) - b (weakResidual! writes it into r)
 """
-weakResidual(prob::WENDyProblem, p::AbstractVector{<:Real}) = _r(prob.ws.form, p)
+weakResidual(prob::WENDyProblem, p::AbstractVector{<:Real}) = _r(prob.ws.wform, p)
 weakResidual!(r::AbstractVector{<:Real}, prob::WENDyProblem, p::AbstractVector{<:Real}) = r .= weakResidual(prob, p)
 """
     weakJacobian(prob::WENDyProblem, p)
@@ -173,8 +174,8 @@ weakResidual!(r::AbstractVector{<:Real}, prob::WENDyProblem, p::AbstractVector{<
 
 Jacobian of the weak residual wrt p (weakJacobian! writes it into ∇r)
 """
-weakJacobian(prob::WENDyProblem, p::AbstractVector{<:Real}) = copy(_∇r(prob.ws.form, p))
-weakJacobian!(∇r::AbstractMatrix{<:Real}, prob::WENDyProblem, p::AbstractVector{<:Real}) = ∇r .= _∇r(prob.ws.form, p)
+weakJacobian(prob::WENDyProblem, p::AbstractVector{<:Real}) = copy(_∇r(prob.ws.wform, p))
+weakJacobian!(∇r::AbstractMatrix{<:Real}, prob::WENDyProblem, p::AbstractVector{<:Real}) = ∇r .= _∇r(prob.ws.wform, p)
 """
     weakCovariance(prob::WENDyProblem, p)
 

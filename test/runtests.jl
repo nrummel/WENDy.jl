@@ -5,14 +5,14 @@ using OrdinaryDiffEq: ODEProblem, Rodas5P, solve as solve_ode
 
 ## Reference weak negative log-likelihood written directly from its definition, generic in the element type so
 ## ForwardDiff can differentiate it. It shares only the L(p) and r(p) kernels with the package.
-Lₚ_ref(w::WENDy.LinearWeakForm, p) = reshape(reshape(w.L₁, :, length(p)) * p, size(w.L₀))
-Lₚ_ref(w::WENDy.NonlinearWeakForm, p) = WENDy._Lₚ(p, w.tt, w.X, w.V, w.sig, w.∇ₓf!)
+Lₚ_ref(wform::WENDy.LinearWeakForm, p) = reshape(reshape(wform.L₁, :, length(p)) * p, size(wform.L₀))
+Lₚ_ref(wform::WENDy.NonlinearWeakForm, p) = WENDy._Lₚ(p, wform.tt, wform.X, wform.Φ, wform.σ, wform.∇ₓf!)
 function Lr_ref(prob::WENDyProblem, p::AbstractVector)
-    L₀ = kron(Diagonal(prob.sig), prob.Vp) # L₀ = V′ ∘ diag(σ)
-    L₀ + Lₚ_ref(prob.ws.form, p), WENDy._r(prob.ws.form, p)
+    L₀ = kron(Diagonal(prob.σ), prob.Φ̇) # L₀ = Φ̇ ∘ diag(σ)
+    L₀ + Lₚ_ref(prob.ws.wform, p), WENDy._r(prob.ws.wform, p)
 end
 S_ref(params, L) = (1-params.diagReg)*(L*L') + params.diagReg*I
-function wnll_ref(prob::WENDyProblem, params::WENDyParameters, p::AbstractVector)
+function ℓ_ref(prob::WENDyProblem, params::WENDyParameters, p::AbstractVector)
     L, r = Lr_ref(prob, p)
     C = cholesky(Symmetric(S_ref(params, L)))
     z = C.L \ r
@@ -73,32 +73,32 @@ const CASES = [
             WENDyProblem(tt, U, c.f!, J; linearInParameters=c.lip, noiseDist=c.dist, params=c.params)
         end
         p = c.pstar .* (1 .+ 0.1 .* randn(MersenneTwister(2), J))
-        f(q) = wnll_ref(prob, c.params, q)
-        gref = ForwardDiff.gradient(f, p)
-        Href = ForwardDiff.hessian(f, p)
+        f(q) = ℓ_ref(prob, c.params, q)
+        gradℓref = ForwardDiff.gradient(f, p)
+        hessℓref = ForwardDiff.hessian(f, p)
         @testset "$(c.name)" begin
             # linear problems use the blocks of LLᵀ, nonlinear ones build S from L(p)
-            @test prob.ws.form isa (c.lip ? WENDy.LinearWeakForm : WENDy.NonlinearWeakForm)
+            @test prob.ws.wform isa (c.lip ? WENDy.LinearWeakForm : WENDy.NonlinearWeakForm)
             @test prob.ws.cov isa (c.lip ? WENDy.BlockCovariance : WENDy.FactorCovariance)
             @test prob.noiseDist == c.dist
             # a workspace that builds S from L(p) is always valid, so compare both
-            wsL = WENDy.WENDyWorkspace(prob.ws.form, c.params; cov=WENDy.FactorCovariance())
-            @test wnll(prob, p) ≈ f(p) rtol=1e-10
-            @test WENDy.wnll(wsL, p) ≈ f(p) rtol=1e-10
-            g = zeros(J)
-            @test ∇wnll!(g, prob, p) ≈ gref rtol=1e-8
-            @test WENDy.∇wnll(wsL, p) ≈ gref rtol=1e-8
-            @test ∇wnll(prob, p) ≈ g
-            H = zeros(J,J)
-            @test Hwnll!(H, prob, p) ≈ Href rtol=1e-8
-            @test issymmetric(H)
-            @test WENDy.Hwnll(wsL, p) ≈ Href rtol=1e-8
-            @test Hwnll(prob, p) ≈ H
+            wsL = WENDy.WENDyWorkspace(prob.ws.wform, c.params; cov=WENDy.FactorCovariance())
+            @test ℓ(prob, p) ≈ f(p) rtol=1e-10
+            @test WENDy.ℓ(wsL, p) ≈ f(p) rtol=1e-10
+            gradℓ = zeros(J)
+            @test ∇ℓ!(gradℓ, prob, p) ≈ gradℓref rtol=1e-8
+            @test WENDy.∇ℓ(wsL, p) ≈ gradℓref rtol=1e-8
+            @test ∇ℓ(prob, p) ≈ gradℓ
+            hessℓ = zeros(J,J)
+            @test ∇²ℓ!(hessℓ, prob, p) ≈ hessℓref rtol=1e-8
+            @test issymmetric(hessℓ)
+            @test WENDy.∇²ℓ(wsL, p) ≈ hessℓref rtol=1e-8
+            @test ∇²ℓ(prob, p) ≈ hessℓ
             # approximate hessian (no log-det curvature)
-            Happroxref = approxH_ref(prob, c.params, p)
-            @test Hwnll!(H, prob, p; approx=true) ≈ Happroxref rtol=1e-8
-            @test issymmetric(H)
-            @test WENDy.Hwnll(wsL, p; approx=true) ≈ Happroxref rtol=1e-8
+            hessℓapproxref = approxH_ref(prob, c.params, p)
+            @test ∇²ℓ!(hessℓ, prob, p; approx=true) ≈ hessℓapproxref rtol=1e-8
+            @test issymmetric(hessℓ)
+            @test WENDy.∇²ℓ(wsL, p; approx=true) ≈ hessℓapproxref rtol=1e-8
             # weak residual, its jacobian and covariance
             L, r = Lr_ref(prob, p)
             KD = prob.K*prob.D
@@ -109,28 +109,28 @@ const CASES = [
             @test weakCovariance(prob, p) ≈ S_ref(c.params, L) rtol=1e-12
             # the workspace is never stale
             p₂ = c.pstar .* (1 .+ 0.1 .* randn(MersenneTwister(3), J))
-            g₂ref = ForwardDiff.gradient(f, p₂)
-            H₂ref = ForwardDiff.hessian(f, p₂)
+            gradℓ₂ref = ForwardDiff.gradient(f, p₂)
+            hessℓ₂ref = ForwardDiff.hessian(f, p₂)
             for _ in 1:2 # alternate p and p₂ so every call follows a call at the other point
-                @test wnll(prob, p₂) ≈ f(p₂) rtol=1e-10
-                @test ∇wnll!(g, prob, p) ≈ gref rtol=1e-8
-                @test Hwnll!(H, prob, p₂) ≈ H₂ref rtol=1e-8
+                @test ℓ(prob, p₂) ≈ f(p₂) rtol=1e-10
+                @test ∇ℓ!(gradℓ, prob, p) ≈ gradℓref rtol=1e-8
+                @test ∇²ℓ!(hessℓ, prob, p₂) ≈ hessℓ₂ref rtol=1e-8
                 weakResidual!(zeros(KD), prob, p₂) # must not disturb the cached state at p
-                @test wnll(prob, p) ≈ f(p) rtol=1e-10
-                @test ∇wnll!(g, prob, p₂) ≈ g₂ref rtol=1e-8
-                @test Hwnll!(H, prob, p) ≈ Href rtol=1e-8
+                @test ℓ(prob, p) ≈ f(p) rtol=1e-10
+                @test ∇ℓ!(gradℓ, prob, p₂) ≈ gradℓ₂ref rtol=1e-8
+                @test ∇²ℓ!(hessℓ, prob, p) ≈ hessℓref rtol=1e-8
             end
             # optimizers often mutate the same array in place
             q = copy(p)
-            ∇wnll!(g, prob, q)
+            ∇ℓ!(gradℓ, prob, q)
             q .= p₂
-            @test ∇wnll!(g, prob, q) ≈ g₂ref rtol=1e-8
-            # after m and ∇m at p, Hm at p reuses the factorization rather than recomputing it
-            wnll(prob, p); ∇wnll!(g, prob, p)
-            F = prob.ws.F
-            Hwnll!(H, prob, p)
-            @test prob.ws.F === F
-            @test H ≈ Href rtol=1e-8
+            @test ∇ℓ!(gradℓ, prob, q) ≈ gradℓ₂ref rtol=1e-8
+            # after ℓ and ∇ℓ at p, ∇²ℓ at p reuses the factorization rather than recomputing it
+            ℓ(prob, p); ∇ℓ!(gradℓ, prob, p)
+            Sfact = prob.ws.Sfact
+            ∇²ℓ!(hessℓ, prob, p)
+            @test prob.ws.Sfact === Sfact
+            @test hessℓ ≈ hessℓref rtol=1e-8
         end
     end
     @testset "Logistic solvers" begin
@@ -146,10 +146,10 @@ const CASES = [
         p̂ = quiet(() -> solve(prob, p₀, c.params))
         # earlier versions took Val(...) keywords
         probVal = quiet(() -> WENDyProblem(tt, U, c.f!, 2; linearInParameters=Val(true), noiseDist=Val(Normal), params=c.params))
-        @test probVal.ws.form isa WENDy.LinearWeakForm
-        @test wnll(probVal, p₀) ≈ wnll(prob, p₀) rtol=1e-10 # test function selection is not bitwise reproducible
+        @test probVal.ws.wform isa WENDy.LinearWeakForm
+        @test ℓ(probVal, p₀) ≈ ℓ(prob, p₀) rtol=1e-10 # test function selection is not bitwise reproducible
         @test relErr(p̂) < 0.05
-        @test norm(∇wnll!(zeros(2), prob, p̂)) < 1e-3*norm(∇wnll!(zeros(2), prob, p₀))
+        @test norm(∇ℓ!(zeros(2), prob, p̂)) < 1e-3*norm(∇ℓ!(zeros(2), prob, p₀))
         # approximate hessian
         p̂ₐ = quiet(() -> solve(prob, p₀, WENDyParameters(Kmax=25, approxHessian=true)))
         @test norm(p̂ₐ - p̂)/norm(p̂) < 1e-6

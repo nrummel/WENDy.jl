@@ -50,10 +50,10 @@ function _minRadius(
     # we want the F[M/2]
     
     for (r,radius) in enumerate(radii)
-        VV = _buildV(radius, Mp1, dt, Kᵣ)
-        V = VV[:,:,1]
-        K = size(V,1)
-        @tullio ΦU[k,d,m] := V[k,m]*U[m,d]
+        Φᵣ = _buildΦ(radius, Mp1, dt, Kᵣ)
+        Φ = Φᵣ[:,:,1]
+        K = size(Φ,1)
+        @tullio ΦU[k,d,m] := Φ[k,m]*U[m,d]
         ΦU = reshape(ΦU, K*D, Mp1)
         Fhat_ΦU = fft(ΦU, (2,))
         errs[r] = norm(imag(Fhat_ΦU[:,IX]))
@@ -97,9 +97,9 @@ function _buildChunks(Mp1::Int, radius::Int, Kᵣ::Union{Int,Nothing}=nothing)
     return [c[2:end-1] for c in chunks] 
 end
 """
-    Build the V_full for a particular radius and test function φ. If asked provide the functions for each test function.
+    Build the Φ_full for a particular radius and test function φ. If asked provide the functions for each test function.
 """
-function _buildV(radius::Int, Mp1::Int, dt::Real, Kᵣ::Union{Int, Nothing}=nothing; derivativeOrder::Int=0)
+function _buildΦ(radius::Int, Mp1::Int, dt::Real, Kᵣ::Union{Int, Nothing}=nothing; derivativeOrder::Int=0)
     @assert isnothing(Kᵣ) || mod(Kᵣ,2)==0 "Kᵣ must be even "
     diam = Int(2*radius+1) 
     f = derivativeOrder == 0 ? WENDy.ExponentialTestFun() : _derivative(radius, dt, derivativeOrder)
@@ -107,37 +107,37 @@ function _buildV(radius::Int, Mp1::Int, dt::Real, Kᵣ::Union{Int, Nothing}=noth
     # chunks may be slightly longer than Kᵣ because 
     # of rounding with discretization (or could be nothing)
     Kᵣ = length(chunks)
-    Vr = zeros(Kᵣ, Mp1) 
+    Φᵣ = zeros(Kᵣ, Mp1) 
     xx = range(-1,1,diam)[2:end-1]
     ϕ = f.(xx)
     # normalize for stability
     ϕnorm  = norm(WENDy.ExponentialTestFun().(xx))
     ϕ /= ϕnorm
     for (k,c) in enumerate(chunks) 
-        Vr[k, c] .= ϕ
+        Φᵣ[k, c] .= ϕ
     end 
-    return Vr
+    return Φᵣ
 end
 """ """ 
-function _computeDerivative_analytic(Vp_full::AbstractMatrix, F::SVD, K::Int)
-    @info "    Computing Vp with analytic Vp_full and svd(V_full)"
-    (diagm(1 ./ F.S) * F.U' *  Vp_full)[1:K,:]
+function _computeDerivative_analytic(Φ̇_full::AbstractMatrix, F::SVD, K::Int)
+    @info "    Computing Φ̇ with analytic Φ̇_full and svd(Φ_full)"
+    (diagm(1 ./ F.S) * F.U' *  Φ̇_full)[1:K,:]
 end
 """ """
-function _computeDerivative_fft(V::AbstractMatrix, dt::Real)
-    @info "    Computing Vp with the fft"
-    _, Mp1 = size(V)
-    Vp_fft = zeros(size(V))
-    _Vp_fft = fft(V', (1, ))
+function _computeDerivative_fft(Φ::AbstractMatrix, dt::Real)
+    @info "    Computing Φ̇ with the fft"
+    _, Mp1 = size(Φ)
+    Φ̇_fft = zeros(size(Φ))
+    _Φ̇_fft = fft(Φ', (1, ))
     k = mod(Mp1,2)==0 ? 
         vcat(0:Mp1/2, -Mp1/2+1:-1) : 
         vcat(0:floor(Mp1/2), -floor(Mp1/2):-1)
-    Vp_fft = imag(ifft((-2*pi/(Mp1*dt))*k .* _Vp_fft, (1,)))'
+    Φ̇_fft = imag(ifft((-2*pi/(Mp1*dt))*k .* _Φ̇_fft, (1,)))'
 end
 """ """
 function getTestFunctionMatrices(
     tt::AbstractVector{<:Real}, U::AbstractMatrix{<:Real}, radiusMinTime::Real, radiusMaxTime::Real, numRadii::Int, testFunSubRate::Real, radiiParams::AbstractVector{<:Real}, maxTestFunCondNum::Real, minTestFunInfoNum::Real, Kmax::Int, Kᵣ::Union{Nothing,Int}; 
-    analyticVp::Bool=true, noSVD::Bool=false, ll::LogLevel=Info, debug::Bool=false
+    analyticΦ̇::Bool=true, noSVD::Bool=false, ll::LogLevel=Info, debug::Bool=false
 )
     with_logger(ConsoleLogger(stderr, ll)) do 
         @info "  Getting Test Function Matrices"
@@ -169,16 +169,16 @@ function getTestFunctionMatrices(
         if length(radii) == 0 
             radii = [radiusMax]
         end
-        V_full = reduce(vcat, _buildV(r, Mp1, dt) for r in radii)
-        Vp_full = reduce(vcat, _buildV(r, Mp1, dt; derivativeOrder=1) for r in radii)
-        Kfull, _ = size(V_full)
+        Φ_full = reduce(vcat, _buildΦ(r, Mp1, dt) for r in radii)
+        Φ̇_full = reduce(vcat, _buildΦ(r, Mp1, dt; derivativeOrder=1) for r in radii)
+        Kfull, _ = size(Φ_full)
         @info "    K_full=$Kfull"
         if noSVD
-            @info "    Returning the V_full, Vp_full"
-            return V_full, Vp_full 
+            @info "    Returning the Φ_full, Φ̇_full"
+            return Φ_full, Φ̇_full 
         end
         Kmax = min(Kmax, Kfull, Mp1)
-        F = minimum(size(V_full)) <= Kmax ? svd(V_full) : svds(V_full, nsv=Kmax)[1]
+        F = minimum(size(Φ_full)) <= Kmax ? svd(Φ_full) : svds(Φ_full, nsv=Kmax)[1]
         # Choose K off how quickly the singular values decay wrt to the max
         condNumbers = F.S[1] ./ F.S
         sumAllS = sum(F.S) + (min(Kfull, Mp1)-Kmax) * F.S[end] # upper bound on the sum of all singular values
@@ -194,10 +194,10 @@ function getTestFunctionMatrices(
         @info "    condNum is now $(condNumbers[K])"
         @info "    infoNum is now $(infoNumbers[K])"
         @info "    K=$(K)"
-        V = F.Vt[1:K,:]
-        Vp = analyticVp ? _computeDerivative_analytic(Vp_full, F, K) : _computeDerivative_fft(V, dt)
-        @assert size(V,2) == Mp1 && size(Vp,2) == Mp1
-        return debug ? (radii, V_full, Vp_full, V, Vp) : (V, Vp)
+        Φ = F.Vt[1:K,:]
+        Φ̇ = analyticΦ̇ ? _computeDerivative_analytic(Φ̇_full, F, K) : _computeDerivative_fft(Φ, dt)
+        @assert size(Φ,2) == Mp1 && size(Φ̇,2) == Mp1
+        return debug ? (radii, Φ_full, Φ̇_full, Φ, Φ̇) : (Φ, Φ̇)
     end
 end
 ## Convience wrapper to get testfunctions with the parameter struct

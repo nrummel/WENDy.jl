@@ -39,31 +39,31 @@ function OutputErrorProblem(tt::AbstractVector{<:Real}, U::AbstractVecOrMat{<:Re
 end
 # Û(tt; p, u₀), the (Mp1 x D) forward solve; defined in ext/WENDyOrdinaryDiffEqExt.jl
 function _forwardSolve end
-# û(tt; p, u₀) - U, where w = [p; u₀] when params.fsU0Free and w = p otherwise (then u₀ = U[1,:])
-function _forwardSolveResidual(oe::OutputErrorProblem, w::AbstractVector, params::WENDyParameters)
+# û(tt; p, u₀) - U, where pu₀ = [p; u₀] when params.fsU0Free and pu₀ = p otherwise (then u₀ = U[1,:])
+function _forwardSolveResidual(oe::OutputErrorProblem, pu₀::AbstractVector, params::WENDyParameters)
     Mp1, D = size(oe.U)
     J = oe.J
     try
-        p, u₀ = params.fsU0Free ? (w[1:J], w[J+1:end]) : (w[1:J], oe.U[1,:])
+        p, u₀ = params.fsU0Free ? (pu₀[1:J], pu₀[J+1:end]) : (pu₀[1:J], oe.U[1,:])
         return (_forwardSolve(oe, p, u₀, params) - oe.U)[:]
     catch
         NaN*ones(Mp1*D)
     end
 end
 """
-    oeResidual!(r, oe::OutputErrorProblem, w, params=oe.params)
+    oeResidual!(r, oe::OutputErrorProblem, pu₀, params=oe.params)
 
-Output error residual û(tt; p, u₀) - U (flattened), written into r. Here w = [p; u₀] when params.fsU0Free and w = p otherwise.
+Output error residual û(tt; p, u₀) - U (flattened), written into r. Here pu₀ = [p; u₀] when params.fsU0Free and pu₀ = p otherwise.
 """
-oeResidual!(r::AbstractVector{<:Real}, oe::OutputErrorProblem, w::AbstractVector{<:Real}, params::WENDyParameters=oe.params) =
-    r .= _forwardSolveResidual(oe, w, params)
+oeResidual!(r::AbstractVector{<:Real}, oe::OutputErrorProblem, pu₀::AbstractVector{<:Real}, params::WENDyParameters=oe.params) =
+    r .= _forwardSolveResidual(oe, pu₀, params)
 """
-    oeJacobian!(∇r, oe::OutputErrorProblem, w, params=oe.params)
+    oeJacobian!(∇r, oe::OutputErrorProblem, pu₀, params=oe.params)
 
-Jacobian of the output error residual wrt w (by forward mode automatic differentiation through the ODE solve), written into ∇r
+Jacobian of the output error residual wrt pu₀ (by forward mode automatic differentiation through the ODE solve), written into ∇r
 """
-oeJacobian!(∇r::AbstractMatrix{<:Real}, oe::OutputErrorProblem, w::AbstractVector{<:Real}, params::WENDyParameters=oe.params) =
-    ForwardDiff.jacobian!(∇r, w -> _forwardSolveResidual(oe, w, params), w)
+oeJacobian!(∇r::AbstractMatrix{<:Real}, oe::OutputErrorProblem, pu₀::AbstractVector{<:Real}, params::WENDyParameters=oe.params) =
+    ForwardDiff.jacobian!(∇r, pu₀ -> _forwardSolveResidual(oe, pu₀, params), pu₀)
 """
     solve(oe::OutputErrorProblem, p₀, params=oe.params; return_wits=false)
 
@@ -74,8 +74,8 @@ With return_wits=true this returns (what, iterations, iterates).
 function solve(oe::OutputErrorProblem, p₀::AbstractVector{<:Real}, params::WENDyParameters=oe.params; return_wits::Bool=false, kwargs...)
     w₀ = params.fsU0Free ? vcat(p₀, oe.u₀) : p₀
     nonlinearLeastSquares(
-        (r, w) -> oeResidual!(r, oe, w, params),
-        (∇r, w) -> oeJacobian!(∇r, oe, w, params),
+        (r, pu₀) -> oeResidual!(r, oe, pu₀, params),
+        (∇r, pu₀) -> oeJacobian!(∇r, oe, pu₀, params),
         length(oe.U), w₀, params;
         return_wits=return_wits
     )

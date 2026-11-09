@@ -65,4 +65,4 @@ oe = OutputErrorProblem(tt, U, f!, J; params=params)
 ```
 
 ## Evaluating the Weak Form Likelihood
-The weak form negative log-likelihood and its derivatives can be evaluated directly with `wnll(prob, p)`, `∇wnll!(g, prob, p)` and `Hwnll!(H, prob, p)`, and the weak residual with `weakResidual!(r, prob, p)`, `weakJacobian!(∇r, prob, p)` and `weakCovariance(prob, p)`.
+The weak form negative log-likelihood and its derivatives can be evaluated directly with `ℓ(prob, p)`, `∇ℓ!(g, prob, p)` and `∇²ℓ!(H, prob, p)`, and the weak residual with `weakResidual!(r, prob, p)`, `weakJacobian!(∇r, prob, p)` and `weakCovariance(prob, p)`.
