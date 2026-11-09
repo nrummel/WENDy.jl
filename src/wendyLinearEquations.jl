@@ -51,10 +51,10 @@ function _∇²ℓ(
     approx = isnothing(S⁻¹)
     δ̃ = 1-diagReg
     S⁻¹∇r = Sfact \ G # ∇r = G
-    ∂S = [(Qⱼ = _Q(q, P, j); δ̃ .* (Qⱼ .+ Qⱼ')) for j in 1:J]
-    W = reduce(hcat, ∂ⱼS * y for ∂ⱼS in ∂S)
+    ∂S = stack((Qⱼ = _Q(q, P, j); δ̃ .* (Qⱼ .+ Qⱼ')) for j in 1:J) # ∂S[:,:,j] = ∂ⱼS
+    W = reduce(hcat, ∂ⱼS * y for ∂ⱼS in eachslice(∂S; dims=3))
     # ∂ⱼrᵀS⁻¹∂ᵢr + covariance terms
-    H = G'S⁻¹∇r + _∇²ℓCovTerms(S⁻¹∇r, W, Sfact \ W, approx ? nothing : [S⁻¹ * ∂ⱼS for ∂ⱼS in ∂S])
+    H = G'S⁻¹∇r + _∇²ℓCovTerms(S⁻¹∇r, W, Sfact \ W, approx ? nothing : stack(S⁻¹ * ∂ⱼS for ∂ⱼS in eachslice(∂S; dims=3)))
     # (1-δ)⟨S⁻¹ - yyᵀ, L₁ᵢL₁ⱼᵀ⟩, or just -(1-δ)⟨yyᵀ, L₁ᵢL₁ⱼᵀ⟩ when approx
     C = _C(approx ? -y*y' : S⁻¹ - y*y', P)
     H += δ̃ * C[2:end,2:end]

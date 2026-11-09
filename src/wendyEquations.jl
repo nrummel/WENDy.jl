@@ -38,15 +38,15 @@ function _∇ℓ(∇L::AbstractArray{<:Real,3}, ∇r::AbstractMatrix{<:Real}, y:
 end
 """
 ∇²ℓ(p) terms that only depend on how S changes, shared by the linear and general Hessians.
-With W = [∂₁Sy ⋯ ∂ⱼSy] and Aⱼ = S⁻¹∂ⱼS this is
+With W = [∂₁Sy ⋯ ∂ⱼSy] and A[:,:,j] = S⁻¹∂ⱼS this is
     -(S⁻¹∇r)ᵀW - Wᵀ(S⁻¹∇r) + WᵀS⁻¹W - ½[tr(AᵢAⱼ)]ᵢⱼ
 Pass A = nothing to leave out the trace (see approx in _∇²ℓ).
 """
-function _∇²ℓCovTerms(S⁻¹∇r::AbstractMatrix{<:Real}, W::AbstractMatrix{<:Real}, S⁻¹W::AbstractMatrix{<:Real}, A::Union{Nothing,AbstractVector})
+function _∇²ℓCovTerms(S⁻¹∇r::AbstractMatrix{<:Real}, W::AbstractMatrix{<:Real}, S⁻¹W::AbstractMatrix{<:Real}, A::Union{Nothing,AbstractArray{<:Real,3}})
     H = -S⁻¹∇r'W - W'S⁻¹∇r + W'S⁻¹W
     isnothing(A) && return H
-    J = length(A)
-    H - [dot(transpose(A[i]), A[j]) for i in 1:J, j in 1:J] / 2
+    J = size(A, 3)
+    H - [dot(transpose(view(A,:,:,i)), view(A,:,:,j)) for i in 1:J, j in 1:J] / 2
 end
 """
 ∇²ℓ(p) - Hessian of weak form negative log likelihood using trace identities. With y = S⁻¹r, Sⱼy = ∂ⱼSy and vⱼ = ∂ⱼLᵀy:
@@ -71,7 +71,7 @@ function _∇²ℓ(
     # ∂ⱼrᵀS⁻¹∂ᵢr - (1-δ)vᵢᵀvⱼ
     H = ∇r'S⁻¹∇r - δ̃ * ∇Lᵀy'∇Lᵀy
     W = zeros(length(y), J)
-    A = approx ? nothing : Vector{Matrix{Float64}}(undef, J)
+    A = approx ? nothing : Array{Float64}(undef, length(y), length(y), J)
     for j in 1:J
         ∂ⱼL = @view ∇L[:,:,j]
         if approx
@@ -82,7 +82,7 @@ function _∇²ℓ(
         ∂ⱼLLᵀ = ∂ⱼL * L'
         ∂ⱼS = δ̃ .* (∂ⱼLLᵀ .+ ∂ⱼLLᵀ')
         W[:,j] = ∂ⱼS * y
-        A[j] = Sfact \ ∂ⱼS
+        A[:,:,j] = Sfact \ ∂ⱼS
         # (1-δ)⟨S⁻¹∂ⱼL, ∂ᵢL⟩ for all i
         H[:,j] += δ̃ * (reshape(∇L, :, J)' * vec(Sfact \ ∂ⱼL))
     end
