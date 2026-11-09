@@ -18,6 +18,7 @@ The forward solves need OrdinaryDiffEq.jl, which WENDy only loads on request: ru
 # Fields
 - tt, U, f!, J : as above
 - D::Int : number of state variables
+- Mp1::Int : number of time points
 - u₀::AbstractVector{<:Real} : initial condition taken from the data, U[1,:] (the initial guess for u₀ when fsU0Free)
 - params::WENDyParameters : default parameters for solve
 """
@@ -27,6 +28,7 @@ struct OutputErrorProblem
     f!::Function
     J::Int
     D::Int
+    Mp1::Int
     u₀::AbstractVector{<:Real}
     params::WENDyParameters
 end
@@ -34,15 +36,14 @@ function OutputErrorProblem(tt::AbstractVector{<:Real}, U::AbstractVecOrMat{<:Re
     isnothing(Base.get_extension(@__MODULE__, :WENDyOrdinaryDiffEqExt)) &&
         error("OutputErrorProblem solves the ODE with OrdinaryDiffEq.jl: run `using OrdinaryDiffEq` first")
     U = U isa AbstractVector ? reshape(U, length(U), 1) : U
-    _, D = size(U)
-    OutputErrorProblem(tt, U, f!, J, D, U[1,:], params)
+    Mp1, D = size(U)
+    OutputErrorProblem(tt, U, f!, J, D, Mp1, U[1,:], params)
 end
 # Û(tt; p, u₀), the (Mp1 x D) forward solve; defined in ext/WENDyOrdinaryDiffEqExt.jl
 function _forwardSolve end
 # û(tt; p, u₀) - U, where pu₀ = [p; u₀] when params.fsU0Free and pu₀ = p otherwise (then u₀ = U[1,:])
 function _forwardSolveResidual(oe::OutputErrorProblem, pu₀::AbstractVector, params::WENDyParameters)
-    Mp1, D = size(oe.U)
-    J = oe.J
+    (; J, D, Mp1) = oe
     try
         p, u₀ = params.fsU0Free ? (pu₀[1:J], pu₀[J+1:end]) : (pu₀[1:J], oe.U[1,:])
         return (_forwardSolve(oe, p, u₀, params) - oe.U)[:]
@@ -77,7 +78,7 @@ function solve(oe::OutputErrorProblem, p₀::AbstractVector{<:Real}, params::WEN
     out = nonlinearLeastSquares(
         (r, pu₀) -> oeResidual!(r, oe, pu₀, params),
         (∇r, pu₀) -> oeJacobian!(∇r, oe, pu₀, params),
-        length(oe.U), pu₀_init, params
+        oe.Mp1*oe.D, pu₀_init, params
     )
     J = oe.J
     û₀ = params.fsU0Free ? out.p̂[J+1:end] : nothing

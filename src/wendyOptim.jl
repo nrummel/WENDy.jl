@@ -22,7 +22,7 @@ function _irlsStep(prob::WENDyProblem, pnm1::AbstractVector{<:Real}, params::WEN
         end
         if isnothing(ws) || !(ws.Sfact isa Cholesky)
             @warn "The covariance calculation failed most likely because S ⊁ 0 "
-            return NaN .* ones(size(pnm1))
+            return fill(NaN, prob.dims.J)
         end
         _irlsStep(ws.wform, prob, ws.Sfact.L, pnm1, params)
     end
@@ -38,7 +38,7 @@ function _irlsStep(wform::NonlinearWeakForm, prob::WENDyProblem, C::AbstractMatr
     out = nonlinearLeastSquares(
         (r, p) -> r .= C \ weakResidual(prob, p),
         (∇r, p) -> ∇r .= C \ weakJacobian(prob, p),
-        prob.K*prob.D, pnm1, params;
+        prob.dims.KD, pnm1, params;
         reltol=params.nlsReltol, abstol=params.nlsAbstol, maxiters=params.nlsMaxiters
     )
     @info "  iterations = $(out.iterations)"
@@ -51,7 +51,7 @@ function (alg::IRLS)(prob::WENDyProblem, p₀::AbstractVector{<:AbstractFloat}, 
     start = time()
     with_logger(ConsoleLogger(stderr,ll)) do
         reltol,abstol = params.optimReltol, params.optimAbstol
-        J = length(p₀)
+        (; J) = prob.dims
         iterates = zeros(J, 0)
         pnm1 = p₀
         for n = 1:maxIt
@@ -109,10 +109,10 @@ function _trustRegion_unconstrained(
 end
 ## constrained
 function _trustRegion_constrained(
-    objective::Function, gradient!::Function, hessian!::Function, p₀::AbstractVector{<:Real}, params::WENDyParameters, constraints::AbstractVector{<:Tuple{<:Real,<:Real}};
-    kwargs...
+    objective::Function, gradient!::Function, hessian!::Function, p₀::AbstractVector{<:Real}, params::WENDyParameters, constraints::AbstractVector{<:Tuple{<:Real,<:Real}},
+    dims::WENDyDims; kwargs...
 )
-    J = length(p₀)
+    (; J) = dims
     # this solver expects the gradient in this form
     objgrad!(gradℓ, p) = (gradient!(gradℓ, p); (objective(p), gradℓ))
     # store iterates in a callback
@@ -138,7 +138,7 @@ function (alg::TrustRegion)(prob::WENDyProblem, p₀::AbstractVector{<:Real}, pa
     objective, gradient!, hessian! = _secondOrder(prob, params)
     out = isnothing(prob.constraints) ?
         _trustRegion_unconstrained(objective, gradient!, hessian!, p₀, params; kwargs...) :
-        _trustRegion_constrained(objective, gradient!, hessian!, p₀, params, prob.constraints; kwargs...)
+        _trustRegion_constrained(objective, gradient!, hessian!, p₀, params, prob.constraints, prob.dims; kwargs...)
     _solution(alg, p₀, out.p̂, out.iterations, out.iterates, out.retcode, start)
 end
 ## adaptive regularization with cubics
@@ -146,7 +146,7 @@ struct ARCqK<:AbstractWENDySolver end
 function (alg::ARCqK)(prob::WENDyProblem, p₀::AbstractVector{<:Real}, params::WENDyParameters; kwargs...)
     start = time()
     objective, gradient!, hessian! = _secondOrder(prob, params)
-    J = length(p₀)
+    (; J) = prob.dims
     objgrad!(gradℓ, p) = (gradient!(gradℓ, p); (objective(p), gradℓ))
     iterates = zeros(J, 0)
     _clbk(nlp, solver, stats) = (iterates = hcat(iterates, stats.solution); nothing)
@@ -167,7 +167,7 @@ end
 function nonlinearLeastSquares(r!::Function, ∇r!::Function, n::Int, p₀::AbstractVector{<:Real}, params::WENDyParameters;
     reltol::Real=params.optimReltol, abstol::Real=params.optimAbstol, maxiters::Int=params.optimMaxiters, kwargs...
 )
-    iterates = zeros(length(p₀), 0)
+    iterates = zeros(length(p₀), 0) # p₀ is p or [p; u₀]: this solver is not tied to one problem
     function _r!(r, p, ::Any)
         iterates = hcat(iterates, p)
         r!(r, p)
@@ -190,7 +190,7 @@ struct WLS<:AbstractWENDySolver end
 function (alg::WLS)(prob::WENDyProblem, p₀::AbstractVector{<:Real}, params::WENDyParameters; kwargs...)
     start = time()
     out = nonlinearLeastSquares(
-        (r, p) -> weakResidual!(r, prob, p), (∇r, p) -> weakJacobian!(∇r, prob, p), prob.K*prob.D, p₀, params
+        (r, p) -> weakResidual!(r, prob, p), (∇r, p) -> weakJacobian!(∇r, prob, p), prob.dims.KD, p₀, params
     )
     _solution(alg, p₀, out.p̂, out.iterations, out.iterates, out.retcode, start)
 end

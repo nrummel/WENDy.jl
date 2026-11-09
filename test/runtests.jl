@@ -6,7 +6,7 @@ using OrdinaryDiffEq: ODEProblem, Rodas5P, solve as solve_ode
 ## Reference weak negative log-likelihood written directly from its definition, generic in the element type so
 ## ForwardDiff can differentiate it. It shares only the L(p) and r(p) kernels with the package.
 Lₚ_ref(wform::WENDy.LinearWeakForm, p) = reshape(reshape(wform.L₁, :, length(p)) * p, size(wform.L₀))
-Lₚ_ref(wform::WENDy.NonlinearWeakForm, p) = WENDy._Lₚ(p, wform.tt, wform.X, wform.Φ, wform.σ, wform.∇ₓf!)
+Lₚ_ref(wform::WENDy.NonlinearWeakForm, p) = WENDy._Lₚ(p, wform.tt, wform.X, wform.Φ, wform.σ, wform.∇ₓf!, wform.dims)
 function Lr_ref(prob::WENDyProblem, p::AbstractVector)
     L₀ = kron(Diagonal(prob.σ), prob.Φ̇) # L₀ = Φ̇ ∘ diag(σ)
     L₀ + Lₚ_ref(prob.ws.wform, p), WENDy._r(prob.ws.wform, p)
@@ -81,6 +81,10 @@ const CASES = [
             @test prob.ws.wform isa (c.lip ? WENDy.LinearWeakForm : WENDy.NonlinearWeakForm)
             @test prob.ws.cov isa (c.lip ? WENDy.BlockCovariance : WENDy.FactorCovariance)
             @test prob.noiseDist == c.dist
+            # the sizes, read once when the weak form is built and shared by the problem, weak form and workspace
+            (; D, Mp1, K, KD) = prob.dims
+            @test prob.dims.J == J && D == size(U, 2) && K == size(prob.Φ, 1) && KD == K*D && Mp1 == length(prob.tt)
+            @test prob.dims === prob.ws.wform.dims
             # a workspace that builds S from L(p) is always valid, so compare both
             wsL = WENDy.WENDyWorkspace(prob.ws.wform, c.params; cov=WENDy.FactorCovariance())
             @test ℓ(prob, p) ≈ f(p) rtol=1e-10
@@ -101,7 +105,6 @@ const CASES = [
             @test WENDy.∇²ℓ(wsL, p; approx=true) ≈ hessℓapproxref rtol=1e-8
             # weak residual, its jacobian and covariance
             L, r = Lr_ref(prob, p)
-            KD = prob.K*prob.D
             @test weakResidual!(zeros(KD), prob, p) ≈ r rtol=1e-12
             @test weakResidual(prob, p) ≈ r rtol=1e-12
             @test weakJacobian!(zeros(KD, J), prob, p) ≈ ForwardDiff.jacobian(q -> Lr_ref(prob, q)[2], p) rtol=1e-8

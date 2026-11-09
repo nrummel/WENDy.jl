@@ -76,6 +76,21 @@ Hyper-parameters for the WENDy Algorithm
     approxHessian::Bool                 = false
 end 
 """
+    WENDyDims(; D, J, Mp1, K)
+
+Sizes of a WENDy problem, fixed once its test functions are selected: D state variables, J parameters, Mp1 = M+1
+time points and K test functions, and KD = K*D, the length of the weak residual r(p). Built once by weakForm and
+shared by the weak form, the workspace and the WENDyProblem (prob.dims).
+"""
+struct WENDyDims
+    D::Int
+    J::Int
+    Mp1::Int
+    K::Int
+    KD::Int
+end
+WENDyDims(; D::Int, J::Int, Mp1::Int, K::Int) = WENDyDims(D, J, Mp1, K, K*D)
+"""
     WENDySolution
 
 What every solver returns:

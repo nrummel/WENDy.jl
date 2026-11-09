@@ -1,10 +1,9 @@
 ## helper function to build G matrix
-function _buildGmat(f!::Function, tt::AbstractVector{<:Real}, Y::AbstractMatrix{<:Real}, Φ::AbstractMatrix{<:Real}, J::Int)
-    Mp1, D = size(Y)
-    K, _ = size(Φ)
+function _buildGmat(f!::Function, tt::AbstractVector{<:Real}, Y::AbstractMatrix{<:Real}, Φ::AbstractMatrix{<:Real}, dims::WENDyDims)
+    (; J, Mp1, KD) = dims
     eⱼ = zeros(J)
     F = similar(Y)
-    G = zeros(K*D,J)
+    G = zeros(KD, J)
     for j in 1:J 
         eⱼ .= 0
         eⱼ[j] = 1
@@ -54,10 +53,7 @@ It can also be built from data that was already transformed and its weak form (e
 where wform = weakForm(f!, tt, X, Φ, Φ̇, σ, b, J; linearInParameters, noiseDist).
 
 # Fields
-- D::Int : number of state variables
-- J::Int : number of parameters (to be estimated)
-- Mp1::Int : (Mp1+1) number of data points in time 
-- K::Int : number of test functions 
+- dims::WENDyDims : the sizes D (state variables), J (parameters), Mp1 (time points), K (test functions) and KD = K*D
 - tt, X : times and data (X = log(U) for LogNormal noise, with nonpositive data removed)
 - Φ, Φ̇ : test function matrices Φ and Φ̇
 - σ : estimated noise level in each state variable
@@ -67,10 +63,7 @@ where wform = weakForm(f!, tt, X, Φ, Φ̇, σ, b, J; linearInParameters, noiseD
 - ws::WENDyWorkspace : the weak form and shared state for ℓ(p), ∇ℓ(p) and ∇²ℓ(p)
 """
 struct WENDyProblem
-    D::Int # number of state variables
-    J::Int # number of parameters (to be estimated)
-    Mp1::Int # (Mp1+1) number of data points in time 
-    K::Int # number of test functions 
+    dims::WENDyDims # D, J, Mp1, K and KD, shared with the weak form and the workspace
     tt::Vector{Float64}
     X::Matrix{Float64}
     Φ::Matrix{Float64}
@@ -89,9 +82,7 @@ function WENDyProblem(
 )
     with_logger(ConsoleLogger(stderr, ll)) do
         @info "  Building workspace"
-        Mp1, D = size(X)
-        K, _ = size(Φ)
-        WENDyProblem(D, _J(wform), Mp1, K, tt, X, Φ, Φ̇, σ, b, noiseDist, constraints, WENDyWorkspace(wform, params))
+        WENDyProblem(wform.dims, tt, X, Φ, Φ̇, σ, b, noiseDist, constraints, WENDyWorkspace(wform, params))
     end
 end
 # noise models: LogNormal noise is Normal noise on log(U), so only the data and rhs are transformed

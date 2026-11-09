@@ -13,8 +13,8 @@ struct FactorCovariance <: CovarianceStrategy end
 const MAX_LLᵀ_BLOCK_BYTES = 2^30
 covarianceStrategy(wform::NonlinearWeakForm) = FactorCovariance()
 function covarianceStrategy(wform::LinearWeakForm)
-    KD, _, J = size(wform.L₁)
-    (J+1)^2*KD^2*sizeof(Float64) <= MAX_LLᵀ_BLOCK_BYTES ? BlockCovariance(_LLᵀBlocks(wform.L₀, wform.L₁)) : FactorCovariance()
+    (; J, KD) = wform.dims
+    (J+1)^2*KD^2*sizeof(Float64) <= MAX_LLᵀ_BLOCK_BYTES ? BlockCovariance(_LLᵀBlocks(wform.L₀, wform.L₁, wform.dims)) : FactorCovariance()
 end
 # (L, S) at p with q = [1; p], L = nothing when it is not needed
 function _covariance(::FactorCovariance, wform::WeakForm, q::AbstractVector{<:Real}, p::AbstractVector{<:Real}, diagReg::Real)
@@ -25,7 +25,7 @@ function _covariance(::FactorCovariance, wform::WeakForm, q::AbstractVector{<:Re
     L, S
 end
 _covariance(c::BlockCovariance, wform::WeakForm, q::AbstractVector{<:Real}, p::AbstractVector{<:Real}, diagReg::Real) =
-    nothing, _S(q, c.P, diagReg)
+    nothing, _S(q, c.P, diagReg, wform.dims)
 ## Workspace for the weak form negative log-likelihood ℓ(p), its gradient ∇ℓ(p) and hessian ∇²ℓ(p)
 # The optimizers usually evaluate ℓ, ∇ℓ and ∇²ℓ at the same p, so they share this state. Whenever p changes
 # (compared by value) we recompute S(p), its factorization, r(p) and y = S⁻¹r. The remaining pieces are only
@@ -79,15 +79,15 @@ _∇Lℓ!(ws::WENDyWorkspace) = isnothing(ws.∇Lℓ) ? (ws.∇Lℓ = ws.Sfact \
 ## ℓ(p), ∇ℓ(p), ∇²ℓ(p) on the workspace (see wendyProblems.jl for the versions on a WENDyProblem)
 function ℓ(ws::WENDyWorkspace, p::AbstractVector{<:Real})
     _update!(ws, p)
-    (dot(ws.r, ws.y) + ws.logDet)/2 + length(ws.r)/2*log(2*pi)
+    (dot(ws.r, ws.y) + ws.logDet)/2 + ws.wform.dims.KD/2*log(2*pi)
 end
 ∇ℓ(ws::WENDyWorkspace, p::AbstractVector{<:Real}) = (_update!(ws, p); ∇ℓ(ws.cov, ws))
-∇ℓ(c::BlockCovariance, ws::WENDyWorkspace) = _∇ℓ(ws.q, c.P, ws.wform.G, ws.y, _S⁻¹!(ws), ws.diagReg)
-∇ℓ(::FactorCovariance, ws::WENDyWorkspace) = _∇ℓ(_∇L!(ws), _∇r!(ws), ws.y, _∇Lℓ!(ws), ws.diagReg)
+∇ℓ(c::BlockCovariance, ws::WENDyWorkspace) = _∇ℓ(ws.q, c.P, ws.wform.G, ws.y, _S⁻¹!(ws), ws.diagReg, ws.wform.dims)
+∇ℓ(::FactorCovariance, ws::WENDyWorkspace) = _∇ℓ(_∇L!(ws), _∇r!(ws), ws.y, _∇Lℓ!(ws), ws.diagReg, ws.wform.dims)
 ∇²ℓ(ws::WENDyWorkspace, p::AbstractVector{<:Real}; approx::Bool=false) = (_update!(ws, p); ∇²ℓ(ws.cov, ws; approx=approx))
 ∇²ℓ(c::BlockCovariance, ws::WENDyWorkspace; approx::Bool=false) =
-    _∇²ℓ(ws.q, c.P, ws.wform.G, ws.Sfact, approx ? nothing : _S⁻¹!(ws), ws.y, ws.diagReg)
+    _∇²ℓ(ws.q, c.P, ws.wform.G, ws.Sfact, approx ? nothing : _S⁻¹!(ws), ws.y, ws.diagReg, ws.wform.dims)
 function ∇²ℓ(::FactorCovariance, ws::WENDyWorkspace; approx::Bool=false)
-    H = _∇²ℓ(ws.Sfact, _∇L!(ws), ws.L, _∇r!(ws), ws.y, ws.diagReg; approx=approx) + _Hsecond(ws.wform, ws)
+    H = _∇²ℓ(ws.Sfact, _∇L!(ws), ws.L, _∇r!(ws), ws.y, ws.diagReg, ws.wform.dims; approx=approx) + _Hsecond(ws.wform, ws)
     (H + H') / 2
 end
