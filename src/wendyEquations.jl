@@ -1,6 +1,6 @@
 ## Equations that do not depend on if the problem is linear or not in parameters
 # L(p) = L₀ + Lₚ(p) is the covariance factor of the weak residual, S(p) = (1-δ)LLᵀ + δI. Each state variable d 
-# has its own test functions V_d (K_d × Mp1, all the same unless perStateTestFunctions), so the rows of r, L and S 
+# has its own test functions V_d (K_d × Mp1, see testFunctionMatrices), so the rows of r, L and S 
 # come in blocks of K_d rows, one per state, and the columns of L in blocks of Mp1 columns, one per state.
 _rows(K::AbstractVector{Int}, d::Int) = sum(K[1:d-1])+1:sum(K[1:d])
 """L₀ = blockdiag(σ_d V′_d)"""

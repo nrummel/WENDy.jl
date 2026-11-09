@@ -207,11 +207,14 @@ end
 """
     testFunctionMatrices(tt, X, params::WENDyParameters; kwargs...) -> (V, Vp)
 
-Test function matrices V_d and their derivatives V′_d for each state variable d, as vectors of length D. With 
-params.perStateTestFunctions the minimum radius and the number of test functions are selected from each state's 
+Test function matrices V_d and their derivatives V′_d for each state variable d, as vectors of length D. By default 
+(params.snrThreshold) every state keeps its own number of leading singular directions of V_full, chosen by their 
+estimated signal to noise ratio (see _snrTestFunctionMatrices). With snrThreshold = nothing the earlier rule is used: 
+with params.perStateTestFunctions the minimum radius and the number of test functions are selected from each state's 
 data alone (Kmax applies to each state), otherwise every state uses the same matrices from getTestFunctionMatrices.
 """
 function testFunctionMatrices(tt::AbstractVector{<:Real}, X::AbstractMatrix{<:Real}, params::WENDyParameters; kwargs...)
+    isnothing(params.snrThreshold) || return _snrTestFunctionMatrices(tt, X, params; kwargs...)
     D = size(X, 2)
     if params.perStateTestFunctions
         VVp = [getTestFunctionMatrices(tt, X[:, d:d], params; kwargs...) for d in 1:D]
@@ -219,4 +222,35 @@ function testFunctionMatrices(tt::AbstractVector{<:Real}, X::AbstractMatrix{<:Re
     end
     V, Vp = getTestFunctionMatrices(tt, X, params; kwargs...)
     fill(V, D), fill(Vp, D)
+end
+"""
+    _snrTestFunctionMatrices(tt, X, params::WENDyParameters; analyticVp=true, ll=Info) -> (V, Vp)
+
+The candidate test functions are the right singular vectors φₖ of the pooled V_full (rows of Wᵀ in V_full = UΣWᵀ, 
+derivatives φ′ₖ the rows of Σ⁻¹UᵀV′_full), at most Kmax of them and with condition number σ₁/σₖ ≤ maxTestFunCondNum. 
+Row k of the weak form right hand side of state d is -φ′ₖᵀx_d with noise of standard deviation σ_d‖φ′ₖ‖, so state d 
+keeps the leading K_d directions whose estimated signal to noise ratio stays at least snrThreshold (at least snrKmin).
+"""
+function _snrTestFunctionMatrices(tt::AbstractVector{<:Real}, X::AbstractMatrix{<:Real}, params::WENDyParameters; analyticVp::Bool=true, ll::LogLevel=Info)
+    V_full, Vp_full = getTestFunctionMatrices(tt, X, params; noSVD=true, ll=ll)
+    with_logger(ConsoleLogger(stderr, ll)) do
+        D = size(X, 2)
+        Kmax = min(params.Kmax, size(V_full)...)
+        F = minimum(size(V_full)) <= Kmax ? svd(V_full) : svds(V_full, nsv=Kmax)[1]
+        Kc = count(F.S[1] ./ F.S[1:Kmax] .<= params.maxTestFunCondNum)
+        V = F.Vt[1:Kc,:]
+        Vp = analyticVp ? _computeDerivative_analytic(Vp_full, F, Kc) : _computeDerivative_fft(V, mean(diff(tt)))
+        snr = _estimateSNR(Vp, X, estimate_std(X), params.snrWindow)
+        K = [clamp(something(findfirst(snr[:,d] .< params.snrThreshold), Kc + 1) - 1, min(params.snrKmin, Kc), Kc) for d in 1:D]
+        @info "    K = $K (estimated SNR ≥ $(params.snrThreshold) among $Kc candidates)"
+        [V[1:K[d],:] for d in 1:D], [Vp[1:K[d],:] for d in 1:D]
+    end
+end
+# estimated signal to noise ratio of each row φ′ₖ of Vp and state d, averaged over `window` neighbouring rows: 
+# E|φ′ₖᵀx_d|² = |φ′ₖᵀx*_d|² + σ_d²‖φ′ₖ‖², so SNR² ≈ mean(|φ′ₖᵀx_d|² / (σ̂_d²‖φ′ₖ‖²)) - 1
+function _estimateSNR(Vp::AbstractMatrix, X::AbstractMatrix, sig::AbstractVector, window::Int)
+    K, D = size(Vp, 1), size(X, 2)
+    ratio = (Vp * X).^2 ./ (sum(abs2, Vp, dims=2) .* (sig').^2)
+    h = window ÷ 2
+    [sqrt(max(mean(@view ratio[max(1,k-h):min(K,k+h), d]) - 1, 0)) for k in 1:K, d in 1:D]
 end

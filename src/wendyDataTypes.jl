@@ -13,6 +13,9 @@ Hyper-parameters for the WENDy Algorithm
         minTestFunInfoNum::Real=0.95,
         Kmax::Int=200,
         Kᵣ::Union{Nothing,Int}=100,
+        snrThreshold::Union{Nothing,Real}=1.0,
+        snrWindow::Int=15,
+        snrKmin::Int=10,
         perStateTestFunctions::Bool=false,
         fsAbstol::Real=1e-8,
         fsReltol::Real=1e-8,
@@ -36,10 +39,13 @@ Hyper-parameters for the WENDy Algorithm
 - radiiParams::AbstractVector{<:Real} = 2 .^(0:3) : Multiplied by the minRadius to give a list of radii to use when building the test function  matrix
 - testFunSubRate::Real = 2.0 : Corresponds to how much we should sup-sample in the min radii detection sub-algorithm 
 - maxTestFunCondNum::Real = 1e4 : Maximum Condition number of the test function matrix after svd reduction
-- minTestFunInfoNum::Real = 0.95 : Minimum information (σₖ/σ₁)in the test function matrix after svd reduction
-- Kmax::Int = 200 : Hard maximum size on the test function matrix (of each state variable when perStateTestFunctions)
+- minTestFunInfoNum::Real = 0.95 : Minimum information (σₖ/σ₁)in the test function matrix after svd reduction (only used when snrThreshold = nothing)
+- Kmax::Int = 200 : Hard maximum size on the test function matrix of each state variable
 - Kᵣ::Union{Nothing,Int} = 100 : how many test function to spread through the time domain in the min radii detection sub-algorithm
-- perStateTestFunctions::Bool = false : Select the test functions separately for each state variable (the minimum radius and the number of test functions come from that state's data alone), instead of one set shared by all states. Smooth or slow states can then use fewer, wider test functions
+- snrThreshold::Union{Nothing,Real} = 1.0 : Each state variable d keeps the leading right singular vectors of V_full (among those with condition number ≤ maxTestFunCondNum) until their estimated signal to noise ratio |φ′ₖᵀx_d| / (σ̂_d‖φ′ₖ‖), averaged over snrWindow neighbouring directions, drops below snrThreshold. So the number of test functions K_d differs by state and shrinks as the noise grows. nothing uses the earlier rule instead: one K for all states from the condition number and information criteria (see perStateTestFunctions)
+- snrWindow::Int = 15 : Number of neighbouring singular directions the estimated signal to noise ratio is averaged over (one direction alone is too noisy to compare with snrThreshold)
+- snrKmin::Int = 10 : Fewest test functions a state variable keeps under the signal to noise ratio rule
+- perStateTestFunctions::Bool = false : Only used when snrThreshold = nothing. Select the test functions separately for each state variable (the minimum radius and the number of test functions come from that state's data alone), instead of one set shared by all states. Smooth or slow states can then use fewer, wider test functions
 - fsAbstol::Real = 1e-8 : forward solve absolute tolerance for solving ordinary differential equation
 - fsReltol::Real = 1e-8 : forward solve relative tolerance for solving ordinary differntial equation
 - nlsAbstol::Real = 1e-8 : nonlinear least squares absolute tolerance (only used in the IRLS WENDy algorithm)
@@ -64,6 +70,9 @@ Hyper-parameters for the WENDy Algorithm
     minTestFunInfoNum::Real             = 0.95
     Kmax::Int                           = 200
     Kᵣ::Union{Nothing,Int}              = 100
+    snrThreshold::Union{Nothing,Real}   = 1.0
+    snrWindow::Int                      = 15
+    snrKmin::Int                        = 10
     perStateTestFunctions::Bool         = false
     fsAbstol::Real                      = 1e-8
     fsReltol::Real                      = 1e-8

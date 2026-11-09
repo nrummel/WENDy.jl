@@ -56,7 +56,7 @@ test function matrices of each state (a single matrix is used for every state).
 - D::Int : number of state variables
 - J::Int : number of parameters (to be estimated)
 - Mp1::Int : (Mp1+1) number of data points in time 
-- K::Vector{Int} : number of test functions of each state variable (all equal unless perStateTestFunctions)
+- K::Vector{Int} : number of test functions of each state variable (see snrThreshold in WENDyParameters)
 - tt, X : times and data (X = log(U) for LogNormal noise, with nonpositive data removed)
 - V, Vp : test function matrices V_d and V′_d of each state variable
 - sig : estimated noise level in each state variable

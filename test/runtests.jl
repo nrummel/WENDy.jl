@@ -60,15 +60,18 @@ const CASES = [
         lip=true, dist=Normal, nr=0.1, params=WENDyParameters(Kmax=25)),
     (name="Lotka-Volterra (linear)", f! =lotkaVolterra!, u₀=[1.0,1.0], tRng=(0.0,10.0), dt=0.02, pstar=[1.5,1.0,1.0,3.0],
         lip=true, dist=Normal, nr=0.05, params=WENDyParameters(Kmax=25)),
+    # the earlier selection rule: one set of test functions shared by all states
+    (name="Lotka-Volterra (linear, shared test functions)", f! =lotkaVolterra!, u₀=[1.0,1.0], tRng=(0.0,10.0), dt=0.02, pstar=[1.5,1.0,1.0,3.0],
+        lip=true, dist=Normal, nr=0.05, params=WENDyParameters(Kmax=25, snrThreshold=nothing)),
     (name="Goodwin (nonlinear, LogNormal)", f! =goodwin!, u₀=[0.3617,0.9137,1.3934], tRng=(0.0,80.0), dt=0.5,
         pstar=[3.4884,0.0969,1,10,0.0969,0.0581,0.0969,0.0775], lip=false, dist=LogNormal, nr=0.05,
         params=WENDyParameters(Kmax=25, radiusMinTime=0.5, radiusMaxTime=16.0)),
-    # test functions selected separately for each state variable
+    # the earlier selection rule run separately for each state variable
     (name="Lotka-Volterra (linear, per-state test functions)", f! =lotkaVolterra!, u₀=[1.0,1.0], tRng=(0.0,10.0), dt=0.02, pstar=[1.5,1.0,1.0,3.0],
-        lip=true, dist=Normal, nr=0.05, params=WENDyParameters(Kmax=25, perStateTestFunctions=true)),
+        lip=true, dist=Normal, nr=0.05, params=WENDyParameters(Kmax=25, snrThreshold=nothing, perStateTestFunctions=true)),
     (name="Goodwin (nonlinear, LogNormal, per-state test functions)", f! =goodwin!, u₀=[0.3617,0.9137,1.3934], tRng=(0.0,80.0), dt=0.5,
         pstar=[3.4884,0.0969,1,10,0.0969,0.0581,0.0969,0.0775], lip=false, dist=LogNormal, nr=0.05,
-        params=WENDyParameters(Kmax=25, radiusMinTime=0.5, radiusMaxTime=16.0, perStateTestFunctions=true)),
+        params=WENDyParameters(Kmax=25, radiusMinTime=0.5, radiusMaxTime=16.0, snrThreshold=nothing, perStateTestFunctions=true)),
 ]
 
 @testset "WENDy.jl" begin
@@ -89,7 +92,16 @@ const CASES = [
             # one block of test functions per state variable
             @test length(prob.K) == length(prob.V) == prob.D && sum(prob.K) == length(prob.b₀)
             @test size.(prob.V, 1) == prob.K && all(size.(prob.V, 2) .== prob.Mp1)
-            c.params.perStateTestFunctions || @test all(==(prob.V[1]), prob.V)
+            if !isnothing(c.params.snrThreshold)
+                # signal to noise ratio rule: each state keeps a leading block of the same singular directions
+                Kc = maximum(prob.K)
+                Vc = prob.V[argmax(prob.K)]
+                @test all(min(c.params.snrKmin, Kc) <= K <= c.params.Kmax for K in prob.K)
+                @test all(prob.V[d] == Vc[1:prob.K[d],:] for d in 1:prob.D)
+                @test Vc * Vc' ≈ I atol=1e-10
+            elseif !c.params.perStateTestFunctions
+                @test all(==(prob.V[1]), prob.V)
+            end
             @test prob.noiseDist == c.dist
             # a workspace that builds S from L(p) is always valid, so compare both
             wsL = WENDy.WENDyWorkspace(prob.ws.form, c.params; cov=WENDy.FactorCovariance())
