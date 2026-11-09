@@ -24,15 +24,11 @@ module WENDy
     include("wendyTestFunctions.jl")
     include("wendyNoise.jl")
     include("wendySymbolics.jl")
-    include("wendyEquations.jl")
-    include("wendyLinearEquations.jl")
-    include("wendyNonlinearEquations.jl")
-    include("wendyWeakForms.jl")
-    include("wendyWorkspace.jl")
+    include("wendyWeakLikelihood.jl")
     include("wendyProblems.jl")
     include("wendyOutputError.jl")
     include("wendyOptim.jl")
 
     export WENDyProblem, OutputErrorProblem, WENDyParameters, WENDySolution, solve, Normal, LogNormal
-    export ℓ, ∇ℓ, ∇ℓ!, ∇²ℓ, ∇²ℓ!, weakResidual, weakResidual!, weakJacobian, weakJacobian!, weakCovariance, Ĉ, C_cons, C_∇²ℓ, oeResidual!, oeJacobian!
+    export ℓ, ∇ℓ, ∇ℓ!, ∇²ℓ, ∇²ℓ!, ∇²m, ∇²m!, weakResidual, weakResidual!, weakJacobian, weakJacobian!, weakCovariance, Ĉ, C_cons, C_∇²ℓ, oeResidual!, oeJacobian!
 end # module WENDy

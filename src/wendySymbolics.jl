@@ -51,21 +51,21 @@ function _get∇ₚ∇ₓf(f!::Function, D::Int, J::Int)
     build_function(∇ₚ∇ₓf, x,p,t; expression=false)[end]
 end
 """ Build a function for the hessian wrt the parameters of the rhs """
-function _getHₚf(f!::Function, D::Int, J::Int)
+function _get∇²ₚf(f!::Function, D::Int, J::Int)
     @variables p[1:J] x[1:D] t
     dx = Vector(undef, D)
     f!(dx, x, p, t)
     ∇ₚf = jacobian(dx, p)
-    Hₚf = jacobian(∇ₚf, p)
-    return build_function(Hₚf, x,p,t; expression=false)[end]
+    ∇²ₚf = jacobian(∇ₚf, p)
+    return build_function(∇²ₚf, x,p,t; expression=false)[end]
 end
 """ Build a function for the hessian wrt the parameters of the jacobian wrt to the state of the rhs """
-function _getHₚ∇ₓf(f!::Function, D::Int, J::Int)
+function _get∇²ₚ∇ₓf(f!::Function, D::Int, J::Int)
     @variables p[1:J] x[1:D] t
     dx = Vector(undef, D)
     f!(dx, x, p, t)
     ∇ₓf = jacobian(dx, x)
     ∇ₚ∇ₓf = jacobian(∇ₓf, p)
-    Hₚ∇ₓf = jacobian(∇ₚ∇ₓf, p)
-    return build_function(Hₚ∇ₓf, x,p,t; expression=false)[end]
+    ∇²ₚ∇ₓf = jacobian(∇ₚ∇ₓf, p)
+    return build_function(∇²ₚ∇ₓf, x,p,t; expression=false)[end]
 end

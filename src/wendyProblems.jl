@@ -1,20 +1,3 @@
-## helper function to build G matrix
-function _buildGmat(f!::Function, tt::AbstractVector{<:Real}, Y::AbstractMatrix{<:Real}, Φ::AbstractMatrix{<:Real}, dims::WENDyDims)
-    (; J, Mp1, KD) = dims
-    eⱼ = zeros(J)
-    F = similar(Y)
-    G = zeros(KD, J)
-    for j in 1:J 
-        eⱼ .= 0
-        eⱼ[j] = 1
-        for m in 1:Mp1 
-            @views f!(F[m,:], Y[m,:], eⱼ, tt[m])
-        end 
-        gⱼ = Φ * F
-        G[:,j] = vec(gⱼ)
-    end
-    G
-end
 """
     WENDyProblem
 
@@ -142,14 +125,22 @@ Gradient of the weak form negative log-likelihood (∇ℓ! writes it into grad�
 ∇ℓ(prob::WENDyProblem, p::AbstractVector{<:Real}) = ∇ℓ(prob.ws, p)
 ∇ℓ!(gradℓ::AbstractVector{<:Real}, prob::WENDyProblem, p::AbstractVector{<:Real}) = gradℓ .= ∇ℓ(prob, p)
 """
-    ∇²ℓ(prob::WENDyProblem, p; approx=false)
-    ∇²ℓ!(hessℓ, prob::WENDyProblem, p; approx=false)
+    ∇²ℓ(prob::WENDyProblem, p)
+    ∇²ℓ!(hessℓ, prob::WENDyProblem, p)
 
-Hessian of the weak form negative log-likelihood (∇²ℓ! writes it into hessℓ). With approx = true the curvature 
-of the log-determinant term is left out (see approxHessian in WENDyParameters)
+Hessian of the weak form negative log-likelihood (∇²ℓ! writes it into hessℓ)
 """
-∇²ℓ(prob::WENDyProblem, p::AbstractVector{<:Real}; approx::Bool=false) = ∇²ℓ(prob.ws, p; approx=approx)
-∇²ℓ!(hessℓ::AbstractMatrix{<:Real}, prob::WENDyProblem, p::AbstractVector{<:Real}; approx::Bool=false) = hessℓ .= ∇²ℓ(prob, p; approx=approx)
+∇²ℓ(prob::WENDyProblem, p::AbstractVector{<:Real}) = ∇²ℓ(prob.ws, p)
+∇²ℓ!(hessℓ::AbstractMatrix{<:Real}, prob::WENDyProblem, p::AbstractVector{<:Real}) = hessℓ .= ∇²ℓ(prob, p)
+"""
+    ∇²m(prob::WENDyProblem, p)
+    ∇²m!(hessm, prob::WENDyProblem, p)
+
+Hessian of the Mahalanobis part m(p) = ½rᵀS(p)⁻¹r of the weak form negative log-likelihood, so
+∇²ℓ = ∇²m + ∇²(½log|S|). This is the approximate hessian used with approxHessian = true (see WENDyParameters).
+"""
+∇²m(prob::WENDyProblem, p::AbstractVector{<:Real}) = ∇²m(prob.ws, p)
+∇²m!(hessm::AbstractMatrix{<:Real}, prob::WENDyProblem, p::AbstractVector{<:Real}) = hessm .= ∇²m(prob, p)
 ## weak residual, its jacobian and covariance
 """
     weakResidual(prob::WENDyProblem, p)

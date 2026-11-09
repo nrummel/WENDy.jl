@@ -49,7 +49,7 @@ Hyper-parameters for the WENDy Algorithm
 - optimTimelimit::Real = 500.0 : maximum time in seconds (used by all other optimization algorithms)
 - fsAlg = nothing : forward solve algorithm (any OrdinaryDiffEq ODE solver) used by the output error least squares problem; nothing uses Rodas5P() (see OutputErrorProblem)
 - fsU0Free::Bool = true : Specifies if the forward solve algorithm should also optimize over the initial condition
-- approxHessian::Bool = false : Second order solvers (TrustRegion, ARCqK and the hybrid methods) use an approximate hessian of the weak negative log-likelihood that leaves out the curvature of its log-determinant term. This skips the most expensive part of the hessian (it is the exact hessian of the Maholinobis distance when the problem is linear in parameters), turning these into quasi-Newton methods. Often several times faster when that term is small relative to the rest of the hessian, but it can converge to a worse point when it is not, so check the result against the exact hessian on a new problem
+- approxHessian::Bool = false : Second order solvers (TrustRegion, ARCqK and the hybrid methods) use the hessian ∇²m of the Mahalanobis distance m(p) = ½rᵀS⁻¹r instead of ∇²ℓ, leaving out the curvature of the log-determinant term (see ∇²m). This skips the most expensive part of the hessian, turning these into quasi-Newton methods. Often several times faster when that term is small relative to the rest of the hessian, but it can converge to a worse point when it is not, so check the result against the exact hessian on a new problem
 """
 @kwdef struct WENDyParameters   
     diagReg::Real                       = 1.0e-10

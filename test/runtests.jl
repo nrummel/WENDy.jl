@@ -6,7 +6,7 @@ using OrdinaryDiffEq: ODEProblem, Rodas5P, solve as solve_ode
 ## Reference weak negative log-likelihood written directly from its definition, generic in the element type so
 ## ForwardDiff can differentiate it. It shares only the L(p) and r(p) kernels with the package.
 Lₚ_ref(wform::WENDy.LinearWeakForm, p) = reshape(reshape(wform.L₁, :, length(p)) * p, size(wform.L₀))
-Lₚ_ref(wform::WENDy.NonlinearWeakForm, p) = WENDy._Lₚ(p, wform.tt, wform.X, wform.Φ, wform.σ, wform.∇ₓf!, wform.dims)
+Lₚ_ref(wform::WENDy.NonlinearWeakForm, p) = WENDy._Lₚ(wform, p)
 function Lr_ref(prob::WENDyProblem, p::AbstractVector)
     L₀ = kron(Diagonal(prob.σ), prob.Φ̇) # L₀ = Φ̇ ∘ diag(σ)
     L₀ + Lₚ_ref(prob.ws.wform, p), WENDy._r(prob.ws.wform, p)
@@ -18,17 +18,12 @@ function ℓ_ref(prob::WENDyProblem, params::WENDyParameters, p::AbstractVector)
     z = C.L \ r
     (dot(z,z) + 2sum(log, diag(C.U)))/2 + length(r)/2*log(2pi)
 end
-## The approximate hessian is the hessian of the Maholinobis distance ½rᵀS⁻¹r plus (1-δ)⟨S⁻¹L, ∂ᵢⱼL⟩ (zero when linear)
+## The approximate hessian is the hessian of the Mahalanobis distance m(p) = ½rᵀS⁻¹r
 function mahal_ref(prob::WENDyProblem, params::WENDyParameters, p::AbstractVector)
     L, r = Lr_ref(prob, p)
     dot(r, S_ref(params, L) \ r)/2
 end
-function approxH_ref(prob::WENDyProblem, params::WENDyParameters, p::AbstractVector)
-    L, _ = Lr_ref(prob, p)
-    Z = S_ref(params, L) \ L
-    ForwardDiff.hessian(q -> mahal_ref(prob, params, q), p) +
-        (1-params.diagReg)*ForwardDiff.hessian(q -> dot(Z, Lr_ref(prob, q)[1]), p)
-end
+approxH_ref(prob::WENDyProblem, params::WENDyParameters, p::AbstractVector) = ForwardDiff.hessian(q -> mahal_ref(prob, params, q), p)
 
 function simulate(f!, u₀, tRng, dt, pstar, dist, nr; seed=1)
     Random.seed!(seed)
@@ -100,9 +95,9 @@ const CASES = [
             @test ∇²ℓ(prob, p) ≈ hessℓ
             # approximate hessian (no log-det curvature)
             hessℓapproxref = approxH_ref(prob, c.params, p)
-            @test ∇²ℓ!(hessℓ, prob, p; approx=true) ≈ hessℓapproxref rtol=1e-8
+            @test ∇²m!(hessℓ, prob, p) ≈ hessℓapproxref rtol=1e-8
             @test issymmetric(hessℓ)
-            @test WENDy.∇²ℓ(wsL, p; approx=true) ≈ hessℓapproxref rtol=1e-8
+            @test WENDy.∇²m(wsL, p) ≈ hessℓapproxref rtol=1e-8
             # weak residual, its jacobian and covariance
             L, r = Lr_ref(prob, p)
             @test weakResidual!(zeros(KD), prob, p) ≈ r rtol=1e-12

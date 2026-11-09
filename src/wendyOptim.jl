@@ -77,7 +77,8 @@ end
 _secondOrder(prob::WENDyProblem, params::WENDyParameters) = (
     p -> ℓ(prob, p),
     (gradℓ, p) -> ∇ℓ!(gradℓ, prob, p),
-    (hessℓ, p) -> ∇²ℓ!(hessℓ, prob, p; approx=params.approxHessian)
+    # the approximate hessian drops the log-det curvature: ∇²ℓ = ∇²m + ∇²logdet, see ∇²ℓ in wendyWeakLikelihood.jl
+    params.approxHessian ? (hessℓ, p) -> ∇²m!(hessℓ, prob, p) : (hessℓ, p) -> ∇²ℓ!(hessℓ, prob, p)
 )
 # These solvers accept a hessian vector product, so we build one that only recomputes H when p changes
 function _hessianVectorProduct(hessian!::Function, J::Int)
