@@ -156,8 +156,8 @@ const CASES = [
         # other weak form solvers
         for alg in (WENDy.ARCqK(), WENDy.IRLS(), WENDy.WLS())
             @test relErr(quiet(() -> solve(prob, p₀, c.params; alg=alg))) < 0.1
-            what, iters, wits = quiet(() -> solve(prob, p₀, c.params; alg=alg, return_wits=true))
-            @test relErr(what) < 0.1 && iters > 0 && size(wits, 1) == 2
+            p̂, iters, iterates = quiet(() -> solve(prob, p₀, c.params; alg=alg, return_iterates=true))
+            @test relErr(p̂) < 0.1 && iters > 0 && size(iterates, 1) == 2
         end
         # output error least squares estimates [p; u₀] by default
         ŵ = quiet(() -> solve(oe, p₀))
@@ -167,8 +167,8 @@ const CASES = [
         # hybrid: weak form MLE then output error
         ŵₕ = quiet(() -> solve(prob, p₀, c.params; alg=WENDy.HybridTrustRegionOELS(oe)))
         @test ŵₕ ≈ quiet(() -> solve(oe, p̂)) rtol=1e-8
-        what, iters, wits = quiet(() -> solve(prob, p₀, c.params; alg=WENDy.HybridTrustRegionOELS(oe), return_wits=true))
-        @test what ≈ ŵₕ rtol=1e-8
-        @test size(wits, 1) == 3
+        p̂, iters, iterates = quiet(() -> solve(prob, p₀, c.params; alg=WENDy.HybridTrustRegionOELS(oe), return_iterates=true))
+        @test p̂ ≈ ŵₕ rtol=1e-8
+        @test size(iterates, 1) == 3
     end
 end
