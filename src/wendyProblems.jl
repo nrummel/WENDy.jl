@@ -29,7 +29,6 @@ For the output error (forward solve) least squares problem see OutputErrorProble
 - params::WENDyParameters : (optional) struct of hyper-parameters for the WENDy Algorithm (see the doc for WENDyParameters)
 - constraints=nothing : (optional) Linear box constraints for each parameter, ∀j ∈ [1, ⋯,J], ℓⱼ ≤ pⱼ ≤ uⱼ. Accepts constraints as a list of tuples, [(ℓ₁,u₁), ⋯]. Note: this only is compatible with the TrustRegion solver.
 - ll::LogLevel=Warn : (optional) see additional algorithm information by setting ll=Info
-(linearInParameters=Val(true) and noiseDist=Val(LogNormal), as in earlier versions, are also accepted.)
 
 It can also be built from data that was already transformed and its weak form (e.g. to rebuild a saved problem) with 
     WENDyProblem(tt, X, Φ, Φ̇, σ, b, wform::WeakForm, params::WENDyParameters; noiseDist=Normal, constraints=nothing, ll=Warn)
@@ -77,22 +76,18 @@ function _transformData(::Type{LogNormal}, tt::AbstractVector{<:Real}, U::Abstra
     end
     tt[ix], log.(U[ix,:])
 end
-# earlier versions took Val(true) / Val(LogNormal)
-_unwrap(::Val{x}) where x = x
-_unwrap(x) = x
 ## constructor
 function WENDyProblem(
     _tt::AbstractVector{<:Real}, 
     U::AbstractVecOrMat{<:Real}, 
     _f!::Function, 
     J::Int;
-    linearInParameters::Union{Bool,Val}=false, 
-    noiseDist::Union{Type{<:Distribution},Val}=Normal, 
+    linearInParameters::Bool=false, 
+    noiseDist::Type{<:Distribution}=Normal, 
     params::WENDyParameters=WENDyParameters(),
     constraints::Union{Nothing,AbstractVector{<:Tuple{<:Real,<:Real}}}=nothing,
     ll::LogLevel=Warn
 )
-    linearInParameters, noiseDist = _unwrap(linearInParameters), _unwrap(noiseDist)
     with_logger(ConsoleLogger(stderr, ll)) do
         @info "Building WENDyProblem"
         U = U isa AbstractVector ? reshape(U, length(U), 1) : U

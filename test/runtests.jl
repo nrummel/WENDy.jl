@@ -145,10 +145,6 @@ const CASES = [
         p̂ = sol.p̂
         @test sol isa WENDySolution && sol.retcode == :success && sol.alg == "TrustRegion" && isnothing(sol.û₀)
         @test sol.iterations > 0 && size(sol.iterates) == (2, sol.iterations + 1) && sol.iterates[:,1] == p₀ && sol.time > 0
-        # earlier versions took Val(...) keywords
-        probVal = quiet(() -> WENDyProblem(tt, U, c.f!, 2; linearInParameters=Val(true), noiseDist=Val(Normal), params=c.params))
-        @test probVal.ws.wform isa WENDy.LinearWeakForm
-        @test ℓ(probVal, p₀) ≈ ℓ(prob, p₀) rtol=1e-10 # test function selection is not bitwise reproducible
         @test relErr(p̂) < 0.05
         @test norm(∇ℓ!(zeros(2), prob, p̂)) < 1e-3*norm(∇ℓ!(zeros(2), prob, p₀))
         # approximate hessian
