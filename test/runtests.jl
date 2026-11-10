@@ -156,6 +156,9 @@ const CASES = [
             @test relErr(s.p̂) < 0.1 && s.iterations > 0 && size(s.iterates, 1) == 2 && s.iterates[:,1] == p₀
             @test s.retcode == :success && s.alg == string(nameof(typeof(alg)))
         end
+        # IRLS stops at optimTimelimit with the last iterate
+        s = quiet(() -> solve(prob, p₀, WENDyParameters(optimTimelimit=1e-9); alg=WENDy.IRLS()))
+        @test s.retcode == :timelimit && s.iterations == 1 && size(s.iterates, 2) == 2 && s.p̂ == s.iterates[:,end]
         # output error least squares estimates p and u₀ by default
         oes = quiet(() -> solve(oe, p₀))
         @test length(oes.p̂) == 2 && length(oes.û₀) == 1 && relErr(oes.p̂) < 0.05 && size(oes.iterates, 1) == 2

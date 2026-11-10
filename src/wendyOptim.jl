@@ -13,7 +13,8 @@ _retcode(rc::NonlinearSolve.ReturnCode.T) = NonlinearSolve.SciMLBase.successful_
     rc == NonlinearSolve.ReturnCode.MaxIters ? :maxiters : rc == NonlinearSolve.ReturnCode.MaxTime ? :timelimit : :failed
 ## IRLS: iteratively reweighted least squares
 # With Cholesky S(pⁿ⁻¹) = CCᵀ held fixed, pⁿ minimizes ½‖C⁻¹r(p)‖²
-function _irlsStep(prob::WENDyProblem, pnm1::AbstractVector{<:Real}, params::WENDyParameters; ll::LogLevel=Warn)
+# timeLeft bounds the inner nonlinear least squares solve, so IRLS as a whole stays within params.optimTimelimit
+function _irlsStep(prob::WENDyProblem, pnm1::AbstractVector{<:Real}, params::WENDyParameters; ll::LogLevel=Warn, timeLeft::Real=params.optimTimelimit)
     with_logger(ConsoleLogger(stderr,ll)) do
         ws = try
             _update!(prob.ws, pnm1)
@@ -24,22 +25,22 @@ function _irlsStep(prob::WENDyProblem, pnm1::AbstractVector{<:Real}, params::WEN
             @warn "The covariance calculation failed most likely because S ⊁ 0 "
             return fill(NaN, prob.dims.J)
         end
-        _irlsStep(ws.wform, prob, ws.Sfact.L, pnm1, params)
+        _irlsStep(ws.wform, prob, ws.Sfact.L, pnm1, params, timeLeft)
     end
 end
 # r(p) = Gp - b, so this is a linear least squares problem
-function _irlsStep(wform::LinearWeakForm, prob::WENDyProblem, C::AbstractMatrix{<:Real}, pnm1::AbstractVector{<:Real}, params::WENDyParameters)
+function _irlsStep(wform::LinearWeakForm, prob::WENDyProblem, C::AbstractMatrix{<:Real}, pnm1::AbstractVector{<:Real}, params::WENDyParameters, timeLeft::Real)
     pn = (C \ wform.G) \ (C \ wform.b)
     @info "  objective_value = $(norm(C \ (wform.G*pn - wform.b))^2/2)"
     pn
 end
-function _irlsStep(wform::NonlinearWeakForm, prob::WENDyProblem, C::AbstractMatrix{<:Real}, pnm1::AbstractVector{<:Real}, params::WENDyParameters)
+function _irlsStep(wform::NonlinearWeakForm, prob::WENDyProblem, C::AbstractMatrix{<:Real}, pnm1::AbstractVector{<:Real}, params::WENDyParameters, timeLeft::Real)
     @info "  Running local optimization method"
     out = nonlinearLeastSquares(
         (r, p) -> r .= C \ weakResidual(prob, p),
         (∇r, p) -> ∇r .= C \ weakJacobian(prob, p),
         prob.dims.KD, pnm1, params;
-        reltol=params.nlsReltol, abstol=params.nlsAbstol, maxiters=params.nlsMaxiters
+        reltol=params.nlsReltol, abstol=params.nlsAbstol, maxiters=params.nlsMaxiters, maxtime=max(timeLeft, 0.0)
     )
     @info "  iterations = $(out.iterations)"
     out.p̂
@@ -56,7 +57,7 @@ function (alg::IRLS)(prob::WENDyProblem, p₀::AbstractVector{<:AbstractFloat}, 
         pnm1 = p₀
         for n = 1:maxIt
             @info "Iteration $n"
-            pn = _irlsStep(prob, pnm1, params; ll=iterll)
+            pn = _irlsStep(prob, pnm1, params; ll=iterll, timeLeft=params.optimTimelimit - (time() - start))
             if any(isnan.(pn))
                 @warn "Optimization method failed"
                 return _solution(alg, p₀, pn, n, iterates, :failed, start)
@@ -66,6 +67,10 @@ function (alg::IRLS)(prob::WENDyProblem, p₀::AbstractVector{<:AbstractFloat}, 
             if resNorm / norm(pnm1) < reltol || resNorm < abstol
                 @info "  Convergence Criterion met: ‖pⁿ - pⁿ⁻¹‖ = $resNorm"
                 return _solution(alg, p₀, pn, n, iterates, :success, start)
+            end
+            if time() - start >= params.optimTimelimit
+                @warn "Time limit met for IRLS"
+                return _solution(alg, p₀, pn, n, iterates, :timelimit, start)
             end
             pnm1 = pn
         end
@@ -166,7 +171,8 @@ end
 ## Levenberg-Marquardt for min ½‖r(p)‖² given r!(r, p), ∇r!(∇r, p) and the length of r.
 ## Gives (; p̂, iterations, iterates, retcode), the iterates being every point the residual was evaluated at.
 function nonlinearLeastSquares(r!::Function, ∇r!::Function, n::Int, p₀::AbstractVector{<:Real}, params::WENDyParameters;
-    reltol::Real=params.optimReltol, abstol::Real=params.optimAbstol, maxiters::Int=params.optimMaxiters, kwargs...
+    reltol::Real=params.optimReltol, abstol::Real=params.optimAbstol, maxiters::Int=params.optimMaxiters,
+    maxtime::Real=params.optimTimelimit, kwargs...
 )
     iterates = zeros(length(p₀), 0) # p₀ is p or [p; u₀]: this solver is not tied to one problem
     function _r!(r, p, ::Any)
@@ -181,7 +187,7 @@ function nonlinearLeastSquares(r!::Function, ∇r!::Function, n::Int, p₀::Abst
         abstol=abstol,
         reltol=reltol,
         maxiters=maxiters,
-        maxtime=params.optimTimelimit,
+        maxtime=maxtime,
         verbose=false
     )
     (; p̂=sol.u, iterations=sol.stats.nsteps, iterates, retcode=_retcode(sol.retcode))
