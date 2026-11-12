@@ -5,11 +5,12 @@ using OrdinaryDiffEq: ODEProblem, Rodas5P, solve as solve_ode
 
 ## Reference weak negative log-likelihood written directly from its definition, generic in the element type so
 ## ForwardDiff can differentiate it. It shares only the L(p) and r(p) kernels with the package.
-Lₚ_ref(wform::WENDy.LinearWeakForm, p) = reshape(reshape(wform.L₁, :, length(p)) * p, size(wform.L₀))
-Lₚ_ref(wform::WENDy.NonlinearWeakForm, p) = WENDy._Lₚ(wform, p)
+# a linear weak form evaluates ∇ₓf at p directly, rather than through its stored B
+Lₚ_ref(wform::WENDy.LinearWeakForm, prob, p) = WENDy._Lₚ((; wform.dims, prob.tt, prob.X, prob.Φ, prob.σ, wform.∇ₓf!), p)
+Lₚ_ref(wform::WENDy.NonlinearWeakForm, prob, p) = WENDy._Lₚ(wform, p)
 function Lr_ref(prob::WENDyProblem, p::AbstractVector)
     L₀ = kron(Diagonal(prob.σ), prob.Φ̇) # L₀ = Φ̇ ∘ diag(σ)
-    L₀ + Lₚ_ref(prob.ws.wform, p), WENDy._r(prob.ws.wform, p)
+    L₀ + Lₚ_ref(prob.ws.wform, prob, p), WENDy._r(prob.ws.wform, p)
 end
 S_ref(params, L) = (1-params.diagReg)*(L*L') + params.diagReg*I
 function ℓ_ref(prob::WENDyProblem, params::WENDyParameters, p::AbstractVector)
@@ -129,6 +130,15 @@ const CASES = [
             ∇²ℓ!(hessℓ, prob, p)
             @test prob.ws.Sfact === Sfact
             @test hessℓ ≈ hessℓref rtol=1e-8
+            # the pieces cached at p (Lᵀy, vⱼ, the block contractions) give the same results whichever call comes first
+            for w in (prob.ws, wsL), order in ((:g, :m, :h), (:h, :m, :g), (:m, :h, :g), (:m, :g, :h))
+                WENDy.ℓ(w, p₂) # move away from p, dropping the caches
+                for k in order
+                    k == :g && @test WENDy.∇ℓ(w, p) ≈ gradℓref rtol=1e-8
+                    k == :m && @test WENDy.∇²m(w, p) ≈ hessℓapproxref rtol=1e-8
+                    k == :h && @test WENDy.∇²ℓ(w, p) ≈ hessℓref rtol=1e-8
+                end
+            end
         end
     end
     @testset "Logistic solvers" begin
