@@ -56,40 +56,53 @@ plts = map(targets) do target
 end
 savefig(plot(plts...; layout=(1, length(targets)), size=(450length(targets), 400)), joinpath(DIR, "figs", "steady.png"))
 
-## 4. methods compiled for the target (after the warm-up), by package, from the trace runs
-pkgof(line) = (m = match(r"precompile\(Tuple\{(?:typeof\()?(?:Core\.)?(?:var\"#[^\"]*\"\{)?([A-Za-z][A-Za-z0-9_]*)\.", line);
-    isnothing(m) ? "other" : m.captures[1])
-counts = Dict{Tuple{String,String},Dict{String,Int}}()
+## 4. compile time for the target (after the warm-up), by the package that owns the compiled method, from the trace
+## runs (Base.@trace_compile prints each compiled method with its time). Core.kwcall and Type{...} wrappers are skipped.
+function pkgof(line)
+    i = findfirst("Tuple{", line)
+    isnothing(i) && return "other"
+    for m in eachmatch(r"([A-Z][A-Za-z0-9_]*)\.", line[last(i):end])
+        m.captures[1] in ("Core", "Type") || return m.captures[1]
+    end
+    "other"
+end
+msof(line) = (m = match(r"#=\s*([0-9.]+) ms =#", line); isnothing(m) ? 0.0 : parse(Float64, m.captures[1]))
+counts = Dict{Tuple{String,String},Dict{String,Float64}}()
 for target in targets, c in configs
     f = joinpath(DIR, "results", "trace_$(target)_$(c).txt")
     isfile(f) || continue
-    d = Dict{String,Int}()
+    d = Dict{String,Float64}()
     for l in eachline(f)
-        startswith(l, "precompile(") || startswith(l, "#=") || continue
+        occursin("precompile(", l) || continue
         k = pkgof(l)
-        d[k] = get(d, k, 0) + 1
+        d[k] = get(d, k, 0.0) + msof(l) / 1000
     end
     counts[(target, c)] = d
 end
 if !isempty(counts)
-    allpk = Dict{String,Int}()
+    allpk = Dict{String,Float64}()
     for d in values(counts), (k, v) in d
-        allpk[k] = get(allpk, k, 0) + v
+        allpk[k] = get(allpk, k, 0.0) + v
     end
-    top = first.(sort(collect(allpk), by=last, rev=true))[1:min(8, end)]
+    top = first.(sort(collect(allpk), by=last, rev=true))[1:min(7, end)]
     grp(k) = k in top ? k : "other"
-    pkgs = unique(grp.(top)) ∪ ["other"]
+    pkgs = [filter(!=("other"), top); "other"]
     plts = map(targets) do target
-        M = [sum((v for (k, v) in get(counts, (target, c), Dict{String,Int}()) if grp(k) == pk); init=0) for c in configs, pk in pkgs]
-        groupedbar_like = bar(; title=target, ylabel="methods compiled for the target", xrotation=20, legend=:outerright)
+        M = [sum((v for (k, v) in get(counts, (target, c), Dict{String,Float64}()) if grp(k) == pk); init=0.0) for c in configs, pk in pkgs]
+        p = bar(; title=target, ylabel="compile seconds (traced run)", xrotation=20, legend=:outerright)
         bottom = zeros(length(configs))
         for (j, pk) in enumerate(pkgs)
-            bar!(groupedbar_like, configs, bottom .+ M[:, j]; fillrange=bottom, label=pk, color=j)
+            bar!(p, configs, bottom .+ M[:, j]; fillrange=bottom, label=pk, color=j)
             bottom .+= M[:, j]
         end
-        groupedbar_like
+        p
     end
-    savefig(plot(plts...; layout=(1, length(targets)), size=(600length(targets), 450)), joinpath(DIR, "figs", "packages.png"))
+    savefig(plot(plts...; layout=(1, length(targets)), size=(650length(targets), 450)), joinpath(DIR, "figs", "packages.png"))
+    for target in targets, c in configs
+        d = get(counts, (target, c), nothing)
+        isnothing(d) && continue
+        println(rpad("$target $c", 32), join(("$k $(round(v, digits=2))" for (k, v) in sort(collect(d), by=last, rev=true)[1:min(5, end)]), ", "))
+    end
 end
 
 ## 5. accuracy: relative difference of p̂ from base (first call), per method
