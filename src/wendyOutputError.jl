@@ -23,6 +23,7 @@ The forward solves need OrdinaryDiffEq.jl, which WENDy only loads on request: ru
 - params::WENDyParameters : default parameters for solve
 - ∇ₓf!, ∂ₜf! : symbolic state jacobian ∇ₓf!(out, u, p, t) (D x D) and time gradient ∂ₜf!(out, u, p, t) (length D) of f!,
   handed to the forward solver instead of its internal autodiff; built only when WENDy._OE_SYMBOLIC[] (else nothing)
+- sens : the forward sensitivity system (see OESensitivity) when WENDy._OE_SENS[], else nothing
 """
 struct OutputErrorProblem
     tt::AbstractVector{<:Real}
@@ -35,6 +36,7 @@ struct OutputErrorProblem
     params::WENDyParameters
     ∇ₓf!::Union{Nothing,Function}
     ∂ₜf!::Union{Nothing,Function}
+    sens::Any # Union{Nothing,OESensitivity}
 end
 """ (private) Build the time gradient ∂f/∂t of the rhs f!(du, u, p, t), in place ∂ₜf!(out, u, p, t) """
 function _get∂ₜf(f!::Function, D::Int, J::Int)
@@ -50,7 +52,72 @@ function OutputErrorProblem(tt::AbstractVector{<:Real}, U::AbstractVecOrMat{<:Re
     U = U isa AbstractVector ? reshape(U, length(U), 1) : U
     Mp1, D = size(U)
     ∇ₓf!, ∂ₜf! = _OE_SYMBOLIC[] ? (_get∇ₓf(f!, D, J), _get∂ₜf(f!, D, J)) : (nothing, nothing)
-    OutputErrorProblem(tt, U, f!, J, D, Mp1, U[1,:], params, ∇ₓf!, ∂ₜf!)
+    sens = _OE_SENS[] ? OESensitivity(f!, D, J) : nothing
+    OutputErrorProblem(tt, U, f!, J, D, Mp1, U[1,:], params, ∇ₓf!, ∂ₜf!, sens)
+end
+## Forward sensitivities. With S = ∂u/∂[p; u₀] (D × (J+D)), the augmented state z = [u; vec(S)] solves
+##     du/dt = f(u, p, t),    dS/dt = ∇ₓf(u, p, t) S + [∇ₚf(u, p, t)  0],    u(0) = u₀, S(0) = [0  I],
+## so one Float64 solve gives û(tt) and its jacobian wrt p and u₀ (the u₀ columns are dropped unless fsU0Free).
+## The rhs of this system, its jacobian wrt z and its time gradient are generated symbolically from f! and kept behind
+## FunctionWrappers with fixed Float64 signatures, so the forward solver sees the same function types for every f! and
+## is compiled once (rather than once per f! with ForwardDiff Duals, as differentiating through the solver does).
+const _ZVec = FunctionWrapper{Nothing, Tuple{Vector{Float64}, Vector{Float64}, Vector{Float64}, Float64}}
+const _ZMat = FunctionWrapper{Nothing, Tuple{Matrix{Float64}, Vector{Float64}, Vector{Float64}, Float64}}
+"""
+The forward sensitivity system of an OutputErrorProblem (see above): rhs!(dz, z, p, t), jac!(Jz, z, p, t) and
+tgrad!(dzdt, z, p, t) for z = [u; vec(S)] of length D(1+J+D), and the last solve (at pu₀, with the given fsU0Free).
+"""
+mutable struct OESensitivity
+    D::Int
+    J::Int
+    rhs!::_ZVec
+    jac!::_ZMat
+    tgrad!::_ZVec
+    last::Any # (key, r, ∇r) of the last solve, key = (copy of pu₀, fsU0Free)
+end
+_nothing(f!) = (o, z, p, t) -> (f!(o, z, p, t); nothing)
+function OESensitivity(f!::Function, D::Int, J::Int)
+    n = D*(1 + J + D)
+    @variables z[1:n] p[1:J] t
+    zz = collect(z)
+    u = zz[1:D]
+    S = reshape(zz[D+1:end], D, J + D)
+    fu = Vector{Any}(undef, D)
+    f!(fu, u, collect(p), t)
+    ∇ₓf = jacobian(fu, u)
+    ∇ₚf = jacobian(fu, collect(p))
+    dS = ∇ₓf * S + hcat(∇ₚf, zeros(Num, D, D))
+    rhs = [fu; vec(dS)]
+    jac = jacobian(rhs, zz)
+    tgrad = [Symbolics.derivative(e, t) for e in rhs]
+    build(ex) = _build(ex, z, p, t)[end]
+    OESensitivity(D, J, _ZVec(_nothing(build(rhs))), _ZMat(_nothing(build(jac))), _ZVec(_nothing(build(tgrad))), nothing)
+end
+# (Û, S) at tt: Û (Mp1 x D) and S (D x (J+D) x Mp1), or nothing when the solve fails; defined in the extension
+function _sensitivitySolve end
+# r = vec(Û - U) and ∇r = ∂r/∂pu₀ from one sensitivity solve, cached for the next call at the same pu₀. Only the
+# jacobian comes from here: the residual alone is a plain forward solve, which is much cheaper (D states rather than
+# D(1+J+D)) and, with Float64 arguments, also compiled once by OrdinaryDiffEq's default AutoSpecialize.
+function _sensitivityResidual(oe::OutputErrorProblem, pu₀::AbstractVector{<:Real}, params::WENDyParameters)
+    (; J, D, Mp1, sens) = oe
+    key = (Vector{Float64}(pu₀), params.fsU0Free)
+    !isnothing(sens.last) && sens.last[1] == key && return sens.last[2], sens.last[3]
+    p, u₀ = params.fsU0Free ? (pu₀[1:J], pu₀[J+1:end]) : (pu₀[1:J], oe.U[1,:])
+    nc = params.fsU0Free ? J + D : J
+    out = try
+        _sensitivitySolve(oe, Vector{Float64}(p), Vector{Float64}(u₀), params)
+    catch
+        nothing
+    end
+    r, ∇r = if isnothing(out)
+        fill(NaN, Mp1*D), fill(NaN, Mp1*D, nc)
+    else
+        Û, S = out
+        # rows of r are (m, d) with m fastest, as vec of the Mp1 x D residual
+        vec(Û - oe.U), reshape(permutedims(S[:, 1:nc, :], (3, 1, 2)), Mp1*D, nc)
+    end
+    sens.last = (key, r, ∇r)
+    r, ∇r
 end
 # Û(tt; p, u₀), the (Mp1 x D) forward solve; defined in ext/WENDyOrdinaryDiffEqExt.jl
 function _forwardSolve end
@@ -74,10 +141,12 @@ oeResidual!(r::AbstractVector{<:Real}, oe::OutputErrorProblem, pu₀::AbstractVe
 """
     oeJacobian!(∇r, oe::OutputErrorProblem, pu₀, params=oe.params)
 
-Jacobian of the output error residual wrt pu₀ (by forward mode automatic differentiation through the ODE solve), written into ∇r
+Jacobian of the output error residual wrt pu₀, written into ∇r: by forward mode automatic differentiation through the
+ODE solve, or from the forward sensitivity equations when the problem has them (WENDy._OE_SENS[], see OESensitivity)
 """
 oeJacobian!(∇r::AbstractMatrix{<:Real}, oe::OutputErrorProblem, pu₀::AbstractVector{<:Real}, params::WENDyParameters=oe.params) =
-    ForwardDiff.jacobian!(∇r, pu₀ -> _forwardSolveResidual(oe, pu₀, params), pu₀)
+    isnothing(oe.sens) ? ForwardDiff.jacobian!(∇r, pu₀ -> _forwardSolveResidual(oe, pu₀, params), pu₀) :
+        (∇r .= _sensitivityResidual(oe, pu₀, params)[2])
 """
     solve(oe::OutputErrorProblem, p₀, params=oe.params)
 

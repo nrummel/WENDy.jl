@@ -4,7 +4,10 @@
 ##   _WRAP[]         wrap the generated functions in FunctionWrappers (fixed Float64 signatures), so the time loops are
 ##                   compiled once rather than once per problem
 ##   _OE_SYMBOLIC[]  give the forward solver of OutputErrorProblem the symbolic state jacobian of f!
+##   _OE_SENS[]      OutputErrorProblem gets its jacobian from symbolic forward sensitivity equations (one Float64
+##                   solve behind fixed-signature wrappers) instead of ForwardDiff through the solver
 const _CSE = Ref(false)
+const _OE_SENS = Ref(false)
 const _WRAP = Ref(false)
 const _OE_SYMBOLIC = Ref(false)
 _build(ex, args...) = build_function(ex, args...; expression=false, cse=_CSE[])

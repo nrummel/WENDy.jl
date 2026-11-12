@@ -1,7 +1,8 @@
 ## Compile latency of WENDy and output error least squares for a new rhs f!, after a warm-up on another rhs.
-##   julia --project=benchmark benchmark/compileLatency.jl <target> <config> <rep> <out.tsv> [--trace <trace.txt>]
+##   julia --project=benchmark benchmark/compileLatency.jl <target> <config> <rep> <out.tsv> [--trace <trace.txt>] [--oe-only]
 ## target: logistic | hindmarshRose (data from benchmark/makeData.jl). config: base, or switches joined by "+"
-## (cse, wrap, oejac; e.g. cse+wrap+oejac). One process per (target, config, rep), so nothing compiled for the target
+## (cse, wrap, oejac, sens; e.g. cse+wrap+oejac). With --oe-only only the output error problem is built and solved
+## (warm-up included). One process per (target, config, rep), so nothing compiled for the target
 ## leaks between configurations. With --trace, every method compiled for the target is written to trace.txt
 ## (Base.@trace_compile); keep those runs out of the timings, the tracing slows compilation down.
 ## Appends one line per step to out.tsv:
@@ -14,10 +15,11 @@ include(joinpath(@__DIR__, "odes.jl"))
 
 target, config, rep, out = ARGS[1], ARGS[2], parse(Int, ARGS[3]), ARGS[4]
 trace = (i = findfirst(==("--trace"), ARGS); isnothing(i) ? nothing : ARGS[i+1])
+const OE_ONLY = "--oe-only" in ARGS
 switches = config == "base" ? String[] : split(config, "+")
 for s in switches
     s == "cse" ? (WENDy._CSE[] = true) : s == "wrap" ? (WENDy._WRAP[] = true) :
-        s == "oejac" ? (WENDy._OE_SYMBOLIC[] = true) : error("unknown switch $s")
+        s == "oejac" ? (WENDy._OE_SYMBOLIC[] = true) : s == "sens" ? (WENDy._OE_SENS[] = true) : error("unknown switch $s")
 end
 LinearAlgebra.BLAS.set_num_threads(1) # several processes run at once
 
@@ -34,13 +36,17 @@ function steps(name; record)
     f!, _, _, pstar, params = ODES[name]
     (; tt, U, p₀) = deserialize(joinpath(@__DIR__, "data", "$name.jls"))
     J = length(pstar)
-    t = @timed WENDyProblem(tt, U, f!, J; linearInParameters=true, params, ll=WENDy.Warn)
-    record("build_wendy", t, "", Float64[])
-    prob = t.value
+    prob = nothing
+    if !OE_ONLY
+        t = @timed WENDyProblem(tt, U, f!, J; linearInParameters=true, params, ll=WENDy.Warn)
+        record("build_wendy", t, "", Float64[])
+        prob = t.value
+    end
     t = @timed OutputErrorProblem(tt, U, f!, J; params)
     record("build_oe", t, "", Float64[])
     oe = t.value
     for (m, run) in METHODS, call in ("first", "second")
+        OE_ONLY && m != "oels" && continue
         t = @timed run(prob, oe, p₀, params)
         record("$(m)_$call", t, string(t.value.retcode), t.value.p̂)
     end
