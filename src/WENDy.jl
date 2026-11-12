@@ -15,6 +15,7 @@ module WENDy
     using ImageFiltering: imfilter, Inner # Convolution in Julia
     using FFTW: fft, ifft
     using Tullio: @tullio
+    using FunctionWrappers: FunctionWrapper # fixed-signature rhs of the output error sensitivity system
     using Arpack: svds
     # stdlib
     using LinearAlgebra, Statistics, Logging

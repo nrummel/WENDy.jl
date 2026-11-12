@@ -1,60 +1,4 @@
 ## Output error (forward solve) least squares
-"""
-    OutputErrorProblem(tt, U, f!, J; params=WENDyParameters())
-
-The output error least squares problem: find p (and optionally u₀) that minimize ½‖û(tt; p, u₀) - U‖² where û solves
-the ODE du/dt = f(u, p, t). This is the common alternative to the weak form, provided for comparison and for the
-hybrid solver HybridTrustRegionOELS.
-
-The forward solves need OrdinaryDiffEq.jl, which WENDy only loads on request: run `using OrdinaryDiffEq` first.
-
-## Arguments
-- tt::AbstractVector{<:Real} : vector of times (equispaced)
-- U::AbstractVecOrMat{<:Real} : Corrupted state variable data
-- f!::Function : Right hand-side of the differential equation, f!(du, u, p, t)
-- J::Int : number of parameters (to be estimated)
-- params::WENDyParameters : (optional) the forward solve settings fsAlg, fsReltol, fsAbstol and fsU0Free are used
-
-# Fields
-- tt, U, f!, J : as above
-- D::Int : number of state variables
-- Mp1::Int : number of time points
-- u₀::AbstractVector{<:Real} : initial condition taken from the data, U[1,:] (the initial guess for u₀ when fsU0Free)
-- params::WENDyParameters : default parameters for solve
-- ∇ₓf!, ∂ₜf! : symbolic state jacobian ∇ₓf!(out, u, p, t) (D x D) and time gradient ∂ₜf!(out, u, p, t) (length D) of f!,
-  handed to the forward solver instead of its internal autodiff; built only when WENDy._OE_SYMBOLIC[] (else nothing)
-- sens : the forward sensitivity system (see OESensitivity) when WENDy._OE_SENS[], else nothing
-"""
-struct OutputErrorProblem
-    tt::AbstractVector{<:Real}
-    U::AbstractMatrix{<:Real}
-    f!::Function
-    J::Int
-    D::Int
-    Mp1::Int
-    u₀::AbstractVector{<:Real}
-    params::WENDyParameters
-    ∇ₓf!::Union{Nothing,Function}
-    ∂ₜf!::Union{Nothing,Function}
-    sens::Any # Union{Nothing,OESensitivity}
-end
-""" (private) Build the time gradient ∂f/∂t of the rhs f!(du, u, p, t), in place ∂ₜf!(out, u, p, t) """
-function _get∂ₜf(f!::Function, D::Int, J::Int)
-    @variables p[1:J] x[1:D] t
-    dx = Vector(undef, D)
-    f!(dx, x, p, t)
-    ∂ₜf = [Symbolics.derivative(dxd, t) for dxd in dx]
-    return _build(∂ₜf, x, p, t)[end]
-end
-function OutputErrorProblem(tt::AbstractVector{<:Real}, U::AbstractVecOrMat{<:Real}, f!::Function, J::Int; params::WENDyParameters=WENDyParameters())
-    isnothing(Base.get_extension(@__MODULE__, :WENDyOrdinaryDiffEqExt)) &&
-        error("OutputErrorProblem solves the ODE with OrdinaryDiffEq.jl: run `using OrdinaryDiffEq` first")
-    U = U isa AbstractVector ? reshape(U, length(U), 1) : U
-    Mp1, D = size(U)
-    ∇ₓf!, ∂ₜf! = _OE_SYMBOLIC[] ? (_get∇ₓf(f!, D, J), _get∂ₜf(f!, D, J)) : (nothing, nothing)
-    sens = _OE_SENS[] ? OESensitivity(f!, D, J) : nothing
-    OutputErrorProblem(tt, U, f!, J, D, Mp1, U[1,:], params, ∇ₓf!, ∂ₜf!, sens)
-end
 ## Forward sensitivities. With S = ∂u/∂[p; u₀] (D × (J+D)), the augmented state z = [u; vec(S)] solves
 ##     du/dt = f(u, p, t),    dS/dt = ∇ₓf(u, p, t) S + [∇ₚf(u, p, t)  0],    u(0) = u₀, S(0) = [0  I],
 ## so one Float64 solve gives û(tt) and its jacobian wrt p and u₀ (the u₀ columns are dropped unless fsU0Free).
@@ -92,6 +36,48 @@ function OESensitivity(f!::Function, D::Int, J::Int)
     tgrad = [Symbolics.derivative(e, t) for e in rhs]
     build(ex) = _build(ex, z, p, t)[end]
     OESensitivity(D, J, _ZVec(_nothing(build(rhs))), _ZMat(_nothing(build(jac))), _ZVec(_nothing(build(tgrad))), nothing)
+end
+"""
+    OutputErrorProblem(tt, U, f!, J; params=WENDyParameters())
+
+The output error least squares problem: find p (and optionally u₀) that minimize ½‖û(tt; p, u₀) - U‖² where û solves
+the ODE du/dt = f(u, p, t). This is the common alternative to the weak form, provided for comparison and for the
+hybrid solver HybridTrustRegionOELS.
+
+The forward solves need OrdinaryDiffEq.jl, which WENDy only loads on request: run `using OrdinaryDiffEq` first.
+
+## Arguments
+- tt::AbstractVector{<:Real} : vector of times (equispaced)
+- U::AbstractVecOrMat{<:Real} : Corrupted state variable data
+- f!::Function : Right hand-side of the differential equation, f!(du, u, p, t)
+- J::Int : number of parameters (to be estimated)
+- params::WENDyParameters : (optional) the forward solve settings fsAlg, fsReltol, fsAbstol and fsU0Free are used
+
+# Fields
+- tt, U, f!, J : as above
+- D::Int : number of state variables
+- Mp1::Int : number of time points
+- u₀::AbstractVector{<:Real} : initial condition taken from the data, U[1,:] (the initial guess for u₀ when fsU0Free)
+- params::WENDyParameters : default parameters for solve
+- sens::OESensitivity : the forward sensitivity system that gives the jacobian (see OESensitivity)
+"""
+struct OutputErrorProblem
+    tt::AbstractVector{<:Real}
+    U::AbstractMatrix{<:Real}
+    f!::Function
+    J::Int
+    D::Int
+    Mp1::Int
+    u₀::AbstractVector{<:Real}
+    params::WENDyParameters
+    sens::OESensitivity
+end
+function OutputErrorProblem(tt::AbstractVector{<:Real}, U::AbstractVecOrMat{<:Real}, f!::Function, J::Int; params::WENDyParameters=WENDyParameters())
+    isnothing(Base.get_extension(@__MODULE__, :WENDyOrdinaryDiffEqExt)) &&
+        error("OutputErrorProblem solves the ODE with OrdinaryDiffEq.jl: run `using OrdinaryDiffEq` first")
+    U = U isa AbstractVector ? reshape(U, length(U), 1) : U
+    Mp1, D = size(U)
+    OutputErrorProblem(tt, U, f!, J, D, Mp1, U[1,:], params, OESensitivity(f!, D, J))
 end
 # (Û, S) at tt: Û (Mp1 x D) and S (D x (J+D) x Mp1), or nothing when the solve fails; defined in the extension
 function _sensitivitySolve end
@@ -141,12 +127,10 @@ oeResidual!(r::AbstractVector{<:Real}, oe::OutputErrorProblem, pu₀::AbstractVe
 """
     oeJacobian!(∇r, oe::OutputErrorProblem, pu₀, params=oe.params)
 
-Jacobian of the output error residual wrt pu₀, written into ∇r: by forward mode automatic differentiation through the
-ODE solve, or from the forward sensitivity equations when the problem has them (WENDy._OE_SENS[], see OESensitivity)
+Jacobian of the output error residual wrt pu₀, written into ∇r, from the forward sensitivity equations (see OESensitivity)
 """
 oeJacobian!(∇r::AbstractMatrix{<:Real}, oe::OutputErrorProblem, pu₀::AbstractVector{<:Real}, params::WENDyParameters=oe.params) =
-    isnothing(oe.sens) ? ForwardDiff.jacobian!(∇r, pu₀ -> _forwardSolveResidual(oe, pu₀, params), pu₀) :
-        (∇r .= _sensitivityResidual(oe, pu₀, params)[2])
+    ∇r .= _sensitivityResidual(oe, pu₀, params)[2]
 """
     solve(oe::OutputErrorProblem, p₀, params=oe.params)
 

@@ -1,16 +1,6 @@
-## Compile-latency switches (experimental, branch compile-latency). They are read when a problem is built, so set them
-## before WENDyProblem / OutputErrorProblem:
-##   _CSE[]          build_function(...; cse=true) for every generated function
-##   _WRAP[]         wrap the generated functions in FunctionWrappers (fixed Float64 signatures), so the time loops are
-##                   compiled once rather than once per problem
-##   _OE_SYMBOLIC[]  give the forward solver of OutputErrorProblem the symbolic state jacobian of f!
-##   _OE_SENS[]      OutputErrorProblem gets its jacobian from symbolic forward sensitivity equations (one Float64
-##                   solve behind fixed-signature wrappers) instead of ForwardDiff through the solver
-const _CSE = Ref(false)
-const _OE_SENS = Ref(false)
-const _WRAP = Ref(false)
-const _OE_SYMBOLIC = Ref(false)
-_build(ex, args...) = build_function(ex, args...; expression=false, cse=_CSE[])
+## Every generated function goes through _build: common subexpressions are pulled out (cse=true), which keeps the
+## generated code, and its compile time, small for large expressions such as the second derivatives
+_build(ex, args...) = build_function(ex, args...; expression=false, cse=true)
 """
 (private) Build a function for the the rhs specialized to 
 the case of lognormal noise. This means the original rhs changes to 

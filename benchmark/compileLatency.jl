@@ -1,8 +1,8 @@
 ## Compile latency of WENDy and output error least squares for a new rhs f!, after a warm-up on another rhs.
 ##   julia --project=benchmark benchmark/compileLatency.jl <target> <config> <rep> <out.tsv> [--trace <trace.txt>] [--oe-only]
-## target: logistic | hindmarshRose (data from benchmark/makeData.jl). config: base, or switches joined by "+"
-## (cse, wrap, oejac, sens; e.g. cse+wrap+oejac). With --oe-only only the output error problem is built and solved
-## (warm-up included). One process per (target, config, rep), so nothing compiled for the target
+## target: logistic | hindmarshRose (data from benchmark/makeData.jl). config: a label for the WENDy being measured
+## (e.g. its commit; compare versions by running this with an environment for each). With --oe-only only the output
+## error problem is built and solved (warm-up included). One process per (target, config, rep), so nothing compiled for the target
 ## leaks between configurations. With --trace, every method compiled for the target is written to trace.txt
 ## (Base.@trace_compile); keep those runs out of the timings, the tracing slows compilation down.
 ## Appends one line per step to out.tsv:
@@ -16,11 +16,6 @@ include(joinpath(@__DIR__, "odes.jl"))
 target, config, rep, out = ARGS[1], ARGS[2], parse(Int, ARGS[3]), ARGS[4]
 trace = (i = findfirst(==("--trace"), ARGS); isnothing(i) ? nothing : ARGS[i+1])
 const OE_ONLY = "--oe-only" in ARGS
-switches = config == "base" ? String[] : split(config, "+")
-for s in switches
-    s == "cse" ? (WENDy._CSE[] = true) : s == "wrap" ? (WENDy._WRAP[] = true) :
-        s == "oejac" ? (WENDy._OE_SYMBOLIC[] = true) : s == "sens" ? (WENDy._OE_SENS[] = true) : error("unknown switch $s")
-end
 LinearAlgebra.BLAS.set_num_threads(1) # several processes run at once
 
 ## The steps, in this order (later methods reuse what earlier ones compiled): build both problems, then each method

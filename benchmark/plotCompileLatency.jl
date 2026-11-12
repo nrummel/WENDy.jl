@@ -14,6 +14,7 @@ rows = [(; target=string(r[1]), config=string(r[2]), rep=Int(r[3]), step=string(
 targets = unique(r.target for r in rows)
 configs = unique(r.config for r in rows)
 sort!(configs, by=c -> c == "base" ? 0 : count(==('+'), c) + 1)
+const REF = first(configs) # ratios and differences are relative to this one ("base" when present)
 const STEPS = filter(s -> any(r -> r.step in (s, "$(s)_first"), rows), ["build_wendy", "build_oe", "wls", "irls", "mle", "oels", "hybrid"])
 const METHOD_STEPS = filter(!startswith("build"), STEPS)
 first_step(s) = s in ("build_wendy", "build_oe") ? s : "$(s)_first"
@@ -49,9 +50,9 @@ savefig(plot(plts...; layout=(1, length(targets)), size=(450length(targets), 420
 
 ## 3. steady state: second call relative to base (no run time regression)
 plts = map(targets) do target
-    p = hline([1.0]; color=:black, ls=:dash, label="", title=target, ylabel="second call / base", xrotation=30)
-    for (i, c) in enumerate(filter(!=("base"), configs))
-        r = [med(target, c, "$(s)_second", :time) / med(target, "base", "$(s)_second", :time) for s in METHOD_STEPS]
+    p = hline([1.0]; color=:black, ls=:dash, label="", title=target, ylabel="second call / $REF", xrotation=30)
+    for (i, c) in enumerate(filter(!=(REF), configs))
+        r = [med(target, c, "$(s)_second", :time) / med(target, REF, "$(s)_second", :time) for s in METHOD_STEPS]
         scatter!(p, (1:length(r)) .+ 0.08(i - 2), r; label=c, color=i + 1, ms=6)
     end
     xticks!(p, 1:length(METHOD_STEPS), METHOD_STEPS)
@@ -110,10 +111,10 @@ end
 
 ## 5. accuracy: relative difference of p̂ from base (first call), per method
 plts = map(targets) do target
-    p = plot(; title=target, ylabel="‖p̂ - p̂_base‖ / ‖p̂_base‖", yscale=:log10, xrotation=30, legend=:bottomright)
-    for (i, c) in enumerate(filter(!=("base"), configs))
+    p = plot(; title=target, ylabel="‖p̂ - p̂_ref‖ / ‖p̂_ref‖ ($REF)", yscale=:log10, xrotation=30, legend=:bottomright)
+    for (i, c) in enumerate(filter(!=(REF), configs))
         d = map(METHOD_STEPS) do s
-            a = [r.p̂ for r in rows if r.target == target && r.config == "base" && r.step == "$(s)_first"]
+            a = [r.p̂ for r in rows if r.target == target && r.config == REF && r.step == "$(s)_first"]
             b = [r.p̂ for r in rows if r.target == target && r.config == c && r.step == "$(s)_first"]
             isempty(a) || isempty(b) ? NaN : max(norm(first(b) - first(a)) / norm(first(a)), 1e-17)
         end
@@ -141,6 +142,6 @@ for target in targets
         end
         @printf("%16s\n", @sprintf("%.2f (%.2f)", T, C))
     end
-    println("load ", round(med(target, "base", "load", :time), digits=1), " s, warm-up ",
-        round(med(target, "base", "warmup", :time), digits=1), " s (base)")
+    println("load ", round(med(target, REF, "load", :time), digits=1), " s, warm-up ",
+        round(med(target, REF, "warmup", :time), digits=1), " s ($REF)")
 end
