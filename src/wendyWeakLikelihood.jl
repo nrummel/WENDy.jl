@@ -34,7 +34,7 @@
 using FunctionWrappers: FunctionWrapper
 """
 A generated in-place function out = f(x, p, t) (out of rank N) behind a FunctionWrapper with the fixed signature
-(Array{Float64,N}, Vector{Float64}, Vector{Float64}, Float64), so that the time loops (_atEachTime!, _atTime!) are
+(Array{Float64,N}, Vector{Float64}, Vector{Float64}, Float64), so that the time loop _atEachTime! is
 compiled once for every problem (_WRAP[]). raw is the generated function itself, called for any other argument types
 (e.g. ForwardDiff duals).
 """
