@@ -50,7 +50,9 @@ struct LinearWeakForm <: WeakForm
 end
 """
 Weak form of an ode that is not linear in its parameters: r(p), L(p) and their derivatives are evaluated from the data
-and the symbolic rhs f!(du, x, p, t) and its derivatives ∇ₓf!, ∇ₚf!, ∇ₚ∇ₓf!, ∇²ₚf! and ∇²ₚ∇ₓf!.
+and the symbolic rhs f!(du, x, p, t) and its derivatives ∇ₓf!, ∇ₚf! and ∇ₚ∇ₓf!. The second derivatives only enter through
+the p-hessian of the scalar ψ(x, p, t; a, Ω) = ⟨a, f⟩ + ⟨Ω, ∇ₓf⟩ (see _∂²ψ): ∇²ₚψ!(out, x, p, t, a, Ω) writes its upper
+triangle entries that are not structurally zero, at the linear indices ∇²ₚψidx of a J × J matrix.
 """
 struct NonlinearWeakForm <: WeakForm
     dims::WENDyDims
@@ -66,8 +68,8 @@ struct NonlinearWeakForm <: WeakForm
     ∇ₓf!::Function
     ∇ₚf!::Function
     ∇ₚ∇ₓf!::Function
-    ∇²ₚf!::Function
-    ∇²ₚ∇ₓf!::Function
+    ∇²ₚψ!::Function
+    ∇²ₚψidx::Vector{Int}
 end
 """L₀ = Φ̇ ∘ diag(σ₁,⋯,σ_D) (KD × Mp1D), the part of L(p) that does not depend on p"""
 function _L₀(Φ̇::AbstractMatrix{<:Real}, σ::AbstractVector{<:Real}, dims::WENDyDims)
@@ -100,7 +102,7 @@ function weakForm(f!::Function, tt::AbstractVector{<:Real}, X::AbstractMatrix{<:
     @info " Computing additional symbolic functions for nonlinear problem"
     NonlinearWeakForm(
         dims, tt, X, Φ, σ, b, _L₀(Φ̇, σ, dims),
-        fₙ!, ∇ₓf!, _get∇ₚf(fₙ!, D, J), _get∇ₚ∇ₓf(fₙ!, D, J), _get∇²ₚf(fₙ!, D, J), _get∇²ₚ∇ₓf(fₙ!, D, J)
+        fₙ!, ∇ₓf!, _get∇ₚf(fₙ!, D, J), _get∇ₚ∇ₓf(fₙ!, D, J), _get∇²ₚψ(fₙ!, D, J)...
     )
 end
 
@@ -120,19 +122,13 @@ end
 
 ## 2. r(p), ∇r(p), L(p), the factor B(p) of ∇L(p) and the second order terms
 ## The rhs, or one of its derivatives, at every time point: f!(out[⋯, m], xₘ, p, tₘ) for m = 1, ⋯, Mp1 (time is the
-## last index of out), or at one time point (_atTime!, for the second derivatives, which are summed over m as they are
-## evaluated). The weak forms keep the symbolic functions as ::Function, so these loops are the only code that is
-## compiled for each problem's functions; the kernels that call them are compiled once.
+## last index of out). The weak forms keep the symbolic functions as ::Function, so this loop (and the call of ∇²ₚψ! in
+## _∂²ψ) is the only code that is compiled for each problem's functions; the kernels that call them are compiled once.
 function _atEachTime!(out::AbstractArray, f!::Function, X::AbstractMatrix, p::AbstractVector, tt::AbstractVector, Mp1::Int)
     for m in 1:Mp1
         @views f!(selectdim(out, ndims(out), m), X[m,:], p, tt[m])
     end
     out
-end
-function _atTime!(buf::AbstractArray, f!::Function, X::AbstractMatrix, p::AbstractVector, tt::AbstractVector, m::Int)
-    fill!(buf, 0)
-    @views f!(buf, X[m,:], p, tt[m])
-    buf
 end
 """
 g(p) = vec(Φ F(p)) with F(p)[m,:] = f(xₘ, p, tₘ) (KD). wf is a NonlinearWeakForm, or its fields (dims, tt, X, Φ, f!)
@@ -248,33 +244,29 @@ function _ΦI(Φ::AbstractMatrix, dims::WENDyDims)
     reshape(E, K*D, Mp1*D)
 end
 """
-Second order terms, contracted through Φ without forming ∇²r or ∇²L (both are zero for a linear weak form), and
-summed over the time points as the second derivatives are evaluated, so only one D × J × J or D × D × J × J slice is
-ever in memory:
-    ∂ᵢⱼrᵀy     = ∑ ∇²ₚF[d,i,j,m] (ΦᵀY)[m,d],                Y = reshape(y, K, D)
-    ⟨∂ᵢⱼL, M⟩ = ∑ ∇²ₚ∇ₓF[d₂,d₁,i,j,m] σ[d₁] T[d₂,m,d₁],    T = _ΦᵀM(Φ, M)
+Second order terms, without forming ∇²r or ∇²L (both are zero for a linear weak form). For a KD × Mp1D matrix M and a
+scalar c, with Y = reshape(y, K, D) and T = _ΦᵀM(Φ, M),
+    ∂ᵢⱼrᵀy = ∑ ∂ᵢⱼf_d(xₘ) (ΦᵀY)[m,d]    and    ⟨∂ᵢⱼL, M⟩ = ∑ ∂ᵢⱼ∂_{x_{d₁}}f_{d₂}(xₘ) σ[d₁] T[d₂,m,d₁],
+so both are p-hessians of one scalar per time point,
+    ∂ᵢⱼrᵀy + c⟨∂ᵢⱼL, M⟩ = ∑ₘ ∂ᵢⱼψ(xₘ, p, tₘ; aₘ, Ωₘ),    ψ(x, p, t; a, Ω) = ⟨a, f(x, p, t)⟩ + ⟨Ω, ∇ₓf(x, p, t)⟩,
+with aₘ = (ΦᵀY)[m,:] and Ωₘ[d₂,d₁] = c σ[d₁] T[d₂,m,d₁]. The generated ∇²ₚψ! (_get∇²ₚψ) writes only the upper
+triangle entries that are not structurally zero, so a time point costs about their number, instead of the D × J × J
+and D × D × J × J tensors ∇²ₚf and ∇²ₚ∇ₓf (written in full, zeros included) and a product with each.
 """
-function _∂²rᵀy(wf::NonlinearWeakForm, p::AbstractVector{<:Real}, y::AbstractVector{<:Real})
-    (; dims, tt, X, Φ, ∇²ₚf!) = wf
+function _∂²ψ(wf::NonlinearWeakForm, p::AbstractVector{<:Real}, y::AbstractVector{<:Real}, c::Real, T::AbstractArray{<:Real,3})
+    (; dims, tt, X, Φ, σ, ∇²ₚψ!, ∇²ₚψidx) = wf
     (; K, D, Mp1, J) = dims
     ΦᵀY = Φ' * reshape(y, K, D)
-    buf, H = zeros(D, J*J), zeros(J*J)
+    vals, H, a, Ω = zeros(length(∇²ₚψidx)), zeros(J, J), zeros(D), zeros(D, D)
     for m in 1:Mp1
-        _atTime!(reshape(buf, D, J, J), ∇²ₚf!, X, p, tt, m) # ∇²ₚf(xₘ, p, tₘ)
-        mul!(H, buf', view(ΦᵀY, m, :), 1, 1)
+        a .= view(ΦᵀY, m, :)
+        Ω .= c .* view(T, :, m, :) .* σ'
+        @views ∇²ₚψ!(vals, X[m,:], p, tt[m], a, Ω)
+        for (k, l) in enumerate(∇²ₚψidx)
+            H[l] += vals[k]
+        end
     end
-    reshape(H, J, J)
-end
-function _∂²L_T(wf::NonlinearWeakForm, p::AbstractVector{<:Real}, T::AbstractArray{<:Real,3})
-    (; dims, tt, X, σ, ∇²ₚ∇ₓf!) = wf
-    (; D, Mp1, J) = dims
-    buf, H, w = zeros(D*D, J*J), zeros(J*J), zeros(D, D)
-    for m in 1:Mp1
-        _atTime!(reshape(buf, D, D, J, J), ∇²ₚ∇ₓf!, X, p, tt, m) # ∇²ₚ∇ₓf(xₘ, p, tₘ)
-        w .= view(T, :, m, :) .* σ'
-        mul!(H, buf', vec(w), 1, 1)
-    end
-    reshape(H, J, J)
+    H + triu(H, 1)'
 end
 
 ## 3. Covariance strategies: how S(p) = (1-δ)L(p)L(p)ᵀ + δI is formed, and what is kept at the current p
@@ -443,7 +435,7 @@ The hessian ∇²ℓ = ∇²m + ∇²logdet. With y = S⁻¹r, vⱼ = ∂ⱼLᵀ
 For ⟨S⁻¹∂ᵢL, ∂ⱼL⟩, ∂ᵢL = E ∘ blockdiag(B[:,:,i,m]) with E = Φ ⊗ I_D, so one solve Z = S⁻¹E (Mp1D right hand sides)
 replaces the J solves S⁻¹∂ᵢL: ⟨S⁻¹∂ᵢL, ∂ⱼL⟩ = ∑ Ẑ[e,m,d₂] B[d₂,d₁,i,m] B[e,d₁,j,m] with Ẑ = _ΦᵀM(Φ, Z). The J
 matrices Aⱼ (KD × KD) take one product through Φ (_∂L_Mᵀ) and one solve each. The terms with second derivatives
-(∂ᵢⱼrᵀy and ⟨∂ᵢⱼL, ·⟩, see _∂²rᵀy) are zero for a linear weak form; they are linear in their second argument, so
+(∂ᵢⱼrᵀy and ⟨∂ᵢⱼL, ·⟩, see _∂²ψ) are zero for a linear weak form; they are linear in their second argument, so
 ∇²ℓ takes ⟨∂ᵢⱼL, S⁻¹L - y(Lᵀy)ᵀ⟩ in one contraction instead of one for m and one for logdet.
 """
 ∇²m(c::CovarianceStrategy, ws::WENDyWorkspace) = _symmetric(_∇²m₁(c, ws) + _∇²m₂(ws.wform, c, ws))
@@ -498,9 +490,9 @@ _∇²m₂(wf::LinearWeakForm, c::CovarianceStrategy, ws::WENDyWorkspace) = zero
 _∇²ℓ₂(wf::LinearWeakForm, c::CovarianceStrategy, ws::WENDyWorkspace) = zeros(wf.dims.J, wf.dims.J)
 function _∇²m₂(wf::NonlinearWeakForm, c::FactorCovariance, ws::WENDyWorkspace)
     (; p, y, diagReg) = ws
-    _∂²rᵀy(wf, p, y) - (1-diagReg) * _∂²L_T(wf, p, _ΦᵀM(wf.Φ, y, _Lᵀy!(c, ws), wf.dims))
+    _∂²ψ(wf, p, y, -(1-diagReg), _ΦᵀM(wf.Φ, y, _Lᵀy!(c, ws), wf.dims))
 end
 function _∇²ℓ₂(wf::NonlinearWeakForm, c::FactorCovariance, ws::WENDyWorkspace)
     (; p, y, diagReg) = ws
-    _∂²rᵀy(wf, p, y) + (1-diagReg) * _∂²L_T(wf, p, _ΦᵀS⁻¹L!(c, ws) - _ΦᵀM(wf.Φ, y, _Lᵀy!(c, ws), wf.dims))
+    _∂²ψ(wf, p, y, 1-diagReg, _ΦᵀS⁻¹L!(c, ws) - _ΦᵀM(wf.Φ, y, _Lᵀy!(c, ws), wf.dims))
 end

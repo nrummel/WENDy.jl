@@ -56,6 +56,9 @@ const CASES = [
         lip=true, dist=Normal, nr=0.1, params=WENDyParameters(Kmax=25)),
     (name="Lotka-Volterra (linear)", f! =lotkaVolterra!, u₀=[1.0,1.0], tRng=(0.0,10.0), dt=0.02, pstar=[1.5,1.0,1.0,3.0],
         lip=true, dist=Normal, nr=0.05, params=WENDyParameters(Kmax=25)),
+    # linear in p but built as a nonlinear weak form: every second derivative is structurally zero
+    (name="Lotka-Volterra (as nonlinear)", f! =lotkaVolterra!, u₀=[1.0,1.0], tRng=(0.0,10.0), dt=0.02, pstar=[1.5,1.0,1.0,3.0],
+        lip=false, dist=Normal, nr=0.05, params=WENDyParameters(Kmax=25)),
     (name="Goodwin (nonlinear, LogNormal)", f! =goodwin!, u₀=[0.3617,0.9137,1.3934], tRng=(0.0,80.0), dt=0.5,
         pstar=[3.4884,0.0969,1,10,0.0969,0.0581,0.0969,0.0775], lip=false, dist=LogNormal, nr=0.05,
         params=WENDyParameters(Kmax=25, radiusMinTime=0.5, radiusMaxTime=16.0)),
