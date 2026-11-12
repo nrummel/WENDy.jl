@@ -31,6 +31,34 @@
 ## (BlockCovariance): after construction nothing touches the Mp1·D dimension.
 
 ## 1. Weak forms
+using FunctionWrappers: FunctionWrapper
+"""
+A generated in-place function out = f(x, p, t) (out of rank N) behind a FunctionWrapper with the fixed signature
+(Array{Float64,N}, Vector{Float64}, Vector{Float64}, Float64), so that the time loops (_atEachTime!, _atTime!) are
+compiled once for every problem (_WRAP[]). raw is the generated function itself, called for any other argument types
+(e.g. ForwardDiff duals).
+"""
+struct WrappedRHS{N}
+    fw::FunctionWrapper{Nothing, Tuple{Array{Float64,N}, Vector{Float64}, Vector{Float64}, Float64}}
+    raw::Function
+end
+WrappedRHS{N}(f!::Function) where N = WrappedRHS{N}(
+    FunctionWrapper{Nothing, Tuple{Array{Float64,N}, Vector{Float64}, Vector{Float64}, Float64}}(
+        (out, x, p, t) -> (f!(out, x, p, t); nothing)),
+    f!)
+const _RHS = Union{Function, WrappedRHS}
+"""∇²ₚψ!(vals, x, p, t, a, Ω) (see _get∇²ₚψ) behind a FunctionWrapper with a fixed Float64 signature (_WRAP[]); raw for other types"""
+const _PsiFW = FunctionWrapper{Nothing, Tuple{Vector{Float64}, Vector{Float64}, Vector{Float64}, Float64, Vector{Float64}, Matrix{Float64}}}
+struct WrappedPsi
+    fw::_PsiFW
+    raw::Function
+end
+WrappedPsi(ψ!::Function) = WrappedPsi(_PsiFW((v, x, p, t, a, Ω) -> (ψ!(v, x, p, t, a, Ω); nothing)), ψ!)
+const _PSI = Union{Function, WrappedPsi}
+"""(∇²ₚψ!, idx) from _get∇²ₚψ, with ∇²ₚψ! wrapped when _WRAP[] is set"""
+_wrapψ((ψ!, idx)) = (_WRAP[] ? WrappedPsi(ψ!) : ψ!, idx)
+"""f! wrapped in a WrappedRHS{N} (N the rank of its output) when _WRAP[] is set, else f! itself"""
+_wrap(f!::Function, N::Int) = _WRAP[] ? WrappedRHS{N}(f!) : f!
 abstract type WeakForm end
 """
 Weak form of an ode that is linear in its parameters: r(p) = Gp - b, and ∇ₓf is linear in p too, so the factor B of ∇L
@@ -45,8 +73,8 @@ struct LinearWeakForm <: WeakForm
     G::Matrix{Float64}
     L₀::Matrix{Float64}
     B::Array{Float64,4}
-    f!::Function
-    ∇ₓf!::Function
+    f!::_RHS
+    ∇ₓf!::_RHS
 end
 """
 Weak form of an ode that is not linear in its parameters: r(p), L(p) and their derivatives are evaluated from the data
@@ -62,13 +90,13 @@ struct NonlinearWeakForm <: WeakForm
     σ::Vector{Float64}
     b::Vector{Float64}
     L₀::Matrix{Float64}
-    # the symbolic rhs and its derivatives, kept ::Function so the kernels are not recompiled for every new problem
-    # (see _atEachTime!)
-    f!::Function
-    ∇ₓf!::Function
-    ∇ₚf!::Function
-    ∇ₚ∇ₓf!::Function
-    ∇²ₚψ!::Function
+    # the symbolic rhs and its derivatives, kept ::Function (or wrapped when _WRAP[]) so the kernels are not
+    # recompiled for every new problem (see _atEachTime!)
+    f!::_RHS
+    ∇ₓf!::_RHS
+    ∇ₚf!::_RHS
+    ∇ₚ∇ₓf!::_RHS
+    ∇²ₚψ!::_PSI
     ∇²ₚψidx::Vector{Int}
 end
 """L₀ = Φ̇ ∘ diag(σ₁,⋯,σ_D) (KD × Mp1D), the part of L(p) that does not depend on p"""
@@ -95,14 +123,15 @@ function weakForm(f!::Function, tt::AbstractVector{<:Real}, X::AbstractMatrix{<:
     (; D) = dims
     fₙ! = _getf(f!, D, J, noiseDist)
     ∇ₓf! = _get∇ₓf(fₙ!, D, J)
+    fʷ!, ∇ₓfʷ! = _wrap(fₙ!, 1), _wrap(∇ₓf!, 2)
     if linearInParameters
         @info " Computing G and B for linear problem"
-        return _linearWeakForm(dims, tt, X, Φ, Φ̇, σ, b, fₙ!, ∇ₓf!)
+        return _linearWeakForm(dims, tt, X, Φ, Φ̇, σ, b, fʷ!, ∇ₓfʷ!)
     end
     @info " Computing additional symbolic functions for nonlinear problem"
     NonlinearWeakForm(
         dims, tt, X, Φ, σ, b, _L₀(Φ̇, σ, dims),
-        fₙ!, ∇ₓf!, _get∇ₚf(fₙ!, D, J), _get∇ₚ∇ₓf(fₙ!, D, J), _get∇²ₚψ(fₙ!, D, J)...
+        fʷ!, ∇ₓfʷ!, _wrap(_get∇ₚf(fₙ!, D, J), 2), _wrap(_get∇ₚ∇ₓf(fₙ!, D, J), 3), _wrapψ(_get∇²ₚψ(fₙ!, D, J))...
     )
 end
 
@@ -111,7 +140,7 @@ The LinearWeakForm of the (transformed) rhs f! and its state jacobian ∇ₓf!: 
 same kernels a nonlinear weak form uses.
 """
 function _linearWeakForm(dims::WENDyDims, tt::AbstractVector{<:Real}, X::AbstractMatrix{<:Real}, Φ::AbstractMatrix{<:Real},
-    Φ̇::AbstractMatrix{<:Real}, σ::AbstractVector{<:Real}, b::AbstractVector{<:Real}, f!::Function, ∇ₓf!::Function)
+    Φ̇::AbstractMatrix{<:Real}, σ::AbstractVector{<:Real}, b::AbstractVector{<:Real}, f!::_RHS, ∇ₓf!::_RHS)
     (; J) = dims
     wf = (; dims, tt, X, Φ, σ, f!, ∇ₓf!)
     eⱼ(j) = [i == j ? 1.0 : 0.0 for i in 1:J]
@@ -122,14 +151,38 @@ end
 
 ## 2. r(p), ∇r(p), L(p), the factor B(p) of ∇L(p) and the second order terms
 ## The rhs, or one of its derivatives, at every time point: f!(out[⋯, m], xₘ, p, tₘ) for m = 1, ⋯, Mp1 (time is the
-## last index of out). The weak forms keep the symbolic functions as ::Function, so this loop (and the call of ∇²ₚψ! in
-## _∂²ψ) is the only code that is compiled for each problem's functions; the kernels that call them are compiled once.
+## last index of out). Two modes, fixed when the weak form is built:
+## - f! is the generated ::Function (default): the weak forms keep it as ::Function, so this loop (and the call of
+##   ∇²ₚψ! in _∂²ψ) is the only code that is compiled for each problem's functions; the kernels that call them are
+##   compiled once.
+## - f! is a WrappedRHS (_WRAP[]): with Float64 out and p, xₘ is copied into a Float64 vector and f! writes into a
+##   reused, zeroed Array{Float64} through its FunctionWrapper, whose fixed signature lets this loop (and the kernels)
+##   be compiled once for every problem; other element types (ForwardDiff duals) call the raw function. ∇²ₚψ! is
+##   wrapped the same way (WrappedPsi, see _callψ!).
 function _atEachTime!(out::AbstractArray, f!::Function, X::AbstractMatrix, p::AbstractVector, tt::AbstractVector, Mp1::Int)
     for m in 1:Mp1
         @views f!(selectdim(out, ndims(out), m), X[m,:], p, tt[m])
     end
     out
 end
+_atEachTime!(out::AbstractArray, f!::WrappedRHS, X::AbstractMatrix, p::AbstractVector, tt::AbstractVector, Mp1::Int) =
+    _atEachTime!(out, f!.raw, X, p, tt, Mp1)
+function _atEachTime!(out::AbstractArray{Float64,M}, f!::WrappedRHS{N}, X::AbstractMatrix, p::AbstractVector{Float64},
+    tt::AbstractVector, Mp1::Int) where {M,N}
+    x, pᶠ, buf = Vector{Float64}(undef, size(X, 2)), Vector{Float64}(p), zeros(ntuple(i -> size(out, i), Val(N)))
+    for m in 1:Mp1
+        copyto!(x, view(X, m, :))
+        fill!(buf, 0) # the generated function may leave zero entries unwritten
+        f!.fw(buf, x, pᶠ, Float64(tt[m]))
+        copyto!(selectdim(out, M, m), buf)
+    end
+    out
+end
+# ∇²ₚψ!(vals, x, p, t, a, Ω), directly or through its FunctionWrapper (see WrappedPsi)
+_callψ!(ψ!::Function, vals, x, p, t, a, Ω) = ψ!(vals, x, p, t, a, Ω)
+_callψ!(ψ!::WrappedPsi, vals, x, p, t, a, Ω) = ψ!.raw(vals, x, p, t, a, Ω)
+_callψ!(ψ!::WrappedPsi, vals::Vector{Float64}, x::AbstractVector{Float64}, p::Vector{Float64}, t::Real,
+    a::Vector{Float64}, Ω::Matrix{Float64}) = ψ!.fw(vals, Vector{Float64}(x), p, Float64(t), a, Ω)
 """
 g(p) = vec(Φ F(p)) with F(p)[m,:] = f(xₘ, p, tₘ) (KD). wf is a NonlinearWeakForm, or its fields (dims, tt, X, Φ, f!)
 while a linear weak form is built.
@@ -258,10 +311,11 @@ function _∂²ψ(wf::NonlinearWeakForm, p::AbstractVector{<:Real}, y::AbstractV
     (; K, D, Mp1, J) = dims
     ΦᵀY = Φ' * reshape(y, K, D)
     vals, H, a, Ω = zeros(length(∇²ₚψidx)), zeros(J, J), zeros(D), zeros(D, D)
+    pᶠ = p isa Vector{Float64} ? p : collect(p)
     for m in 1:Mp1
         a .= view(ΦᵀY, m, :)
         Ω .= c .* view(T, :, m, :) .* σ'
-        @views ∇²ₚψ!(vals, X[m,:], p, tt[m], a, Ω)
+        @views _callψ!(∇²ₚψ!, vals, X[m,:], pᶠ, tt[m], a, Ω)
         for (k, l) in enumerate(∇²ₚψidx)
             H[l] += vals[k]
         end

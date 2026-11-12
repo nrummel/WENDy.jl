@@ -21,6 +21,8 @@ The forward solves need OrdinaryDiffEq.jl, which WENDy only loads on request: ru
 - Mp1::Int : number of time points
 - u₀::AbstractVector{<:Real} : initial condition taken from the data, U[1,:] (the initial guess for u₀ when fsU0Free)
 - params::WENDyParameters : default parameters for solve
+- ∇ₓf!, ∂ₜf! : symbolic state jacobian ∇ₓf!(out, u, p, t) (D x D) and time gradient ∂ₜf!(out, u, p, t) (length D) of f!,
+  handed to the forward solver instead of its internal autodiff; built only when WENDy._OE_SYMBOLIC[] (else nothing)
 """
 struct OutputErrorProblem
     tt::AbstractVector{<:Real}
@@ -31,13 +33,24 @@ struct OutputErrorProblem
     Mp1::Int
     u₀::AbstractVector{<:Real}
     params::WENDyParameters
+    ∇ₓf!::Union{Nothing,Function}
+    ∂ₜf!::Union{Nothing,Function}
+end
+""" (private) Build the time gradient ∂f/∂t of the rhs f!(du, u, p, t), in place ∂ₜf!(out, u, p, t) """
+function _get∂ₜf(f!::Function, D::Int, J::Int)
+    @variables p[1:J] x[1:D] t
+    dx = Vector(undef, D)
+    f!(dx, x, p, t)
+    ∂ₜf = [Symbolics.derivative(dxd, t) for dxd in dx]
+    return _build(∂ₜf, x, p, t)[end]
 end
 function OutputErrorProblem(tt::AbstractVector{<:Real}, U::AbstractVecOrMat{<:Real}, f!::Function, J::Int; params::WENDyParameters=WENDyParameters())
     isnothing(Base.get_extension(@__MODULE__, :WENDyOrdinaryDiffEqExt)) &&
         error("OutputErrorProblem solves the ODE with OrdinaryDiffEq.jl: run `using OrdinaryDiffEq` first")
     U = U isa AbstractVector ? reshape(U, length(U), 1) : U
     Mp1, D = size(U)
-    OutputErrorProblem(tt, U, f!, J, D, Mp1, U[1,:], params)
+    ∇ₓf!, ∂ₜf! = _OE_SYMBOLIC[] ? (_get∇ₓf(f!, D, J), _get∂ₜf(f!, D, J)) : (nothing, nothing)
+    OutputErrorProblem(tt, U, f!, J, D, Mp1, U[1,:], params, ∇ₓf!, ∂ₜf!)
 end
 # Û(tt; p, u₀), the (Mp1 x D) forward solve; defined in ext/WENDyOrdinaryDiffEqExt.jl
 function _forwardSolve end

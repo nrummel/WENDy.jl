@@ -1,3 +1,13 @@
+## Compile-latency switches (experimental, branch compile-latency). They are read when a problem is built, so set them
+## before WENDyProblem / OutputErrorProblem:
+##   _CSE[]          build_function(...; cse=true) for every generated function
+##   _WRAP[]         wrap the generated functions in FunctionWrappers (fixed Float64 signatures), so the time loops are
+##                   compiled once rather than once per problem
+##   _OE_SYMBOLIC[]  give the forward solver of OutputErrorProblem the symbolic state jacobian of f!
+const _CSE = Ref(false)
+const _WRAP = Ref(false)
+const _OE_SYMBOLIC = Ref(false)
+_build(ex, args...) = build_function(ex, args...; expression=false, cse=_CSE[])
 """
 (private) Build a function for the the rhs specialized to 
 the case of lognormal noise. This means the original rhs changes to 
@@ -22,7 +32,7 @@ end
 function _getf(f!::Function, D::Int, J::Int, noiseDist::Type{<:Distribution})
     @variables p[1:J] x[1:D] t
     f_sym = _getf_sym(f!, D, J, noiseDist)
-    _,f! = build_function(f_sym, x, p, t;expression=false)
+    _,f! = _build(f_sym, x, p, t)
     return f!
 end
 """ Build a function for the jacobian wrt to the parameters of the rhs """ 
@@ -31,7 +41,7 @@ function _get∇ₚf(f!::Function, D::Int, J::Int)
     dx = Vector(undef, D)
     f!(dx, x, p, t)
     ∇ₚf = jacobian(dx, p)
-    return build_function(∇ₚf, x, p, t; expression=false)[end]
+    return _build(∇ₚf, x, p, t)[end]
 end
 """ Build a function for the jacobian wrt to the state of the rhs"""
 function _get∇ₓf(f!::Function, D::Int, J::Int) 
@@ -39,7 +49,7 @@ function _get∇ₓf(f!::Function, D::Int, J::Int)
     dx = Vector(undef, D)
     f!(dx, x, p, t)
     ∇ₓf = jacobian(dx, x)
-    return build_function(∇ₓf, x,p,t; expression=false)[end]
+    return _build(∇ₓf, x, p, t)[end]
 end
 """ Build a function for the jacobian wrt to the parameters of the jacobian wrt to the state of the rhs"""
 function _get∇ₚ∇ₓf(f!::Function, D::Int, J::Int)
@@ -48,7 +58,7 @@ function _get∇ₚ∇ₓf(f!::Function, D::Int, J::Int)
     f!(dx, x, p, t)
     ∇ₓf = jacobian(dx, x)
     ∇ₚ∇ₓf = jacobian(∇ₓf, p)
-    build_function(∇ₚ∇ₓf, x,p,t; expression=false)[end]
+    _build(∇ₚ∇ₓf, x, p, t)[end]
 end
 """
 The p-hessian of the scalar ψ(x, p, t; a, Ω) = ⟨a, f(x, p, t)⟩ + ⟨Ω, ∇ₓf(x, p, t)⟩ (a ∈ ℝᴰ, Ω ∈ ℝᴰˣᴰ), which is all the
@@ -69,5 +79,5 @@ function _get∇²ₚψ(f!::Function, D::Int, J::Int)
     idx = [LinearIndices((J, J))[i, j] for (i, j, _) in entries]
     # nothing to write when f is linear in p (as a nonlinear weak form)
     isempty(entries) && return ((out, x, p, t, a, Ω) -> nothing), idx
-    build_function([e[3] for e in entries], x, p, t, a, Ω; expression=false)[end], idx
+    _build([e[3] for e in entries], x, p, t, a, Ω)[end], idx
 end
