@@ -57,7 +57,7 @@ WENDy.jl allows for the user to make use of several different solvers. This is d
 - `HybridTrustRegionOELS(oe)` : Runs `TrustRegion()` and then uses the result to initialize the output error least squares problem `oe` (see below).
 
 ## Output Error Least Squares
-A common technique is to minimize the output error, i.e. the difference between the data and a forward solve of the ODE. WENDy.jl provides a simple forward solve least squares solver for comparison as its own problem type. The forward solves use [OrdinaryDiffEq.jl](https://github.com/SciML/OrdinaryDiffEq.jl), which WENDy.jl only loads on request, so it must be loaded first:
+A common technique is to minimize the output error, i.e. the difference between the data and a forward solve of the ODE. WENDy.jl provides a simple forward solve least squares solver for comparison as its own problem type. The forward solves use [OrdinaryDiffEq.jl](https://github.com/SciML/OrdinaryDiffEq.jl), which WENDy.jl only loads on request, so it must be loaded first (`using OrdinaryDiffEqRosenbrock` is enough for the default solver, Rodas5P):
 ```julia
 using OrdinaryDiffEq
 oe = OutputErrorProblem(tt, U, f!, J; params=params)

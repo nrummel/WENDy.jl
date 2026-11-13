@@ -16,6 +16,8 @@ jobs:
     name: Julia ${{ matrix.version }} - ${{ matrix.os }} - ${{ matrix.arch }} - ${{ github.event_name }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
+    # nightly breaks upstream now and then (a dependency that fails to precompile); report it without failing CI
+    continue-on-error: ${{ matrix.version == 'nightly' }}
     permissions: # needed to allow julia-actions/cache to proactively delete old caches that it has created
       actions: write
       contents: read
@@ -39,3 +41,8 @@ jobs:
       - uses: julia-actions/cache@v2
       - uses: julia-actions/julia-buildpkg@v1
       - uses: julia-actions/julia-runtest@v1
+        with:
+          # the defaults (coverage, --check-bounds=yes) need their own precompiled image of every dependency, so the
+          # cached and just-built ones go unused; nothing uploads coverage
+          coverage: false
+          check_bounds: auto

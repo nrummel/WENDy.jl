@@ -5,12 +5,12 @@ The logistic growth equation is a well-known differential equation that has an e
 ```math 
 \dot{u}=p_1 u+p_2 u^2
 ```
-For the sake of the example we will generate data by numerically solving the ODE, and then corrupting with noise. We do this through the standard library and OrdinaryDiffEq.jl. 
+For the sake of the example we will generate data by numerically solving the ODE, and then corrupting with noise. We do this through the standard library and the Rosenbrock solvers of OrdinaryDiffEq.jl (`using OrdinaryDiffEq` works just as well). 
 
 ```@example logistic
 using Random, LinearAlgebra
-using OrdinaryDiffEq: ODEProblem
-using OrdinaryDiffEq: solve as solve_ode
+using OrdinaryDiffEqRosenbrock: ODEProblem, Rodas5P
+using OrdinaryDiffEqRosenbrock: solve as solve_ode
 using WENDy
 ```
 
@@ -29,7 +29,7 @@ J = length(pstar)
 
 ode = ODEProblem(f!, u₀, tRng, pstar)
 tt = tRng[1]:dt:tRng[end]
-Ustar = reduce(vcat, um for um in solve_ode(ode, saveat=dt).u)
+Ustar = reduce(vcat, um for um in solve_ode(ode, Rodas5P(); saveat=dt).u)
 nr = 0.1 # noise ratio
 U = Ustar + nr*randn(size(Ustar)) # corrupting the data with noise
 nothing # hide
@@ -60,7 +60,7 @@ This problem can be visualized by looking at the data, the true solution of the 
 ```@example logistic
 using PlotlyJS
 odeprob = ODEProblem(f!, u₀, tRng, phat.p̂)
-sol = solve_ode(odeprob; saveat=dt)
+sol = solve_ode(odeprob, Rodas5P(); saveat=dt)
 Uhat = reduce(vcat, um' for um in sol.u)
 plot(
     [
@@ -84,7 +84,7 @@ nothing # hide
 ```
 
 ### Comparing to an Output Error Method
-One can compare the weak-form methods to the standard Output Error Least Squares approach by building an `OutputErrorProblem` and then calling `solve`. The forward solves use OrdinaryDiffEq.jl, which is already loaded above to generate the data. This will build the necessary loss with automatic differentiation to provide a Jacobian of the residual. Then, the will solve the code via the Levenberg–Marquardt solver. Note that the output error solver needs to optimize both the initial condition and the parameters for the best results. Thus, this solver returns both an estimate for initial condition $\hat{u}(t_0)$ and the parameters $\hat{p}$.
+One can compare the weak-form methods to the standard Output Error Least Squares approach by building an `OutputErrorProblem` and then calling `solve`. The forward solves use OrdinaryDiffEq.jl (its Rosenbrock solvers are already loaded above to generate the data). This will build the necessary loss with automatic differentiation to provide a Jacobian of the residual. Then, the will solve the code via the Levenberg–Marquardt solver. Note that the output error solver needs to optimize both the initial condition and the parameters for the best results. Thus, this solver returns both an estimate for initial condition $\hat{u}(t_0)$ and the parameters $\hat{p}$.
 
 ```@example logistic
 oeProb = WENDy.OutputErrorProblem(tt,U,f!, J)
@@ -108,8 +108,8 @@ We again can generate data to see how WENDy can estimate parameters. In this cas
 using Random, Logging, LinearAlgebra # hide
 using PlotlyJS # hide
 using WENDy # hide
-using OrdinaryDiffEq: ODEProblem # hide
-using OrdinaryDiffEq: solve as solve_ode # hide
+using OrdinaryDiffEqRosenbrock: ODEProblem, Rodas5P # hide
+using OrdinaryDiffEqRosenbrock: solve as solve_ode # hide
 ## Define rhs, ic, time domain, and length of parameters
 function f!(du, u, p, t)
     du[1] = p[1] / (2.15 + p[3] * u[3]^p[4]) - p[2] * u[1]
@@ -127,7 +127,7 @@ D     = length(u₀)
 ode = ODEProblem(f!, u₀, tRng, pstar)
 tt    = tRng[1]:dt:tRng[end]
 Mp1   = length(tt)
-Ustar = reduce(vcat, um' for um in solve_ode(ode, saveat=dt).u)
+Ustar = reduce(vcat, um' for um in solve_ode(ode, Rodas5P(); saveat=dt).u)
 nr   = 0.05
 U     = Ustar .* exp.(nr*randn(size(Ustar))) # LogNormal Noise
 nothing # hide
@@ -154,7 +154,7 @@ nothing # hide
 We can visualize the quality of our estimated parameters by forward simulating and then plotting. 
 ```@example goodwin
 odeprob = ODEProblem(f!, u₀, tRng, phat.p̂)
-sol = solve_ode(odeprob; saveat=dt)
+sol = solve_ode(odeprob, Rodas5P(); saveat=dt)
 Uhat = reduce(vcat, um' for um in sol.u)
 colors = ["red", "blue", "green"]
 plot(
@@ -181,8 +181,8 @@ Again we can build test data by first simulating with true parameters, and then 
 using Random, Logging, LinearAlgebra # hide
 using PlotlyJS # hide
 using WENDy # hide
-using OrdinaryDiffEq: ODEProblem # hide
-using OrdinaryDiffEq: solve as solve_ode # hide
+using OrdinaryDiffEqRosenbrock: ODEProblem, Rodas5P # hide
+using OrdinaryDiffEqRosenbrock: solve as solve_ode # hide
 ## Define rhs, ic, time domain, and length of parameters
 function f!(du, u, p, t)
     β = (p[1] * exp(-p[1] * p[2])) / (1 - exp(-p[1] * p[2]))
@@ -200,7 +200,7 @@ D     = length(u₀)
 ode = ODEProblem(f!, u₀, tRng, pstar)
 tt    = tRng[1]:dt:tRng[end]
 Mp1   = length(tt)
-Ustar = reduce(vcat, um' for um in solve_ode(ode, saveat=dt).u)
+Ustar = reduce(vcat, um' for um in solve_ode(ode, Rodas5P(); saveat=dt).u)
 nr   = 0.1
 U     = Ustar .* exp.(nr*randn(size(Ustar)))
 nothing # hide
@@ -235,7 +235,7 @@ phat = solve(wendyProb, p₀)
 We can visualize the quality of our estimated parameters by forward simulating and then plotting. 
 ```@example sir
 odeprob = ODEProblem(f!, u₀, tRng, phat.p̂)
-sol = solve_ode(odeprob; saveat=dt)
+sol = solve_ode(odeprob, Rodas5P(); saveat=dt)
 Uhat = reduce(vcat, um' for um in sol.u)
 colors = ["red", "blue", "green"]
 plot(

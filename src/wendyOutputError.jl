@@ -44,7 +44,8 @@ The output error least squares problem: find p (and optionally u₀) that minimi
 the ODE du/dt = f(u, p, t). This is the common alternative to the weak form, provided for comparison and for the
 hybrid solver HybridTrustRegionOELS.
 
-The forward solves need OrdinaryDiffEq.jl, which WENDy only loads on request: run `using OrdinaryDiffEq` first.
+The forward solves need OrdinaryDiffEq.jl, which WENDy only loads on request: run `using OrdinaryDiffEq` first
+(`using OrdinaryDiffEqRosenbrock` is enough for the default solver, Rodas5P).
 
 ## Arguments
 - tt::AbstractVector{<:Real} : vector of times (equispaced)
@@ -74,7 +75,7 @@ struct OutputErrorProblem
 end
 function OutputErrorProblem(tt::AbstractVector{<:Real}, U::AbstractVecOrMat{<:Real}, f!::Function, J::Int; params::WENDyParameters=WENDyParameters())
     isnothing(Base.get_extension(@__MODULE__, :WENDyOrdinaryDiffEqExt)) &&
-        error("OutputErrorProblem solves the ODE with OrdinaryDiffEq.jl: run `using OrdinaryDiffEq` first")
+        error("OutputErrorProblem solves the ODE with OrdinaryDiffEq.jl: run `using OrdinaryDiffEq` (or `using OrdinaryDiffEqRosenbrock`) first")
     U = U isa AbstractVector ? reshape(U, length(U), 1) : U
     Mp1, D = size(U)
     OutputErrorProblem(tt, U, f!, J, D, Mp1, U[1,:], params, OESensitivity(f!, D, J))

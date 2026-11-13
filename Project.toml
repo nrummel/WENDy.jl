@@ -25,10 +25,10 @@ Symbolics = "0c5d862f-8b57-4792-8d23-62f2024744c7"
 Tullio = "bc48ee85-29a4-5162-ae0b-a64e1601d4bc"
 
 [weakdeps]
-OrdinaryDiffEq = "1dea7af3-3e70-54e6-95c3-0bf5283fa5ed"
+OrdinaryDiffEqRosenbrock = "43230ef6-c299-4910-a778-202eb28ce4ce"
 
 [extensions]
-WENDyOrdinaryDiffEqExt = "OrdinaryDiffEq"
+WENDyOrdinaryDiffEqExt = "OrdinaryDiffEqRosenbrock"
 
 [compat]
 AdaptiveRegularization = "0.2"
@@ -44,7 +44,7 @@ Logging = "1"
 ManualNLPModels = "0.2"
 NonlinearSolve = "4"
 Optim = "2"
-OrdinaryDiffEq = "7"
+OrdinaryDiffEqRosenbrock = "2"
 Statistics = "1"
 Symbolics = "7"
 Tullio = "0.3.9"

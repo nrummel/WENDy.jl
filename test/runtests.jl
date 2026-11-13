@@ -1,7 +1,7 @@
 using Test, WENDy, LinearAlgebra, Random, Logging, Statistics
 using WENDy: Normal, LogNormal
 using ForwardDiff
-using OrdinaryDiffEq: ODEProblem, Rodas5P, solve as solve_ode
+using OrdinaryDiffEqRosenbrock: ODEProblem, Rodas5P, solve as solve_ode
 
 ## Reference weak negative log-likelihood written directly from its definition, generic in the element type so
 ## ForwardDiff can differentiate it. It shares only the L(p) and r(p) kernels with the package.

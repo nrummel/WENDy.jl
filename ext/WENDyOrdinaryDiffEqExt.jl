@@ -1,9 +1,10 @@
-## Forward solves for the output error least squares problem (see OutputErrorProblem), loaded with OrdinaryDiffEq
+## Forward solves for the output error least squares problem (see OutputErrorProblem). Loaded with
+## OrdinaryDiffEqRosenbrock, the sublibrary with the default Rodas5P, which `using OrdinaryDiffEq` also loads.
 module WENDyOrdinaryDiffEqExt
     using WENDy: WENDy, OutputErrorProblem, WENDyParameters
-    using OrdinaryDiffEq: ODEProblem, ODEFunction, Rodas5P, DEVerbosity, SciMLLogging
-    import OrdinaryDiffEq
-    using OrdinaryDiffEq: SciMLBase
+    using OrdinaryDiffEqRosenbrock: ODEProblem, ODEFunction, Rodas5P, SciMLBase
+    import OrdinaryDiffEqRosenbrock as OrdinaryDiffEq
+    using OrdinaryDiffEqRosenbrock.OrdinaryDiffEqCore: DEVerbosity, SciMLLogging
     using LinearAlgebra: I
 
     # params.fsAlg = nothing uses Rodas5P, recommended for small stiff systems at tight tolerances
