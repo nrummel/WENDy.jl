@@ -229,10 +229,18 @@ end
 (K·Mp1·D·KD for Q, then one BLAS product of Φ with Q, instead of the KD × Mp1D × KD product with a formed ∂ⱼL).
 """
 function _∂L_Mᵀ(Φ::AbstractMatrix, Bⱼ::AbstractArray{<:Real,3}, M::AbstractMatrix, dims::WENDyDims)
+    (; D, Mp1, KD) = dims
+    T = promote_type(eltype(Φ), eltype(Bⱼ), eltype(M))
+    _∂L_Mᵀ!(Matrix{T}(undef, KD, KD), Array{T}(undef, Mp1, D, KD), Φ, Bⱼ, M, dims)
+end
+"""_∂L_Mᵀ into out (KD × KD), with Q (Mp1 × D × KD) as workspace: no allocation, for loops over j"""
+function _∂L_Mᵀ!(out::Matrix, Q::Array{<:Real,3}, Φ::AbstractMatrix, Bⱼ::AbstractArray{<:Real,3}, M::AbstractMatrix,
+        dims::WENDyDims)
     (; K, D, Mp1, KD) = dims
     M₃ = reshape(M, KD, Mp1, D)
-    @tullio Q[m,d2,r] := Bⱼ[d2,d1,m] * M₃[r,m,d1]
-    reshape(Φ * reshape(Q, Mp1, D*KD), KD, KD)
+    @tullio Q[m,d2,r] = Bⱼ[d2,d1,m] * M₃[r,m,d1]
+    mul!(reshape(out, K, D*KD), Φ, reshape(Q, Mp1, D*KD))
+    out
 end
 """E = Φ ⊗ I_D as a KD × Mp1D matrix, E[(k,d₂),(m,d₂′)] = Φ[k,m]δ(d₂,d₂′), so that ∂ⱼL = E ∘ blockdiag(B[:,:,j,m])"""
 function _ΦI(Φ::AbstractMatrix, dims::WENDyDims)
@@ -434,7 +442,8 @@ The hessian ∇²ℓ = ∇²m + ∇²logdet. With y = S⁻¹r, vⱼ = ∂ⱼLᵀ
 ∇²m only needs solves with J right hand sides (S⁻¹∇r, S⁻¹W), and is the approximate hessian (approxHessian = true).
 For ⟨S⁻¹∂ᵢL, ∂ⱼL⟩, ∂ᵢL = E ∘ blockdiag(B[:,:,i,m]) with E = Φ ⊗ I_D, so one solve Z = S⁻¹E (Mp1D right hand sides)
 replaces the J solves S⁻¹∂ᵢL: ⟨S⁻¹∂ᵢL, ∂ⱼL⟩ = ∑ Ẑ[e,m,d₂] B[d₂,d₁,i,m] B[e,d₁,j,m] with Ẑ = _ΦᵀM(Φ, Z). The J
-matrices Aⱼ (KD × KD) take one product through Φ (_∂L_Mᵀ) and one solve each. The terms with second derivatives
+matrices ∂ⱼS take one product through Φ (_∂L_Mᵀ!) and one triangular solve each, and with the Cholesky factor
+S = UᵀU the trace is ½⟨Cᵢ, Cⱼ⟩ for the symmetric Cⱼ = U⁻ᵀ∂ⱼS U⁻¹, one syrk (see _halfTrS⁻¹∂S²). The terms with second derivatives
 (∂ᵢⱼrᵀy and ⟨∂ᵢⱼL, ·⟩, see _∂²ψ) are zero for a linear weak form; they are linear in their second argument, so
 ∇²ℓ takes ⟨∂ᵢⱼL, S⁻¹L - y(Lᵀy)ᵀ⟩ in one contraction instead of one for m and one for logdet.
 """
@@ -460,12 +469,45 @@ function _∇²logdet₁(c::FactorCovariance, ws::WENDyWorkspace)
     Ẑ = _ΦᵀM(Φ, Sfact \ _ΦI(Φ, dims), dims) # Ẑ[e,m,d₂] = ∑ₖ Φ[k,m] (S⁻¹E)[(k,e),(m,d₂)]
     @tullio ẐB[e,m,d1,i] := Ẑ[e,m,d2] * B[d2,d1,i,m]
     @tullio H[i,j] := ẐB[e,m,d1,i] * B[e,d1,j,m] # ⟨S⁻¹∂ᵢL, ∂ⱼL⟩
-    A = Array{Float64}(undef, KD, KD, J) # A[:,:,j] = S⁻¹∂ⱼS
+    # Nⱼ = ∂ⱼL Lᵀ, so ∂ⱼS = (1-δ)(Nⱼ + Nⱼᵀ); with S = UᵀU, NⱼU⁻¹ = ∂ⱼL L̂ᵀ for L̂ = U⁻ᵀL (one solve for every j)
+    U = Sfact isa Cholesky ? Sfact.U : nothing
+    L̂ = isnothing(U) ? L : ldiv!(U', copy(L))
+    Q = Array{Float64}(undef, dims.Mp1, dims.D, KD)
+    δ̃ * H - _halfTrS⁻¹∂S²(Sfact, U, δ̃, dims, (out, j) -> _∂L_Mᵀ!(out, Q, Φ, view(B,:,:,j,:), L̂, dims))
+end
+"""
+½tr(S⁻¹∂ᵢS S⁻¹∂ⱼS) for every i, j (J × J), where ∂ⱼS = (1-δ)(Nⱼ + Nⱼᵀ) and N!(out, j) writes NⱼU⁻¹ into out (KD × KD)
+when S = UᵀU (Cholesky, U given), or Nⱼ when S was factorized by LU (U = nothing).
+With the Cholesky factor Cⱼ = U⁻ᵀ∂ⱼS U⁻¹ = (1-δ)(Gⱼ + Gⱼᵀ), Gⱼ = U⁻ᵀNⱼU⁻¹, is symmetric and
+tr(S⁻¹∂ᵢS S⁻¹∂ⱼS) = tr(CᵢCⱼ) = ⟨Cᵢ, Cⱼ⟩, so the J × J matrix is one syrk on the stacked Cⱼ. Otherwise Aⱼ = S⁻¹∂ⱼS
+and tr(AᵢAⱼ) = ⟨Aᵢᵀ, Aⱼ⟩, one gemv per i. The stacked Cⱼ (or Aⱼ), J·KD² floats, are the only large array.
+"""
+function _halfTrS⁻¹∂S²(Sfact::Factorization, U, δ̃::Real, dims::WENDyDims, N!)
+    (; J, KD) = dims
+    C = Array{Float64}(undef, KD, KD, J)
+    N = Matrix{Float64}(undef, KD, KD)
     for j in 1:J
-        ∂ⱼLLᵀ = _∂L_Mᵀ(Φ, view(B,:,:,j,:), L, dims)
-        A[:,:,j] = Sfact \ (δ̃ .* (∂ⱼLLᵀ .+ ∂ⱼLLᵀ'))
+        N!(N, j)
+        isnothing(U) || ldiv!(U', N) # Gⱼ
+        Cⱼ = view(C,:,:,j)
+        Cⱼ .= δ̃ .* (N .+ N')
+        if isnothing(U)
+            ldiv!(Sfact, copyto!(N, Cⱼ))
+            copyto!(Cⱼ, N) # Aⱼ
+        end
     end
-    δ̃ * H - [dot(transpose(view(A,:,:,i)), view(A,:,:,j)) for i in 1:J, j in 1:J] / 2
+    C₂ = reshape(C, KD^2, J)
+    T = zeros(J, J)
+    if isnothing(U)
+        for i in 1:J
+            permutedims!(N, view(C,:,:,i), (2, 1)) # Aᵢᵀ
+            mul!(view(T,i,:), C₂', vec(N), 1/2, 0)
+        end
+        T
+    else
+        BLAS.syrk!('U', 'T', 1/2, C₂, 0.0, T)
+        LinearAlgebra.copytri!(T, 'U')
+    end
 end
 # With the blocks ∂ⱼS = (1-δ)(Qⱼ + Qⱼᵀ), vᵢᵀvⱼ = ⟨yyᵀ, L₁ᵢL₁ⱼᵀ⟩ and ⟨S⁻¹∂ᵢL, ∂ⱼL⟩ = ⟨S⁻¹, L₁ᵢL₁ⱼᵀ⟩ (blocks i+1, j+1)
 function _∇²m₁(c::BlockCovariance, ws::WENDyWorkspace)
@@ -482,8 +524,12 @@ function _∇²logdet₁(c::BlockCovariance, ws::WENDyWorkspace)
     (; dims) = wform
     (; J) = dims
     δ̃ = 1-diagReg
-    A = stack((Qⱼ = _Q(c, j, dims); Sfact \ (δ̃ .* (Qⱼ .+ Qⱼ'))) for j in 1:J) # A[:,:,j] = S⁻¹∂ⱼS
-    δ̃ * _C_S⁻¹(c, ws)[2:end,2:end] - [dot(transpose(view(A,:,:,i)), view(A,:,:,j)) for i in 1:J, j in 1:J] / 2
+    U = Sfact isa Cholesky ? Sfact.U : nothing
+    N! = function (out, j) # Qⱼ, times U⁻¹ with the Cholesky factor
+        mul!(vec(out), view(c.P,:,:,j+1), c.q)
+        isnothing(U) ? out : rdiv!(out, U)
+    end
+    δ̃ * _C_S⁻¹(c, ws)[2:end,2:end] - _halfTrS⁻¹∂S²(Sfact, U, δ̃, dims, N!)
 end
 ## ... and the terms with second derivatives (subscript 2), for m and for ℓ (zero for a linear weak form)
 _∇²m₂(wf::LinearWeakForm, c::CovarianceStrategy, ws::WENDyWorkspace) = zeros(wf.dims.J, wf.dims.J)
