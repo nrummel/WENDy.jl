@@ -48,7 +48,7 @@ WENDy makes use of several different optimization routines. For the default solv
 - `optimTimelimit` : (Default 200.0) Time limit in seconds
 
 ## Solver Selection 
-WENDy.jl allows for the user to make use of several different solvers. This is done through the keyword argument `solve(wendyProblem, p₀ ; solver = ...)` in the `solve` . 
+WENDy.jl allows for the user to make use of several different solvers. This is done through the keyword argument `solve(wendyProblem, p₀; alg = ...)` in [`solve`](@ref). 
 - For the maximum likelihood estimator one should select either:
     - `TrustRegion()` : (Default) Allows for both constrained and unconstrained problems
     - `ARCqK()` : Only for the unconstrained, but may lead to a different solution
@@ -61,7 +61,9 @@ A common technique is to minimize the output error, i.e. the difference between 
 ```julia
 using OrdinaryDiffEq
 oe = OutputErrorProblem(tt, U, f!, J; params=params)
-ŵ = solve(oe, p₀) # [p̂; û₀] when params.fsU0Free (the default), otherwise p̂
+sol = solve(oe, p₀)
+sol.p̂  # estimated parameters
+sol.û₀ # estimated initial condition (nothing unless params.fsU0Free, the default)
 ```
 
 ## Evaluating the Weak Form Likelihood

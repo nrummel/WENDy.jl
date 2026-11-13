@@ -59,7 +59,7 @@ nothing # hide
 This problem can be visualized by looking at the data, the true solution of the ODE and the solution given by the estimated parameters.
 ```@example logistic
 using PlotlyJS
-odeprob = ODEProblem(f!, u₀, tRng, phat)
+odeprob = ODEProblem(f!, u₀, tRng, phat.p̂)
 sol = solve_ode(odeprob; saveat=dt)
 Uhat = reduce(vcat, um' for um in sol.u)
 plot(
@@ -88,9 +88,10 @@ One can compare the weak-form methods to the standard Output Error Least Squares
 
 ```@example logistic
 oeProb = WENDy.OutputErrorProblem(tt,U,f!, J)
-uhatphat_OE = WENDy.solve(oeProb, p₀) 
-u0hat_OE = uhatphat_OE[J+1:end]
-phat_OE = uhatphat_OE[1:J]
+sol_OE = solve(oeProb, p₀)
+phat_OE = sol_OE.p̂  # estimated parameters
+u0hat_OE = sol_OE.û₀ # estimated initial condition
+(phat_OE, u0hat_OE)
 ```
 
 ## Goodwin 
@@ -152,7 +153,7 @@ nothing # hide
 ```
 We can visualize the quality of our estimated parameters by forward simulating and then plotting. 
 ```@example goodwin
-odeprob = ODEProblem(f!, u₀, tRng, phat)
+odeprob = ODEProblem(f!, u₀, tRng, phat.p̂)
 sol = solve_ode(odeprob; saveat=dt)
 Uhat = reduce(vcat, um' for um in sol.u)
 colors = ["red", "blue", "green"]
@@ -233,7 +234,7 @@ phat = solve(wendyProb, p₀)
 ```
 We can visualize the quality of our estimated parameters by forward simulating and then plotting. 
 ```@example sir
-odeprob = ODEProblem(f!, u₀, tRng, phat)
+odeprob = ODEProblem(f!, u₀, tRng, phat.p̂)
 sol = solve_ode(odeprob; saveat=dt)
 Uhat = reduce(vcat, um' for um in sol.u)
 colors = ["red", "blue", "green"]

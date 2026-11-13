@@ -56,10 +56,10 @@ p₀ = [3.0, 0.1, 4, 12, 0.1, 0.1, 0.1, 0.1]
 relErr = norm(p₀ - pstar) / norm(pstar)
 @info "Initializing with Relative Coefficient Error = $(relErr)"
 @time phat = solve(wendyProb, p₀)
-relErr = norm(phat - pstar) / norm(pstar)
+relErr = norm(phat.p̂ - pstar) / norm(pstar)
 @info "Relative Coefficient Error = $(relErr)"
 ## plot the resutls 
-odeprob = ODEProblem(f!, u₀, tRng, phat)
+odeprob = ODEProblem(f!, u₀, tRng, phat.p̂)
 sol = solve_ode(odeprob; saveat=dt)
 Uhat = reduce(vcat, um' for um in sol.u)
 colors = ["red", "blue", "green"]
