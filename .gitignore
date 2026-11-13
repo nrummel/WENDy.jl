@@ -9,7 +9,6 @@
 *.pkg
 __pycache__/
 *.py[cod]
-*.*ml
 chromedriver
 *.bson
 *.out
@@ -23,5 +22,3 @@ docs/build/
 docs/Manifest.toml
 Manifest.toml
 examples/Manifest.toml
-paper/.git
-paper/.gitignore

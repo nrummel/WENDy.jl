@@ -3,6 +3,9 @@ uuid = "d405da13-e5c5-4ff7-999e-699e6f93cd5d"
 authors = ["Nicholas Rummel"]
 version = "2.0.0"
 
+[workspace]
+projects = ["test", "docs", "examples", "benchmark"]
+
 [deps]
 AdaptiveRegularization = "79adfba0-1eab-50d9-8528-0589417a2bfe"
 Arpack = "7d9fca2a-8960-54d3-9f78-7d1dccf2cb97"
@@ -36,10 +39,13 @@ ForwardDiff = "1"
 FunctionWrappers = "1.1"
 ImageFiltering = "0.7.12"
 JSOSolvers = "0.14"
+LinearAlgebra = "1"
+Logging = "1"
 ManualNLPModels = "0.2"
 NonlinearSolve = "4"
 Optim = "2"
 OrdinaryDiffEq = "7"
+Statistics = "1"
 Symbolics = "7"
 Tullio = "0.3.9"
 julia = "1.11"

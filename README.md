@@ -15,6 +15,17 @@ From the Julia REPL, type `]` to enter the Pkg REPL mode and run:
 pkg> add WENDy
 ```
 
+## Development
+The package, `test/`, `docs/`, `examples/` and `benchmark/` form one [Pkg workspace](https://pkgdocs.julialang.org/v1/toml-files/#The-[workspace]-section) (Julia 1.12 or later): they share a single `Manifest.toml` at the repository root, while the plotting and documentation packages stay out of WENDy's own dependencies. From the repository root:
+
+```
+julia --project -e 'using Pkg; Pkg.instantiate()'   # once, for every subproject
+julia --project=examples examples/exampleLogistic.jl
+julia --project=docs docs/make.jl                   # or: julia --project=docs -e 'using WENDy, LiveServer; servedocs()'
+```
+
+On Julia 1.11 each subproject is a separate environment: run `Pkg.instantiate()` in it (its `[sources]` entry points it at this checkout).
+
 ## Current features
 - Estimation of parameters for ordinary differential equations
 - Supports: 
