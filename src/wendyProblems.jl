@@ -16,6 +16,7 @@ For the output error (forward solve) least squares problem see OutputErrorProble
         noiseDist::Type{<:Distribution}=Normal, 
         params::WENDyParameters=WENDyParameters(), 
         constraints::Union{Nothing,AbstractVector{Tuple{<:Real,<:Real}}}=nothing, 
+        σ::Union{Nothing,Real,AbstractVector{<:Real}}=nothing,
         ll::LogLevel=Warn
     )
 ## Arguments 
@@ -28,17 +29,22 @@ For the output error (forward solve) least squares problem see OutputErrorProble
 - noiseDist::Type{<:Distribution}=Normal : (optional) specify the distribution of the measurement noise. Choose either Normal for additive Gaussian noise of LogNormal for multiplicative LogNormal noise.
 - params::WENDyParameters : (optional) struct of hyper-parameters for the WENDy Algorithm (see the doc for WENDyParameters)
 - constraints=nothing : (optional) Linear box constraints for each parameter, ∀j ∈ [1, ⋯,J], ℓⱼ ≤ pⱼ ≤ uⱼ. Accepts constraints as a list of tuples, [(ℓ₁,u₁), ⋯]. Note: this only is compatible with the TrustRegion solver.
+- σ=nothing : (optional) the exact noise level, a vector with one standard deviation per state variable or a scalar
+    for the same one in every state. When given, it is used everywhere in place of the estimate (L, S and every solver
+    and covariance built on them) and the noise is not estimated. With noiseDist = LogNormal it is the standard deviation
+    of the log noise (of log U), as the estimate would be. It must be positive and have length D.
 - ll::LogLevel=Warn : (optional) see additional algorithm information by setting ll=Info
 
 It can also be built from data that was already transformed and its weak form (e.g. to rebuild a saved problem) with 
-    WENDyProblem(tt, X, Φ, Φ̇, σ, b, wform::WeakForm, params::WENDyParameters; noiseDist=Normal, constraints=nothing, ll=Warn)
-where wform = weakForm(f!, tt, X, Φ, Φ̇, σ, b, J; linearInParameters, noiseDist).
+    WENDyProblem(tt, X, Φ, Φ̇, σ, b, wform::WeakForm, params::WENDyParameters; noiseDist=Normal, constraints=nothing, σKnown=false, ll=Warn)
+where wform = weakForm(f!, tt, X, Φ, Φ̇, σ, b, J; linearInParameters, noiseDist). σKnown only records where σ came from.
 
 # Fields
 - dims::WENDyDims : the sizes D (state variables), J (parameters), Mp1 (time points), K (test functions) and KD = K*D
 - tt, X : times and data (X = log(U) for LogNormal noise, with nonpositive data removed)
 - Φ, Φ̇ : test function matrices Φ and Φ̇
-- σ : estimated noise level in each state variable
+- σ : noise level in each state variable, estimated from the data or given (the σ keyword)
+- σKnown : true when σ was given, false when it was estimated
 - b : -vec(V′X)
 - noiseDist : the noise model the problem was built for, Normal or LogNormal
 - constraints : vector of tuples containing linear constraints for each parameter
@@ -51,6 +57,7 @@ struct WENDyProblem
     Φ::Matrix{Float64}
     Φ̇::Matrix{Float64}
     σ::Vector{Float64}
+    σKnown::Bool # σ given by the user (true) or estimated from the data (false)
     b::Vector{Float64}
     noiseDist::Type{<:Distribution}
     constraints::Union{Nothing,AbstractVector{Tuple{<:Real,<:Real}}}
@@ -60,11 +67,12 @@ end
 function WENDyProblem(
     tt::AbstractVector{<:Real}, X::AbstractMatrix{<:Real}, Φ::AbstractMatrix{<:Real}, Φ̇::AbstractMatrix{<:Real}, 
     σ::AbstractVector{<:Real}, b::AbstractVector{<:Real}, wform::WeakForm, params::WENDyParameters; 
-    noiseDist::Type{<:Distribution}=Normal, constraints::Union{Nothing,AbstractVector{<:Tuple{<:Real,<:Real}}}=nothing, ll::LogLevel=Warn
+    noiseDist::Type{<:Distribution}=Normal, constraints::Union{Nothing,AbstractVector{<:Tuple{<:Real,<:Real}}}=nothing, 
+    σKnown::Bool=false, ll::LogLevel=Warn
 )
     with_logger(ConsoleLogger(stderr, ll)) do
         @info "  Building workspace"
-        WENDyProblem(wform.dims, tt, X, Φ, Φ̇, σ, b, noiseDist, constraints, WENDyWorkspace(wform, params))
+        WENDyProblem(wform.dims, tt, X, Φ, Φ̇, σ, σKnown, b, noiseDist, constraints, WENDyWorkspace(wform, params))
     end
 end
 # noise models: LogNormal noise is Normal noise on log(U), so only the data and rhs are transformed
@@ -76,6 +84,15 @@ function _transformData(::Type{LogNormal}, tt::AbstractVector{<:Real}, U::Abstra
     end
     tt[ix], log.(U[ix,:])
 end
+# the noise level: estimated from the (transformed) data, or the given one checked and expanded to one per state
+_noiseLevel(::Nothing, X::AbstractMatrix{<:Real}) = estimate_std(X)
+_noiseLevel(σ::Real, X::AbstractMatrix{<:Real}) = _noiseLevel(fill(σ, size(X, 2)), X)
+function _noiseLevel(σ::AbstractVector{<:Real}, X::AbstractMatrix{<:Real})
+    D = size(X, 2)
+    length(σ) == D || throw(DimensionMismatch("σ has length $(length(σ)), the data has D = $D state variables"))
+    all(s -> isfinite(s) && s > 0, σ) || throw(ArgumentError("σ must be positive and finite, got σ = $σ"))
+    Vector{Float64}(σ)
+end
 ## constructor
 function WENDyProblem(
     _tt::AbstractVector{<:Real}, 
@@ -86,21 +103,23 @@ function WENDyProblem(
     noiseDist::Type{<:Distribution}=Normal, 
     params::WENDyParameters=WENDyParameters(),
     constraints::Union{Nothing,AbstractVector{<:Tuple{<:Real,<:Real}}}=nothing,
+    σ::Union{Nothing,Real,AbstractVector{<:Real}}=nothing,
     ll::LogLevel=Warn
 )
     with_logger(ConsoleLogger(stderr, ll)) do
         @info "Building WENDyProblem"
         U = U isa AbstractVector ? reshape(U, length(U), 1) : U
-        @info "  Estimate the noise in each dimension"
         tt, X = _transformData(noiseDist, _tt, U)
-        σ = estimate_std(X)
+        σKnown = !isnothing(σ)
+        @info σKnown ? "  Use the given noise level in each dimension" : "  Estimate the noise in each dimension"
+        σ = _noiseLevel(σ, X)
         @info "  σ = $σ"
         Φ, Φ̇ = getTestFunctionMatrices(tt, X, params; ll=ll)
         @info "  Building the LHS to the residual"
         b = vec(-Φ̇ * X)
         @info "  Build the weak form from symbolic expressions of the ODE"
         wform = weakForm(_f!, tt, X, Φ, Φ̇, σ, b, J; linearInParameters=linearInParameters, noiseDist=noiseDist)
-        return WENDyProblem(tt, X, Φ, Φ̇, σ, b, wform, params; noiseDist=noiseDist, constraints=constraints, ll=ll)
+        return WENDyProblem(tt, X, Φ, Φ̇, σ, b, wform, params; noiseDist=noiseDist, constraints=constraints, σKnown=σKnown, ll=ll)
     end
 end
 ## weak form negative log-likelihood, its gradient and hessian

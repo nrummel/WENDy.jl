@@ -193,4 +193,58 @@ const CASES = [
         @test eigmin(Symmetric(C_cons(prob, p̂) - Ĉ(prob, p̂))) > -1e-10 * opnorm(Ĉ(prob, p̂)) # C_cons ⪰ Ĉ
         @test C_∇²ℓ(prob, p̂) ≈ inv(ForwardDiff.hessian(q -> ℓ_ref(prob, c.params, q), p̂)) rtol=1e-6
     end
+    @testset "Exact noise level σ" begin
+        quiet(f) = with_logger(f, NullLogger())
+        # The estimate path with σ̂ overwritten by hand: the constructor's last steps on prob's (transformed) data and
+        # test functions, with σ in place of estimate_std(X). Reusing prob's Φ matters: with more than Kmax test
+        # functions, svds starts from a random vector, so two builds from the same data differ in Φ by rounding and signs.
+        # With LogNormal noise X = log U already, and weakForm transforms the rhs, as in the constructor.
+        function byHand(c, prob, σ)
+            (; tt, X, Φ, Φ̇, b) = prob
+            wform = WENDy.weakForm(c.f!, tt, X, Φ, Φ̇, σ, b, length(c.pstar); linearInParameters=c.lip, noiseDist=c.dist)
+            quiet(() -> WENDyProblem(tt, X, Φ, Φ̇, σ, b, wform, c.params; noiseDist=c.dist))
+        end
+        # Lotka-Volterra (linear weak form) with some σ, Goodwin (nonlinear, LogNormal) with its true σ: the std of the log noise
+        for (c, σ) in ((CASES[2], [0.07, 0.04]), (CASES[4], fill(CASES[4].nr, 3)))
+            tt, U = simulate(c.f!, c.u₀, c.tRng, c.dt, c.pstar, c.dist, c.nr)
+            J, D = length(c.pstar), length(σ)
+            build(; kw...) = quiet(() -> WENDyProblem(tt, U, c.f!, J; linearInParameters=c.lip, noiseDist=c.dist, params=c.params, kw...))
+            @testset "$(c.name)" begin
+                est = build()
+                @test !est.σKnown && est.σ == WENDy.estimate_std(est.X) # default unchanged
+                given = build(σ=σ)
+                ref = byHand(c, given, σ)
+                @test given.σKnown && given.σ == σ && !ref.σKnown && ref.σ == σ
+                @test given.X == est.X # the (transformed) data do not depend on σ
+                p = c.pstar .* (1 .+ 0.1 .* randn(MersenneTwister(2), J))
+                @test weakCovariance(given, p) == weakCovariance(ref, p)
+                @test ℓ(given, p) == ℓ(ref, p) && ∇ℓ(given, p) == ∇ℓ(ref, p) && ∇²ℓ(given, p) == ∇²ℓ(ref, p)
+                @test ∇²m(given, p) == ∇²m(ref, p) && Ĉ(given, p) == Ĉ(ref, p) && C_cons(given, p) == C_cons(ref, p)
+                @test ℓ(given, p) ≈ ℓ_ref(given, c.params, p) rtol=1e-10 # the reference likelihood built from prob.σ
+                for alg in (WENDy.TrustRegion(), WENDy.IRLS())
+                    @test quiet(() -> solve(given, p, c.params; alg=alg)).p̂ == quiet(() -> solve(ref, p, c.params; alg=alg)).p̂
+                end
+                # a scalar is the same σ for every state
+                s = build(σ=σ[1])
+                @test s.σ == fill(σ[1], D) && s.σKnown
+                # a wrong σ: S - δI = (1-δ)L(σ)L(σ)ᵀ and L is linear in σ, so scaling σ by c scales S - δI by c²
+                # (only σ changes, through the weak form: the test functions are given's)
+                withσ(σ′) = byHand(c, given, σ′)
+                δ = c.params.diagReg
+                @test weakCovariance(withσ(2σ), p) - δ*I ≈ 4(weakCovariance(given, p) - δ*I) rtol=1e-10
+                @test ℓ(withσ(2σ), p) != ℓ(given, p)
+                # changing σ in one state d changes L only in its columns (m, d), by the same factor
+                σ₂ = copy(σ); σ₂[end] *= 3
+                L(prob) = first(Lr_ref(prob, p))
+                L₁, L₂, Mp1 = L(given), L(withσ(σ₂)), given.dims.Mp1
+                @test L₂[:, 1:(D-1)*Mp1] == L₁[:, 1:(D-1)*Mp1]
+                @test L₂[:, (D-1)*Mp1+1:end] ≈ 3L₁[:, (D-1)*Mp1+1:end] rtol=1e-12
+                # validation
+                @test_throws DimensionMismatch build(σ=vcat(σ, 1.0))
+                @test_throws ArgumentError build(σ=vcat(σ[1:end-1], 0.0))
+                @test_throws ArgumentError build(σ=-1.0)
+                @test_throws ArgumentError build(σ=fill(NaN, D))
+            end
+        end
+    end
 end
