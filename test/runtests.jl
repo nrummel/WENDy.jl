@@ -261,14 +261,13 @@ const CASES = [
         @test Φ ≈ s .* Φ₀ atol=1e-12
         @test Φ̇ ≈ s .* Φ̇₀ rtol=1e-10
         @test WENDy.getTestFunctionMatrices(tt, tf) == (Φ, Φ̇)
-        # the full set and the reference SVD: Φ̃_full ≈ U_K Σ_K Φ, Φ = Σ_K⁻¹U_KᵀΦ̃_full, Φ̇ = Σ_K⁻¹U_KᵀΦ̃̇_full
-        Φf, Φ̇f = fullTestFunctionMatrices(tt, tf)
+        # the full set and the reference SVD: Φ = Σ_K⁻¹U_KᵀΦ̃_full, with the SVD done once at construction
+        Φf = WENDy._fullTestFunctionMatrix(tt, tf.radii, tf.centers, tf.scale)
         Φf₀, Φ̇f₀ = quiet(() -> WENDy.getTestFunctionMatrices(tt, U, c.params; noSVD=true, ll=Warn))
         @test size(Φf) == (length(tf.radii), length(tt))
         @test Φf ≈ Φf₀ atol=1e-12
-        @test Φ̇f ≈ Φ̇f₀ rtol=1e-10
         @test Φ ≈ (tf.U' * Φf) ./ tf.Σ atol=1e-12
-        @test Φ̇ ≈ (tf.U' * Φ̇f) ./ tf.Σ rtol=1e-10
+        @test Φ̇ ≈ (tf.U' * Φ̇f₀) ./ tf.Σ rtol=1e-10
         @test tf.U' * tf.U ≈ I atol=1e-10
         @test issorted(tf.Σ; rev=true) && tf.Σ ≈ svdvals(Matrix(Φf))[1:K]
         # the bump's derivative
@@ -281,7 +280,6 @@ const CASES = [
         Φ2, Φ̇2 = tf(tt2)
         @test Φ2[:, 1:2:end] ≈ Φ atol=1e-12
         @test Φ̇2[:, 1:2:end] ≈ Φ̇ rtol=1e-10
-        @test fullTestFunctionMatrices(tt2, tf)[1][:, 1:2:end] ≈ Φf atol=1e-12
         # Φ̇ is the derivative of Φ on each grid: ∑ₘ ψₖ g′ = -∑ₘ ψ̇ₖ g (the ψₖ vanish at both ends)
         for t in (collect(range(tt[1], tt[end], 501)), tt, tt2)
             Φt, Φ̇t = tf(t)
