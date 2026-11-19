@@ -30,6 +30,6 @@ module WENDy
     include("wendyOutputError.jl")
     include("wendyOptim.jl")
 
-    export WENDyProblem, OutputErrorProblem, WENDyParameters, WENDySolution, solve, Normal, LogNormal
+    export WENDyProblem, OutputErrorProblem, WENDyParameters, FixedTestFunctions, WENDySolution, solve, Normal, LogNormal
     export ℓ, ∇ℓ, ∇ℓ!, ∇²ℓ, ∇²ℓ!, ∇²m, ∇²m!, weakResidual, weakResidual!, weakJacobian, weakJacobian!, weakCovariance, Ĉ, C_cons, C_∇²ℓ, oeResidual!, oeJacobian!
 end # module WENDy

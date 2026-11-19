@@ -17,7 +17,8 @@ For the output error (forward solve) least squares problem see OutputErrorProble
         params::WENDyParameters=WENDyParameters(), 
         constraints::Union{Nothing,AbstractVector{Tuple{<:Real,<:Real}}}=nothing, 
         σ::Union{Nothing,Real,AbstractVector{<:Real}}=nothing,
-        ll::LogLevel=Warn
+        ll::LogLevel=Warn,
+        testFunctions::Union{Nothing,FixedTestFunctions}=nothing
     )
 ## Arguments 
 - _tt::AbstractVector{<:Real} : vector of times (equispaced)
@@ -34,6 +35,11 @@ For the output error (forward solve) least squares problem see OutputErrorProble
     and covariance built on them) and the noise is not estimated. With noiseDist = LogNormal it is the standard deviation
     of the log noise (of log U), as the estimate would be. It must be positive and have length D.
 - ll::LogLevel=Warn : (optional) see additional algorithm information by setting ll=Info
+- testFunctions::Union{Nothing,FixedTestFunctions}=nothing : (optional) fixed test functions, built once (see
+  FixedTestFunctions) and evaluated on tt, instead of test functions picked from this data (radii from U, the SVD and K
+  at this grid). With them Φ and Φ̇ depend only on tt, so problems built from different noise realizations, or from
+  different numbers of time points on the same interval, use the same continuous test functions; the radius and
+  SVD parameters in params are then not used
 
 It can also be built from data that was already transformed and its weak form (e.g. to rebuild a saved problem) with 
     WENDyProblem(tt, X, Φ, Φ̇, σ, b, wform::WeakForm, params::WENDyParameters; noiseDist=Normal, constraints=nothing, σKnown=false, ll=Warn)
@@ -104,7 +110,8 @@ function WENDyProblem(
     params::WENDyParameters=WENDyParameters(),
     constraints::Union{Nothing,AbstractVector{<:Tuple{<:Real,<:Real}}}=nothing,
     σ::Union{Nothing,Real,AbstractVector{<:Real}}=nothing,
-    ll::LogLevel=Warn
+    ll::LogLevel=Warn,
+    testFunctions::Union{Nothing,FixedTestFunctions}=nothing
 )
     with_logger(ConsoleLogger(stderr, ll)) do
         @info "Building WENDyProblem"
@@ -114,7 +121,7 @@ function WENDyProblem(
         @info σKnown ? "  Use the given noise level in each dimension" : "  Estimate the noise in each dimension"
         σ = _noiseLevel(σ, X)
         @info "  σ = $σ"
-        Φ, Φ̇ = getTestFunctionMatrices(tt, X, params; ll=ll)
+        Φ, Φ̇ = isnothing(testFunctions) ? getTestFunctionMatrices(tt, X, params; ll=ll) : getTestFunctionMatrices(tt, testFunctions; ll=ll)
         @info "  Building the LHS to the residual"
         b = vec(-Φ̇ * X)
         @info "  Build the weak form from symbolic expressions of the ODE"

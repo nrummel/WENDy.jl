@@ -247,4 +247,54 @@ const CASES = [
             end
         end
     end
+    @testset "Fixed test functions" begin
+        c = CASES[1]
+        quiet(f) = with_logger(f, NullLogger())
+        tt, U = simulate(c.f!, c.u₀, c.tRng, c.dt, c.pstar, c.dist, 0.0) # noise free reference data, 1001 points
+        tf = quiet(() -> FixedTestFunctions(tt, U, c.params))
+        K = size(tf.C, 1)
+        # on the reference grid: the default test functions of that data (rows up to sign)
+        Φ₀, Φ̇₀ = quiet(() -> WENDy.getTestFunctionMatrices(tt, U, c.params; ll=Warn))
+        Φ, Φ̇ = tf(tt)
+        @test size(Φ) == size(Φ₀) == (K, length(tt))
+        s = sign.(vec(sum(Φ .* Φ₀; dims=2)))
+        @test Φ ≈ s .* Φ₀ atol=1e-12
+        @test Φ̇ ≈ s .* Φ̇₀ rtol=1e-10
+        @test WENDy.getTestFunctionMatrices(tt, tf) == (Φ, Φ̇)
+        # the bump's derivative
+        for x in (-0.9, -0.3, 0.0, 0.5, 0.99)
+            @test WENDy._bump′(x) ≈ ForwardDiff.derivative(WENDy._bump, x) rtol=1e-12
+        end
+        @test WENDy._bump(1.0) == WENDy._bump′(-1.5) == 0
+        # the same continuous functions on every grid: a finer grid that contains tt gives the same values there
+        tt2 = collect(range(tt[1], tt[end], 2length(tt) - 1))
+        Φ2, Φ̇2 = tf(tt2)
+        @test Φ2[:, 1:2:end] ≈ Φ atol=1e-12
+        @test Φ̇2[:, 1:2:end] ≈ Φ̇ rtol=1e-10
+        # Φ̇ is the derivative of Φ on each grid: ∑ₘ ψₖ g′ = -∑ₘ ψ̇ₖ g (the ψₖ vanish at both ends)
+        for t in (collect(range(tt[1], tt[end], 501)), tt, tt2)
+            Φt, Φ̇t = tf(t)
+            @test norm(Φt * cos.(t) + Φ̇t * sin.(t)) < 1e-6 * norm(Φt * cos.(t))
+        end
+        # a grid that does not cover the interval is refused
+        @test_throws AssertionError tf(tt[1:end-10])
+        # radii given in time units (not on the grid), and K given
+        tfr = quiet(() -> FixedTestFunctions(tt, [0.123, 0.5]; K=10))
+        @test size(tfr.C, 1) == 10 && unique(tfr.radii) == [0.123, 0.5]
+        @test all(tfr.centers .- tfr.radii .>= tt[1]) && all(tfr.centers .+ tfr.radii .<= tt[end])
+        Φr, Φ̇r = tfr(tt)
+        @test Φr * Φr' ≈ I atol=1e-10 # orthonormal rows on the reference grid
+        # WENDyProblem: Φ, Φ̇ depend only on the grid, not on the data
+        probs = map(1:2) do seed
+            _, Un = simulate(c.f!, c.u₀, c.tRng, c.dt, c.pstar, c.dist, c.nr; seed)
+            quiet(() -> WENDyProblem(tt, Un, c.f!, 2; linearInParameters=true, params=c.params, testFunctions=tf))
+        end
+        @test probs[1].Φ == probs[2].Φ == Φ && probs[1].Φ̇ == Φ̇ && probs[1].dims.K == K
+        @test probs[1].X != probs[2].X
+        # ... and across grids, only through the data
+        tt3, U3 = simulate(c.f!, c.u₀, c.tRng, c.dt/2, c.pstar, c.dist, c.nr)
+        prob3 = quiet(() -> WENDyProblem(tt3, U3, c.f!, 2; linearInParameters=true, params=c.params, testFunctions=tf))
+        @test prob3.Φ == first(tf(tt3)) && prob3.dims.K == K && prob3.dims.Mp1 == length(tt3)
+        @test norm(quiet(() -> solve(prob3, [0.5, 0.5], c.params)).p̂ - c.pstar)/norm(c.pstar) < 0.05
+    end
 end
