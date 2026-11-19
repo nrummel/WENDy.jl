@@ -233,31 +233,34 @@ _bump′(x::Real, η::Real=9) = abs(x) < 1 ? -2η*x/(1 - x^2)^2 * exp(-η/(1 - x
 """
     FixedTestFunctions
 
-K continuous test functions ψₖ(t) = ∑ᵢ C[k,i] φᵢ(t) on a fixed interval, built once, independent of the noisy data
-and of the time grid, so that the same functions can be used for many noise realizations and for any number of time
-points M+1 (assumption (A3)). φᵢ(t) = φ((t - cᵢ)/rᵢ)/sᵢ is the bump φ(x) = exp(-9/(1-x²)) of WENDy's test functions,
-with radius rᵢ and center cᵢ in time units. C (K × K_full) holds the coefficients of the SVD reduction at a
-reference grid t̃: with Φ̃_full = UΣVᵀ there, C = Σ_K⁻¹U_Kᵀ, so that C Φ̃_full = V_Kᵀ is WENDy's usual Φ on t̃.
+A full set of K_full test functions φᵢ(t) = φ((t - cᵢ)/rᵢ)/sᵢ and the leading K singular triplets of their matrix at a
+reference grid t̃, Φ̃_full ≈ U_K Σ_K V_Kᵀ, built once, independent of the noisy data and of the time grid. They define
+K fixed continuous test functions ψ = Σ_K⁻¹U_Kᵀ φ, the same for every noise realization and every number of time
+points M+1 on the interval (assumption (A3)). φ(x) = exp(-9/(1-x²)) is WENDy's bump, rᵢ and cᵢ are in time units and
+sᵢ is fixed at the reference grid (the ℓ² norm of the samples there, as _buildΦ normalizes).
 
-On a time grid tt, `tf(tt)` (or `getTestFunctionMatrices(tt, tf)`) returns Φ[k,m] = ψₖ(tₘ) and Φ̇[k,m] = ψₖ′(tₘ),
-the samples of the same functions and of their exact derivatives, so Φ̇ is consistent with Φ on every grid. Pass it
-to WENDyProblem with the keyword `testFunctions`.
+On any uniform grid tt that covers the interval:
+- `Φ_full, Φ̇_full = fullTestFunctionMatrices(tt, tf)`: the full set and its exact derivatives sampled at tt
+  (sparse, K_full × length(tt))
+- `Φ, Φ̇ = tf(tt)` (or `getTestFunctionMatrices(tt, tf)`): Φ = Σ_K⁻¹U_KᵀΦ_full and Φ̇ = Σ_K⁻¹U_KᵀΦ̇_full
+  (K × length(tt)), i.e. ψₖ(tₘ) and ψₖ′(tₘ), so Φ̇ is consistent with Φ on every grid. On t̃, Φ = V_Kᵀ, WENDy's usual Φ.
+Pass tf to WENDyProblem with the keyword `testFunctions`.
 
 # Constructors
-    FixedTestFunctions(tt_ref, U_ref, params=WENDyParameters(); noiseDist=Normal, K=nothing)
-radii picked from reference data U_ref (noise free, or any data the estimates should not depend on) at times tt_ref
-by WENDy's default rule, the centers on every point of tt_ref, the SVD and K at tt_ref as getTestFunctionMatrices does:
-on tt_ref, tf(tt_ref) is getTestFunctionMatrices(tt_ref, U_ref, params) (up to the signs of the singular vectors).
-
     FixedTestFunctions(tt_ref, radii; maxTestFunCondNum=1e4, minTestFunInfoNum=0.95, Kmax=200, K=nothing)
-radii given in time units. K, when given, overrides the cutoffs (it is still at most min(Kmax, K_full, length(tt_ref))
-when the leading Kmax singular triplets are computed).
+the radii in time units, one family of translates per radius, centered at every point of tt_ref whose support stays
+in [t̃₀ + Δt̃, t̃_M - Δt̃] (as WENDy places them). K by WENDy's cutoffs (condition number, information, Kmax), or given.
+
+    FixedTestFunctions(tt_ref, U_ref, params=WENDyParameters(); noiseDist=Normal, K=nothing)
+the radii picked from reference data U_ref (noise free, or any data the estimates should not depend on) by WENDy's
+default rule, and the cutoffs from params: on tt_ref, tf(tt_ref) is getTestFunctionMatrices(tt_ref, U_ref, params)
+(up to the signs of the singular vectors).
 
 # Fields
 - tspan : the interval [t̃₀, t̃_M] of the reference grid; every φᵢ is supported in it
-- radii, centers, scale : rᵢ, cᵢ (time units) and sᵢ of each of the K_full functions of the full set
-- C : K × K_full reduction coefficients
-- S : the leading singular values of Φ̃_full at the reference grid
+- radii, centers, scale : rᵢ, cᵢ and sᵢ of each of the K_full functions of the full set
+- U : U_K, K_full × K, the leading left singular vectors of Φ̃_full (the coefficients of ψ over the full set, times Σ_K)
+- Σ : Σ_K, the leading K singular values of Φ̃_full
 - Mp1ref : the number of points of the reference grid
 """
 struct FixedTestFunctions
@@ -265,15 +268,14 @@ struct FixedTestFunctions
     radii::Vector{Float64}
     centers::Vector{Float64}
     scale::Vector{Float64}
-    C::Matrix{Float64}
-    S::Vector{Float64}
+    U::Matrix{Float64}
+    Σ::Vector{Float64}
     Mp1ref::Int
 end
 function Base.show(io::IO, tf::FixedTestFunctions)
-    print(io, "FixedTestFunctions(K = $(size(tf.C, 1)) of K_full = $(size(tf.C, 2)) on $(tf.tspan), radii = $(unique(tf.radii)), Mp1ref = $(tf.Mp1ref))")
+    print(io, "FixedTestFunctions(K = $(length(tf.Σ)) of K_full = $(length(tf.radii)) on $(tf.tspan), radii = $(unique(tf.radii)), Mp1ref = $(tf.Mp1ref))")
 end
-# every φᵢ: rᵢ, cᵢ, sᵢ for the given radii (time units) with centers at every point of the reference grid tt whose
-# support stays in [t₀ + Δt, t_M - Δt], and sᵢ the ℓ² norm of its samples on tt (as _buildΦ normalizes)
+# rᵢ, cᵢ, sᵢ of the full set for the given radii (time units) on the reference grid tt
 function _fullSet(tt::AbstractVector{<:Real}, radii::AbstractVector{<:Real})
     dt = (tt[end] - tt[1]) / (length(tt) - 1)
     tol = 1e-8*dt
@@ -288,29 +290,47 @@ function _fullSet(tt::AbstractVector{<:Real}, radii::AbstractVector{<:Real})
     end
     rr, cc, ss
 end
-# Φ_full and Φ̇_full (K_full × Mp1) of the full set sampled at tt, or their products with Cᵀ (C Φ_full, C Φ̇_full) when
-# C is given, without forming Φ_full
-function _evalFullSet(tt::AbstractVector{<:Real}, radii, centers, scale, C::Union{Nothing,AbstractMatrix}=nothing)
+# Φ_fullᵀ and Φ̇_fullᵀ (length(tt) × K_full, sparse): column i holds φᵢ and φᵢ′ at the points of tt in its support
+function _fullSetᵀ(tt::AbstractVector{<:Real}, radii, centers, scale)
     Kfull, Mp1 = length(radii), length(tt)
-    K = isnothing(C) ? Kfull : size(C, 1)
-    Φ, Φ̇ = zeros(K, Mp1), zeros(K, Mp1)
+    colptr = Vector{Int}(undef, Kfull + 1)
+    windows = Vector{UnitRange{Int}}(undef, Kfull)
+    colptr[1] = 1
     for i in 1:Kfull
+        # open support (cᵢ - rᵢ, cᵢ + rᵢ): the bump vanishes at its ends
+        w = searchsortedfirst(tt, centers[i] - radii[i]):searchsortedlast(tt, centers[i] + radii[i])
+        windows[i] = w
+        colptr[i+1] = colptr[i] + length(w)
+    end
+    nnz = colptr[end] - 1
+    rowval, nzval, nzval′ = Vector{Int}(undef, nnz), Vector{Float64}(undef, nnz), Vector{Float64}(undef, nnz)
+    Threads.@threads for i in 1:Kfull
         r, c, s = radii[i], centers[i], scale[i]
-        lo, hi = searchsortedfirst(tt, c - r), searchsortedlast(tt, c + r)
-        for m in lo:hi
+        for (j, m) in enumerate(windows[i])
             x = (tt[m] - c) / r
-            v, dv = _bump(x)/s, _bump′(x)/(r*s)
-            if isnothing(C)
-                Φ[i, m] = v; Φ̇[i, m] = dv
-            else
-                @inbounds for k in 1:K
-                    Φ[k, m] += C[k, i]*v
-                    Φ̇[k, m] += C[k, i]*dv
-                end
-            end
+            ix = colptr[i] + j - 1
+            rowval[ix] = m
+            nzval[ix] = _bump(x) / s
+            nzval′[ix] = _bump′(x) / (r*s)
         end
     end
-    Φ, Φ̇
+    SparseMatrixCSC(Mp1, Kfull, colptr, rowval, nzval), SparseMatrixCSC(Mp1, Kfull, copy(colptr), copy(rowval), nzval′)
+end
+function _checkGrid(tt::AbstractVector{<:Real}, tf::FixedTestFunctions)
+    @assert issorted(tt) && all(abs.(diff(tt) .- (tt[2] - tt[1])) .< 1e-6) "Must use uniform time grid diff(tt) = $(diff(tt))"
+    span = tf.tspan[2] - tf.tspan[1]
+    @assert tt[1] <= tf.tspan[1] + 1e-8*span && tt[end] >= tf.tspan[2] - 1e-8*span "The time grid [$(tt[1]), $(tt[end])] must cover the interval $(tf.tspan) of the fixed test functions"
+end
+"""
+    fullTestFunctionMatrices(tt, tf::FixedTestFunctions)
+
+Φ_full and Φ̇_full (sparse, K_full × length(tt)): the full set of tf and its exact derivatives sampled at the times tt
+(uniform, covering tf.tspan). Φ = Σ_K⁻¹U_KᵀΦ_full and Φ̇ = Σ_K⁻¹U_KᵀΦ̇_full are given directly by tf(tt).
+"""
+function fullTestFunctionMatrices(tt::AbstractVector{<:Real}, tf::FixedTestFunctions)
+    _checkGrid(tt, tf)
+    Pᵀ, Ṗᵀ = _fullSetᵀ(tt, tf.radii, tf.centers, tf.scale)
+    permutedims(Pᵀ), permutedims(Ṗᵀ)
 end
 function FixedTestFunctions(
     tt::AbstractVector{<:Real}, radii::AbstractVector{<:Real};
@@ -320,12 +340,11 @@ function FixedTestFunctions(
     with_logger(ConsoleLogger(stderr, ll)) do
         @assert issorted(tt) && all(abs.(diff(tt) .- (tt[2] - tt[1])) .< 1e-6) "The reference grid must be uniform"
         rr, cc, ss = _fullSet(tt, radii)
-        Φ_full, _ = _evalFullSet(tt, rr, cc, ss)
+        Pᵀ, _ = _fullSetᵀ(tt, rr, cc, ss)
         @info "  Fixed test functions: K_full = $(length(rr)) on the reference grid, Mp1 = $(length(tt))"
-        F, _K = _reduceTestFunctions(Φ_full, maxTestFunCondNum, minTestFunInfoNum, isnothing(K) ? Kmax : max(K, Kmax))
+        F, _K = _reduceTestFunctions(Matrix(Pᵀ'), maxTestFunCondNum, minTestFunInfoNum, isnothing(K) ? Kmax : max(K, Kmax))
         K = isnothing(K) ? _K : min(K, length(F.S))
-        C = Diagonal(1 ./ F.S[1:K]) * F.U[:, 1:K]'
-        FixedTestFunctions((Float64(tt[1]), Float64(tt[end])), rr, cc, ss, Matrix(C), F.S[1:K], length(tt))
+        FixedTestFunctions((Float64(tt[1]), Float64(tt[end])), rr, cc, ss, Matrix(F.U[:, 1:K]), F.S[1:K], length(tt))
     end
 end
 function FixedTestFunctions(
@@ -346,20 +365,35 @@ end
     getTestFunctionMatrices(tt, tf::FixedTestFunctions)
     tf(tt)
 
-Φ and Φ̇ (K × length(tt)) of the fixed test functions at the times tt: Φ[k,m] = ψₖ(tₘ), Φ̇[k,m] = ψₖ′(tₘ).
-tt must be uniform and cover the reference interval tf.tspan.
+Φ = Σ_K⁻¹U_KᵀΦ_full and Φ̇ = Σ_K⁻¹U_KᵀΦ̇_full (K × length(tt)) at the times tt (uniform, covering tf.tspan): the fixed
+test functions ψₖ and their exact derivatives sampled at tt. Φ_full is never formed densely.
 """
 function getTestFunctionMatrices(tt::AbstractVector{<:Real}, tf::FixedTestFunctions; ll::LogLevel=Warn)
-    @assert issorted(tt) && all(abs.(diff(tt) .- (tt[2] - tt[1])) .< 1e-6) "Must use uniform time grid diff(tt) = $(diff(tt))"
-    span = tf.tspan[2] - tf.tspan[1]
-    @assert tt[1] <= tf.tspan[1] + 1e-8*span && tt[end] >= tf.tspan[2] - 1e-8*span "The time grid [$(tt[1]), $(tt[end])] must cover the interval $(tf.tspan) of the fixed test functions"
+    _checkGrid(tt, tf)
     dt = (tt[end] - tt[1]) / (length(tt) - 1)
-    K = size(tf.C, 1)
+    K = length(tf.Σ)
     with_logger(ConsoleLogger(stderr, ll)) do
         minimum(tf.radii) / dt < 2 && @warn "The narrowest fixed test function (radius $(minimum(tf.radii))) has fewer than 2 grid points per radius at dt = $dt"
         K > length(tt) && @warn "K = $K test functions on $(length(tt)) time points: Φ is rank deficient"
         @info "  Fixed test functions: K = $K on Mp1 = $(length(tt))"
     end
-    _evalFullSet(tt, tf.radii, tf.centers, tf.scale, tf.C)
+    Φ_full, Φ̇_full = fullTestFunctionMatrices(tt, tf)
+    Wᵀ = permutedims(tf.U ./ tf.Σ')         # Σ_K⁻¹U_Kᵀ (K × K_full)
+    _mulSparse(Wᵀ, Φ_full), _mulSparse(Wᵀ, Φ̇_full)
+end
+# A*B for dense A and sparse B, threaded over the columns of B (faster than the generic method)
+function _mulSparse(A::AbstractMatrix{<:Real}, B::SparseMatrixCSC)
+    K = size(A, 1)
+    out = zeros(K, size(B, 2))
+    rv, nz = rowvals(B), nonzeros(B)
+    Threads.@threads for m in axes(B, 2)
+        for ix in nzrange(B, m)
+            i, v = rv[ix], nz[ix]
+            @inbounds @simd for k in 1:K
+                out[k, m] += A[k, i]*v
+            end
+        end
+    end
+    out
 end
 (tf::FixedTestFunctions)(tt::AbstractVector{<:Real}) = getTestFunctionMatrices(tt, tf)

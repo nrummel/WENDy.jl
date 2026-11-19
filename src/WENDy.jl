@@ -17,6 +17,7 @@ module WENDy
     using Tullio: @tullio
     using FunctionWrappers: FunctionWrapper # fixed-signature rhs of the output error sensitivity system
     using Arpack: svds
+    using SparseArrays: SparseMatrixCSC, rowvals, nonzeros, nzrange # fixed test functions: the full set sampled on a grid
     # stdlib
     using LinearAlgebra, Statistics, Logging
     using Logging: Info, Warn, LogLevel
@@ -30,6 +31,6 @@ module WENDy
     include("wendyOutputError.jl")
     include("wendyOptim.jl")
 
-    export WENDyProblem, OutputErrorProblem, WENDyParameters, FixedTestFunctions, WENDySolution, solve, Normal, LogNormal
+    export WENDyProblem, OutputErrorProblem, WENDyParameters, FixedTestFunctions, fullTestFunctionMatrices, WENDySolution, solve, Normal, LogNormal
     export ℓ, ∇ℓ, ∇ℓ!, ∇²ℓ, ∇²ℓ!, ∇²m, ∇²m!, weakResidual, weakResidual!, weakJacobian, weakJacobian!, weakCovariance, Ĉ, C_cons, C_∇²ℓ, oeResidual!, oeJacobian!
 end # module WENDy

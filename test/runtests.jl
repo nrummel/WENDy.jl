@@ -252,7 +252,7 @@ const CASES = [
         quiet(f) = with_logger(f, NullLogger())
         tt, U = simulate(c.f!, c.u₀, c.tRng, c.dt, c.pstar, c.dist, 0.0) # noise free reference data, 1001 points
         tf = quiet(() -> FixedTestFunctions(tt, U, c.params))
-        K = size(tf.C, 1)
+        K = length(tf.Σ)
         # on the reference grid: the default test functions of that data (rows up to sign)
         Φ₀, Φ̇₀ = quiet(() -> WENDy.getTestFunctionMatrices(tt, U, c.params; ll=Warn))
         Φ, Φ̇ = tf(tt)
@@ -261,6 +261,16 @@ const CASES = [
         @test Φ ≈ s .* Φ₀ atol=1e-12
         @test Φ̇ ≈ s .* Φ̇₀ rtol=1e-10
         @test WENDy.getTestFunctionMatrices(tt, tf) == (Φ, Φ̇)
+        # the full set and the reference SVD: Φ̃_full ≈ U_K Σ_K Φ, Φ = Σ_K⁻¹U_KᵀΦ̃_full, Φ̇ = Σ_K⁻¹U_KᵀΦ̃̇_full
+        Φf, Φ̇f = fullTestFunctionMatrices(tt, tf)
+        Φf₀, Φ̇f₀ = quiet(() -> WENDy.getTestFunctionMatrices(tt, U, c.params; noSVD=true, ll=Warn))
+        @test size(Φf) == (length(tf.radii), length(tt))
+        @test Φf ≈ Φf₀ atol=1e-12
+        @test Φ̇f ≈ Φ̇f₀ rtol=1e-10
+        @test Φ ≈ (tf.U' * Φf) ./ tf.Σ atol=1e-12
+        @test Φ̇ ≈ (tf.U' * Φ̇f) ./ tf.Σ rtol=1e-10
+        @test tf.U' * tf.U ≈ I atol=1e-10
+        @test issorted(tf.Σ; rev=true) && tf.Σ ≈ svdvals(Matrix(Φf))[1:K]
         # the bump's derivative
         for x in (-0.9, -0.3, 0.0, 0.5, 0.99)
             @test WENDy._bump′(x) ≈ ForwardDiff.derivative(WENDy._bump, x) rtol=1e-12
@@ -271,6 +281,7 @@ const CASES = [
         Φ2, Φ̇2 = tf(tt2)
         @test Φ2[:, 1:2:end] ≈ Φ atol=1e-12
         @test Φ̇2[:, 1:2:end] ≈ Φ̇ rtol=1e-10
+        @test fullTestFunctionMatrices(tt2, tf)[1][:, 1:2:end] ≈ Φf atol=1e-12
         # Φ̇ is the derivative of Φ on each grid: ∑ₘ ψₖ g′ = -∑ₘ ψ̇ₖ g (the ψₖ vanish at both ends)
         for t in (collect(range(tt[1], tt[end], 501)), tt, tt2)
             Φt, Φ̇t = tf(t)
@@ -280,7 +291,7 @@ const CASES = [
         @test_throws AssertionError tf(tt[1:end-10])
         # radii given in time units (not on the grid), and K given
         tfr = quiet(() -> FixedTestFunctions(tt, [0.123, 0.5]; K=10))
-        @test size(tfr.C, 1) == 10 && unique(tfr.radii) == [0.123, 0.5]
+        @test length(tfr.Σ) == 10 && size(tfr.U) == (length(tfr.radii), 10) && unique(tfr.radii) == [0.123, 0.5]
         @test all(tfr.centers .- tfr.radii .>= tt[1]) && all(tfr.centers .+ tfr.radii .<= tt[end])
         Φr, Φ̇r = tfr(tt)
         @test Φr * Φr' ≈ I atol=1e-10 # orthonormal rows on the reference grid
